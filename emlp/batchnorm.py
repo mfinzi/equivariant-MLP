@@ -8,11 +8,22 @@ def gate_indices(rep):
     channels = rep.size()
     indices = np.arange(channels)
     num_nonscalars = 0
-    for i, rank in enumerate(rep):
+    i=0
+    for rank in rep:
         if rank!=(0,0):
             indices[i:i+size(rank,rep.d)] = channels+num_nonscalars
             num_nonscalars+=1
+        i+=size(rank,rep.d)
     return indices
+
+def scalar_mask(rep):
+    channels = rep.size()
+    mask = torch.ones(channels)>0
+    i=0
+    for rank in rep:
+        if rank!=(0,0): mask[i:i+size(rank,rep.d)] = False
+        i+=size(rank,rep.d)
+    return mask
 
 class TensorMaskBN(nn.BatchNorm1d):
     """ Equivariant Batchnorm for tensor representations.
@@ -28,7 +39,8 @@ class TensorMaskBN(nn.BatchNorm1d):
         else:
             x = inp
             mask = torch.ones_like(x[...,0])>0
-        x_or_zero = torch.where(mask.unsqueeze(-1), x, torch.zeros_like(x))  # replace elements outside mask
+        #x_or_zero = torch.where(mask.unsqueeze(-1), x, torch.zeros_like(x))  # replace elements outside mask
+        x_or_zero=x
         if self.training or not self.track_running_stats:
             sum_dims = list(range(len(x.shape[:-1])))
             xsum = x_or_zero.sum(dim=sum_dims)
@@ -47,9 +59,10 @@ class TensorMaskBN(nn.BatchNorm1d):
         else:
             xmean, bias_var = self.running_mean, self.running_var
         std = bias_var.clamp(self.eps) ** 0.5
-        scalar_mask = torch.from_numpy(gate_indices(self.rep)==np.arange(self.rep.size())).to(device=x.device)
-        ratio = torch.where(scalar_mask,self.weight / std,torch.ones_like(self.weight))
-        output = (x_or_zero * ratio + (self.bias - xmean * ratio))
+        mask = scalar_mask(self.rep).to(x.device)
+        #ratio = torch.where(mask,self.weight / std,torch.ones_like(self.weight))
+        #output = (x_or_zero * ratio + (self.bias - xmean * ratio)*mask)
+        output = torch.where(mask,x_or_zero*self.weight/std + (self.bias-xmean*self.weight/std),x_or_zero)
         if self.on:
             out_dict = copy.copy(inp)
             out_dict[self.on] = output

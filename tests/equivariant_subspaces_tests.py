@@ -1,7 +1,7 @@
 
 import numpy as np#
 import copy
-from emlp.equivariant_subspaces_old import *
+from emlp.equivariant_subspaces import *
 import unittest
 
 def rel_error(t1,t2):
@@ -41,7 +41,7 @@ class TestRepresentationSubspace(unittest.TestCase):
         rxy = np.array([[0,1,0],[-1,0,0],[0,0,0]])
         gens = (rxy,)
         ranks = T(0,0)+T(1,0)+T(0,0)+T(1,1)+T(1,0)
-        active_dims, proj = get_active_subspaces(gens,ranks)
+        active_dims, proj = ranks(gens).symmetric_subspace()#get_active_subspaces(gens,ranks)
         random_rep_vec = proj(torch.randn(active_dims)).data.numpy()
         self.assertTrue(rel_error(random_rep_vec[1:3],np.zeros(2))<1e-7)
         self.assertTrue(rel_error(random_rep_vec[-3:-1],np.zeros(2))<1e-7)
@@ -53,7 +53,7 @@ class TestRepresentationSubspace(unittest.TestCase):
         repin = 2*Scalar+3*Vector+T(1,2) + Matrix+Vector
         repout = T(2,1)+2*Vector+ 3*Scalar+Quad
         gens = [np.array([[0,-1],[1,0]])]
-        active_dims,P = matrix_active_subspaces(gens,repout,repin)
+        active_dims,P = (repout*repin.T)(gens).symmetric_subspace()#matrix_active_subspaces(gens,repout,repin)
         params = torch.randn(active_dims).cuda()
         W = P(params).cpu()
         x = torch.randn(repsize(repin,2))

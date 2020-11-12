@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from emlp.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad,size
+from emlp.equivariant_subspaces import capped_tensor_ids
 from emlp.batchnorm import TensorMaskBN,gate_indices
+import collections
 
 class LieLinear(nn.Module):  #
     def __init__(self, repin, repout):
@@ -18,9 +21,9 @@ class LieLinear(nn.Module):  #
 
     def forward(self, x):
         W = self.weight_proj(self._weight_params)
-        print("Using W",W)
+        #print("Using W",W)
         b = self.bias_proj(self._bias_params)
-        return x@W.T# + b
+        return x@W.T + b
 
 def gated(rep):#
     return rep+sum([1 for t in rep if t!=(0,0)])*Scalar
@@ -34,48 +37,66 @@ class GatedNonlinearity(nn.Module):
         activations = gate_scalars.sigmoid() * values[..., :self.rep.size()]
         return activations
 
+
+
 def LieLinearBNSwish(repin,repout):
     return nn.Sequential(LieLinear(repin,gated(repout)),
                          TensorMaskBN(gated(repout)),
                          GatedNonlinearity(repout))
 
 
+# def capped_tensor_product(repin,values,maxrep):
+#     capped_tensor_rep,ids = capped_tensor_ids(repin,maxrep)
+#     tensored_vals = (values[...,:,None]*values[...,None,:]).reshape(*values.shape[:-1],-1)
+#     tensored_vals = tensored_vals[...,ids]
+#     return repin+capped_tensor_rep,torch.cat([values,tensored_vals],dim=-1)
+
+class TensorLinear(LieLinear):
+    def __init__(self,repin,repout):
+        capped_tensor_rep,self.ids = capped_tensor_ids(repin,repout)
+        tensored_rep = repin+capped_tensor_rep
+        super().__init__(tensored_rep,repout)
+    def forward(self,values):
+        tensored_vals = (values[...,:,None]*values[...,None,:]).reshape(*values.shape[:-1],-1)/10
+        in_vals = torch.cat([values,tensored_vals[...,self.ids]],dim=-1)
+        return super().forward(in_vals)
+
+def TensorLinearBNSwish(repin,repout):
+    #return nn.Sequential(TensorLinear(repin,repout),TensorMaskBN(repout))
+    return nn.Sequential(TensorLinear(repin,gated(repout)),
+                         TensorMaskBN(gated(repout)),
+                         GatedNonlinearity(repout))
+
 class EMLP(nn.Module):
     def __init__(self,rep_in,rep_out,rep_middle,num_layers,algebra):#@
         super().__init__()
         reps = [rep_in(algebra)]+(num_layers-1)*[rep_middle(algebra)]
         self.network = nn.Sequential(
-            *[LieLinearBNSwish(rin,rout) for rin,rout in zip(reps,reps[1:])],#
-            LieLinear(rep_middle,rep_out(algebra))
+            *[TensorLinearBNSwish(rin,rout) for rin,rout in zip(reps,reps[1:])],#
+            TensorLinear(rep_middle(algebra),rep_out(algebra))
         )
     def forward(self,x):
         return self.network(x).squeeze(-1)
 
+class Swish(nn.Module):
+    def forward(self,x):
+        return x.sigmoid()*x
 
+def LinearBNSwish(cin,cout):
+    return nn.Sequential(nn.Linear(cin,cout),nn.BatchNorm1d(cout),Swish())
 
-# def nonscalar_arange(rep,d):
-#     indices = []
-#     i = 0
-#     for rank in rep:
-#         if rank[0] == Scalar:
-#             indices.append(-1)
-#         else:
-#             indices.extend(size(rank, d) * [i])
-#             i += 1
-#     return indices
-
-#
-# def gated_nonlinearity(values, gate_scalars, rep,d):
-#     indices=  nonscalar_arange(rep,d)
-#     expanded_gate_scalars = gate_scalars[...,indices]
-#     gated_vals = expanded_gate_scalars.sigmoid()*values
-#     swished_vals = values.sigmoid()*values
-#     scalar_mask = torch.zeros(values.shape[-1]+1,device=values.device)
-#     scalar_mask[-1]=1
-#     scalar_mask = scalar_mask[indices].reshape(*(len(values.shape[:-1])*[1]),-1).expand_as(values)
-#     result = torch.where(scalar_mask>0,swished_vals,gated_vals)
-#     return result
-
-
-
-
+class MLP(nn.Module):
+    def __init__(self,rep_in,rep_out,rep_middle,num_layers,algebra):
+        super().__init__()
+        cin = rep_in(algebra).size()
+        cmid = rep_middle(algebra).size()
+        cmid=256
+        cout = rep_out(algebra).size()
+        self.network = nn.Sequential(
+            LinearBNSwish(cin,cmid),
+            LinearBNSwish(cmid,cmid),
+            LinearBNSwish(cmid,cmid),
+            nn.Linear(cmid,cout)
+        )
+    def forward(self,x):
+        return self.network(x).squeeze(-1)

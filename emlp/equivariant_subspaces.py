@@ -12,13 +12,13 @@ def repsize(rep,d):
     return sum(d**(p+q) for (p,q) in rep)
 
 class TensorRep(object):
-    def __init__(self,ranks,gen=None,shapes=None):
+    def __init__(self,ranks,G=None,shapes=None):
         """ Constructs a tensor type based on a list of tensor ranks
             and possibly the symmetry generators gen."""
         self.ranks = ranks
         self.shapes = shapes or (self.ranks,)
-        self.gen=gen
-        self.d = self.gen[0].shape[0] if self.gen is not None else None
+        self.G=G
+        self.d = self.G.d if self.G is not None else None
 
     def __eq__(self, other):
         return len(self)==len(other) and all(r==rr for r,rr in zip(self.ranks,other.ranks))
@@ -30,32 +30,32 @@ class TensorRep(object):
     def size(self):
         if not self.d: return None
         return repsize(self.ranks,self.d)
-    def __call__(self,gen):
-        self.gen=gen
-        self.d = self.gen[0].shape[0]
+    def __call__(self,G):
+        self.G=G
+        self.d = self.G.d
         return self
     def __add__(self, other):
         if isinstance(other,int): return self+other*Scalar
-        return TensorRep(self.ranks+other.ranks,self.gen if self.gen is not None else other.gen)
+        return TensorRep(self.ranks+other.ranks,self.G if self.G is not None else other.G)
     def __radd__(self, other):
         if isinstance(other,int): return other*Scalar+self
         else: assert False, f"Unsupported operand Rep*{type(other)}"
     def __mul__(self, other):
-        if isinstance(other,int): return TensorRep(other*self.ranks,self.gen)
+        if isinstance(other,int): return TensorRep(other*self.ranks,self.G)
         elif isinstance(other,TensorRep):
             product_ranks = [(r1[0]+r2[0],r1[1]+r2[1]) for r1,r2 in itertools.product(self.ranks,other.ranks)]
-            return TensorRep(product_ranks,self.gen if self.gen is not None else other.gen,self.shapes+other.shapes)
+            return TensorRep(product_ranks,self.G if self.G is not None else other.G,self.shapes+other.shapes)
         else: assert False, f"Unsupported operand Rep*{type(other)}"
 
     def __rmul__(self, other):
-        if isinstance(other, int): return TensorRep(other * self.ranks, self.gen)
+        if isinstance(other, int): return TensorRep(other * self.ranks, self.G)
         else: assert False, f"Unsupported operand Rep*{type(other)}"
     def __iter__(self):
         return iter(self.ranks)
     @property
     def T(self):
         """ only swaps to adjoint representation, does not reorder elems"""
-        return TensorRep([rank[::-1] for rank in self.ranks], self.gen)
+        return TensorRep([rank[::-1] for rank in self.ranks], self.G)
 
     def __matmul__(self, other):
         raise NotImplementedError
@@ -67,12 +67,14 @@ class TensorRep(object):
     def __repr__(self):
         multiplicities=  self.multiplicities()
         tensors = "+".join(f"{v if v > 1 else ''}T{key}" for key, v in multiplicities.items())
-        if self.gen is not None and (self.gen==-self.gen.transpose((0,2,1))).all():
-            # If SO(d) subgroup, show T(p,q) as T(p+q)
-            collapsed_mult = collections.defaultdict(int)
-            for k,v in multiplicities.items():
-                collapsed_mult[sum(k)]+=v
-            tensors = "+".join(f"{v if v > 1 else ''}T({key})" for key, v in collapsed_mult.items())
+        try:
+            if (self.G.lie_algebra==-self.G.lie_algebra.transpose((0,2,1))).all():
+                # If SO(d) subgroup, show T(p,q) as T(p+q)
+                collapsed_mult = collections.defaultdict(int)
+                for k,v in multiplicities.items():
+                    collapsed_mult[sum(k)]+=v
+                tensors = "+".join(f"{v if v > 1 else ''}T({key})" for key, v in collapsed_mult.items())
+        except AttributeError: pass
         return tensors+f" @ d={self.d}" if self.d is not None else tensors
     def __str__(self):
         return repr(self)
@@ -80,7 +82,7 @@ class TensorRep(object):
         return hash(tuple(tuple(ranks) for ranks in self.shapes))
 
     def symmetric_subspace(self):
-        dims,lazy_projection = get_active_subspaces(self.gen,self)
+        dims,lazy_projection = get_active_subspaces(self.G,self)
         if len(self.shape)==1:
             return dims,lazy_projection
         else:
@@ -99,8 +101,8 @@ class TensorRep(object):
         return sp.linalg.block_diag(*[drho(A,rank) for rank in self.ranks])
 
 
-def T(p,q=0,gen=None):
-    return TensorRep([(p,q)],gen=gen)
+def T(p,q=0,G=None):
+    return TensorRep([(p,q)],G=G)
 
 
 Scalar = T(0,0)
@@ -135,13 +137,15 @@ def drho(M,rank):
         rep_M -= np.kron(np.kron(Ikron_powers[p+s-1],M.T),Ikron_powers[q-s])
     return rep_M
 
-def projection_matrix(generators,rank):
-    """ Given a sequence of exponential generators [M1,M2,...]
+def projection_matrix(group,rank):
+    """ Given a sequence of exponential generators [A1,A2,...]
         and a tensor rank (p,q), the function concatenates the representations
-        [drho(M1), drho(M2), ...] into a single large projection matrix.
+        [drho(A1), drho(A2), ...] into a single large projection matrix.
         Input: [generators seq(tensor(d,d))], [rank tuple(p,q)], [d int] """
-    drho_Ms = [drho(M,rank) for M in generators]
-    P = np.concatenate(drho_Ms,axis=0)
+    constraints = []
+    constraints.extend([drho(A,rank) for A in group.lie_algebra])
+    constraints.extend([rho(h,rank)-np.eye(size(rank,group.d)) for h in group.discrete_generators])
+    P = np.concatenate(constraints,axis=0)
     return P
 
 def orthogonal_complement(proj):
@@ -150,13 +154,13 @@ def orthogonal_complement(proj):
     rank = (S>1e-10).sum()
     return VT[rank:]
 
-def get_active_subspace(generators,rank):
+def get_active_subspace(group,rank):
     """ Given an array of generators [M1,M2,...] and tensor rank (p,q)
         this function computes the orthogonal complement to the projection
         matrix formed by stacking the rows of drho(Mi) together.
         Output [Q (r,) + (p+q)*(d,)] """
     if rank ==(0,0): return np.ones((1,1))
-    P = projection_matrix(generators,rank)
+    P = projection_matrix(group,rank)
     Q = orthogonal_complement(P)
     return Q
 
@@ -174,7 +178,7 @@ def rank_permutation(ranks,d):
     permutation = torch.cat([torch.cat([idx for idx in indices]) for indices in ranks_indices.values()])
     return permutation
 
-def get_active_subspaces(generators,rep):
+def get_active_subspaces(group,rep):
     """ Given a representation which is a sequence of tensors
         with ranks (p_i,q_i), computes the orthogonal complement
         to the projection matrix drho(Mi). Function returns both the
@@ -184,7 +188,7 @@ def get_active_subspaces(generators,rep):
         Inputs: [generators seq(tensor(d,d))] [ranks seq(tuple(p,q))]
         Outputs: [r int] [projection (tensor(*,r)->tensor(*,rep_dim))]"""
     rank_multiplicites = rep.multiplicities()
-    Qs = {rank:get_active_subspace(generators,rank) for rank in rank_multiplicites}
+    Qs = {rank:get_active_subspace(group,rank) for rank in rank_multiplicites}
     Qs = {rank:torch.from_numpy(Q).cuda().float() for rank,Q in Qs.items()}
     active_dims = sum([rank_multiplicites[rank]*Qs[rank].shape[0] for rank in Qs.keys()])
     # Get the permutation of the vector when grouped by tensor rank
@@ -277,7 +281,7 @@ def capped_tensor_ids(repin,maxrep):
     out_ranks = []
     for rank,mul in min_mults.items():
         out_ranks.extend(mul*[rank])
-    out_rep = TensorRep(out_ranks,gen=repin.gen)
+    out_rep = TensorRep(out_ranks,G=repin.G)
     # have to do some gnarly permuting to account for block ordering vs elemnt ordering
     # and then the multiplicity sorted order and the original ordering
     ids = torch.argsort(rep_permutation(product_rep))[sorted_perm[all_ids]]

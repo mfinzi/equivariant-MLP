@@ -45,12 +45,13 @@ class BiLinear(nn.Module):
         self.W_shape = rep_W.shape
         Wdim, self.weight_proj = bilinear_weights(rep_W,repin)
         self._weight_params = nn.Parameter(torch.randn(Wdim))
+        self.random_mask = torch.rand(Wdim)>0#<.1
         print(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
     def forward(self, x):
-        W = self.weight_proj(self._weight_params,x)[:,self.matrix_perm].reshape(x.shape[0],*self.W_shape)
+        W = self.weight_proj(self._weight_params*self.random_mask.to(x.device),x)[:,self.matrix_perm].reshape(x.shape[0],*self.W_shape)
         #print(x.shape,W.shape)
-        return (W@x.unsqueeze(-1)).squeeze(-1)
+        return .05*(W@x.unsqueeze(-1)).squeeze(-1)
 
 class TensorBiLinear(LieLinear):
     def __init__(self,repin,repout):
@@ -112,7 +113,7 @@ class TensorLinear(LieLinear):
         return super().forward(in_vals)
 
 def TensorLinearBNSwish(repin,repout):
-    return nn.Sequential(TensorLinear(repin,gated(repout)),TensorMaskBN(gated(repout)),GatedNonlinearity(repout))
+    #return nn.Sequential(TensorLinear(repin,gated(repout)),TensorMaskBN(gated(repout)),GatedNonlinearity(repout))
     return nn.Sequential(Sum2(BiLinear(repin,gated(repout)),LieLinear(repin,gated(repout))),
                          TensorMaskBN(gated(repout)),
                          GatedNonlinearity(repout))

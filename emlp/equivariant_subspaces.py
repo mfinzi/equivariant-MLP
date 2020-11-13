@@ -5,6 +5,7 @@ from functools import lru_cache
 import scipy as sp
 import scipy.linalg
 import functools
+import random
 
 class OrderedCounter(collections.Counter,collections.OrderedDict): pass
 
@@ -61,20 +62,15 @@ class TensorRep(object):
         raise NotImplementedError
 
     def multiplicities(self):
-        if not hasattr(self,'_multiplicities'): self._multiplicities = OrderedCounter(self.ranks)
-        return self._multiplicities
+        if self.G.is_unimodular(): # orthogonal subgroup-> collaps T(p,q) to T(p+q)
+            return OrderedCounter((p+q,0) for (p,q) in self.ranks)
+        return OrderedCounter(self.ranks)
 
     def __repr__(self):
         multiplicities=  self.multiplicities()
         tensors = "+".join(f"{v if v > 1 else ''}T{key}" for key, v in multiplicities.items())
-        try:
-            if (self.G.lie_algebra==-self.G.lie_algebra.transpose((0,2,1))).all():
-                # If SO(d) subgroup, show T(p,q) as T(p+q)
-                collapsed_mult = collections.defaultdict(int)
-                for k,v in multiplicities.items():
-                    collapsed_mult[sum(k)]+=v
-                tensors = "+".join(f"{v if v > 1 else ''}T({key})" for key, v in collapsed_mult.items())
-        except AttributeError: pass
+        if self.G.is_unimodular():
+            tensors = "+".join(f"{v if v > 1 else ''}T({q})" for (q,p), v in multiplicities.items())
         return tensors+f" @ d={self.d}" if self.d is not None else tensors
     def __str__(self):
         return repr(self)
@@ -108,6 +104,20 @@ class TensorRep(object):
 
     def drho(self,A):
         return sp.linalg.block_diag(*[drho(A,rank) for rank in self.ranks])
+
+    def argsort(self):
+        """ get the permutation given by converting
+            from the order in ranks to the order when the ranks are grouped by
+            first occurrence of a given type (p,q)."""
+        ranks_indices = collections.OrderedDict(((rank, []) for rank in self.multiplicities()))
+        i=0
+        for (p,q) in self.ranks:
+            tensor_size = self.d**(p+q)
+            rrank = (p+q,0) if self.G.is_unimodular() else (p,q)
+            ranks_indices[rrank].append(torch.arange(tensor_size)+i)
+            i+= tensor_size
+        permutation = torch.cat([torch.cat([idx for idx in indices]) for indices in ranks_indices.values()])
+        return permutation
 
 
 def T(p,q=0,G=None):
@@ -175,19 +185,7 @@ def get_active_subspace(group,rank):
     Q = orthogonal_complement(P)
     return Q
 
-def rank_permutation(ranks,d):
-    """ get the permutation given by converting
-        from the order in ranks to the order when the ranks are grouped by
-        first occurrence of a given type (p,q)."""
-    rank_multiplicities = OrderedCounter(ranks)
-    ranks_indices = collections.OrderedDict(((rank, []) for rank in rank_multiplicities))
-    i=0
-    for (p,q) in ranks:
-        tensor_size = d**(p+q)
-        ranks_indices[(p,q)].append(torch.arange(tensor_size)+i)
-        i+= tensor_size
-    permutation = torch.cat([torch.cat([idx for idx in indices]) for indices in ranks_indices.values()])
-    return permutation
+
 
 def get_active_subspaces(group,rep):
     """ Given a representation which is a sequence of tensors
@@ -203,7 +201,7 @@ def get_active_subspaces(group,rep):
     Qs = {rank:torch.from_numpy(Q).cuda().float() for rank,Q in Qs.items()}
     active_dims = sum([rank_multiplicites[rank]*Qs[rank].shape[0] for rank in Qs.keys()])
     # Get the permutation of the vector when grouped by tensor rank
-    inverse_perm = torch.argsort(rank_permutation(rep.ranks,rep.d))
+    inverse_perm = torch.argsort(rep.argsort())
     # Apply the projections for each rank, concatenate, and permute back to orig rank order
     def lazy_projection(array):
         i=0
@@ -223,7 +221,7 @@ def get_QQT(group,rep):
     Qs = {rank:get_active_subspace(group,rank) for rank in rank_multiplicites}
     Qs = {rank:torch.from_numpy(Q).cuda().float() for rank,Q in Qs.items()}
     # Get the permutation of the vector when grouped by tensor rank
-    perm = rank_permutation(rep.ranks,rep.d)
+    perm = rep.argsort()
     invperm = torch.argsort(perm)
     # Apply the projections for each rank, concatenate, and permute back to orig rank order
     def lazy_projection(W):
@@ -243,28 +241,34 @@ def bilinear_weights(W_rep,x_rep):
     W_multiplicities = W_rep.multiplicities()
     x_multiplicities = x_rep.multiplicities()
     x_multiplicities.pop((0,0),None)#[(0,0)]=0 # Remove scalars
-    active_dims = sum([W_multiplicities[rank]*n for rank,n in x_multiplicities.items()])
+    d = x_rep.d
+    nelems = lambda nx,rank: min(nx,size(rank,d))
+    active_dims = sum([W_multiplicities[rank]*nelems(n,rank) for rank,n in x_multiplicities.items()])
     # Get the permutation of the vector when grouped by tensor rank
-    inverse_perm = torch.argsort(rank_permutation(W_rep.ranks,W_rep.d))
+    inverse_perm = torch.argsort(W_rep.argsort())
     rank_indices_dict = tensor_indices_dict(x_rep)
+    reduced_indices_dict = {rank:np.concatenate(random.sample(ids,nelems(len(ids),rank)))\
+                                for rank,ids in rank_indices_dict.items()}
     # Apply the projections for each rank, concatenate, and permute back to orig rank order
-    def lazy_projection(params,x): # (*,r), (bs,c)
+    def lazy_projection(params,x): # (*,r), (bs,c) #TODO: find out why backwards of this function is so slow
         bs = x.shape[0]
         i=0
         Ws = []
+        #params = params.detach()
+        #x = x.detach()
         for rank, W_mult in W_multiplicities.items():
             x_mult = x_multiplicities[rank]
             if rank not in x_multiplicities:
-                Ws.append(torch.zeros(bs,W_mult*size(rank,W_rep.d),device=x.device))
+                Ws.append(torch.zeros(bs,W_mult*size(rank,d),device=x.device))
                 continue
-
-            i_end = i+W_mult*x_mult
-            bids =  rank_indices_dict[rank]
-            bilinear_params = params[i:i_end].reshape(W_mult,x_mult)
-            bilinear_elems = bilinear_params@x[:,bids].T.reshape(x_mult,size(rank,W_rep.d)*bs)
-            bilinear_elems = bilinear_elems.reshape(W_mult*size(rank,W_rep.d),bs).T
-            Ws.append(bilinear_elems)
+            n = nelems(x_mult,rank)
+            i_end = i+W_mult*n
+            bids =  reduced_indices_dict[rank]
+            bilinear_params = params[i:i_end].view(W_mult,n)
             i = i_end
+            bilinear_elems = bilinear_params@x[:,bids].T.reshape(n,size(rank,d)*bs)
+            bilinear_elems = bilinear_elems.view(W_mult*size(rank,d),bs).T
+            Ws.append(bilinear_elems)
         Ws = torch.cat(Ws,dim=-1) #concatenate over rep axis
         return Ws[:,inverse_perm] # reorder to original rank ordering
     return active_dims,lazy_projection
@@ -272,11 +276,12 @@ def bilinear_weights(W_rep,x_rep):
 def tensor_indices_dict(rep):
     index_dict = collections.defaultdict(list)
     i=0
-    for rank in rep.ranks:
+    for (p,q) in rep.ranks:
+        rank = (p+q,0) if rep.G.is_unimodular() else (p,q)
         i_end = i+size(rank,rep.d)
         index_dict[rank].append(np.arange(i,i_end))
         i = i_end
-    return {rank:np.concatenate(ids) for rank,ids in index_dict.items()}
+    return index_dict#{rank:np.concatenate(ids) for rank,ids in index_dict.items()}
 
 @lru_cache()
 def rep_permutation(rep):
@@ -312,7 +317,7 @@ def capped_tensor_ids(repin,maxrep):
         interleaved_ids = (d**(p+q)*ids[:,None]+np.arange(d**(p+q))).reshape(-1)
         all_ids.extend(interleaved_ids+i_all)
         i_all += tensor_multiplicities[(p,q)]*d**(p+q)
-    sorted_perm = rank_permutation(product_rep.ranks,d)
+    sorted_perm = product_rep.argsort()
     out_ranks = []
     for rank,mul in min_mults.items():
         out_ranks.extend(mul*[rank])

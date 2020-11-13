@@ -1,29 +1,79 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from emlp.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad,size
-from emlp.equivariant_subspaces import capped_tensor_ids
+from emlp.equivariant_subspaces import capped_tensor_ids,rep_permutation,bilinear_weights
 from emlp.batchnorm import TensorMaskBN,gate_indices
 import collections
 
-class LieLinear(nn.Module):  #
+# class LieLinear(nn.Module):  #
+#     def __init__(self, repin, repout):
+#         super().__init__()
+#         rep_W = repout*repin.T
+#         rep_bias = repout
+
+#         Wdim, self.weight_proj = rep_W.symmetric_subspace()
+#         self._weight_params = nn.Parameter(torch.randn(Wdim))
+#         bias_dim, self.bias_proj = rep_bias.symmetric_subspace()
+#         self._bias_params = nn.Parameter(torch.randn(bias_dim))
+#         print(f"W components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
+#         print(f"bias components:{rep_bias.size()} dim:{bias_dim} shape:{rep_bias} rep:{rep_bias}")
+
+#     def forward(self, x):
+#         W = self.weight_proj(self._weight_params)
+#         #print("Using W",W)
+#         b = self.bias_proj(self._bias_params)
+#         return x@W.T + b
+
+class LieLinear(nn.Linear):  #
+    def __init__(self, repin, repout):
+        super().__init__(repin.size(),repout.size())
+        rep_W = repout*repin.T
+        rep_bias = repout
+        self.weight_proj = rep_W.symmetric_projection()
+        self.bias_proj = rep_bias.symmetric_projection()
+
+    def forward(self, x):
+        return F.linear(x,self.weight_proj(self.weight),self.bias_proj(self.bias))
+
+class BiLinear(nn.Module):
     def __init__(self, repin, repout):
         super().__init__()
         rep_W = repout*repin.T
-        rep_bias = repout
-
-        Wdim, self.weight_proj = rep_W.symmetric_subspace()
+        self.matrix_perm = rep_permutation(rep_W)
+        self.W_shape = rep_W.shape
+        Wdim, self.weight_proj = bilinear_weights(rep_W,repin)
         self._weight_params = nn.Parameter(torch.randn(Wdim))
-        bias_dim, self.bias_proj = rep_bias.symmetric_subspace()
-        self._bias_params = nn.Parameter(torch.randn(bias_dim))
-        print(f"W components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
-        print(f"bias components:{rep_bias.size()} dim:{bias_dim} shape:{rep_bias} rep:{rep_bias}")
+        print(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
     def forward(self, x):
-        W = self.weight_proj(self._weight_params)
-        #print("Using W",W)
-        b = self.bias_proj(self._bias_params)
-        return x@W.T + b
+        W = self.weight_proj(self._weight_params,x)[:,self.matrix_perm].reshape(x.shape[0],*self.W_shape)
+        #print(x.shape,W.shape)
+        return (W@x.unsqueeze(-1)).squeeze(-1)
+
+class TensorBiLinear(LieLinear):
+    def __init__(self,repin,repout):
+        super().__init__(repin+repout,repout)
+        self.bilinear = BiLinear(repin,repout)
+    def forward(self,values):
+        in_vals = torch.cat([values,self.bilinear(values)/10],dim=-1)
+        return super().forward(in_vals)
+
+class Sum(nn.Sequential):
+    def __init__(self,*modules):
+        super().__init__(*modules)
+    def forward(self,*args,**kwargs):
+        return sum(mod(*args,**kwargs) for mod in self)
+
+
+class Sum2(nn.Module):
+    def __init__(self,m1,m2):
+        super().__init__()
+        self.m1=m1
+        self.m2=m2
+    def forward(self,*args,**kwargs):
+        return self.m1(*args,**kwargs)+self.m2(*args,**kwargs)
 
 def gated(rep):#
     return rep+sum([1 for t in rep if t!=(0,0)])*Scalar
@@ -62,8 +112,8 @@ class TensorLinear(LieLinear):
         return super().forward(in_vals)
 
 def TensorLinearBNSwish(repin,repout):
-    #return nn.Sequential(TensorLinear(repin,repout),TensorMaskBN(repout))
-    return nn.Sequential(TensorLinear(repin,gated(repout)),
+    return nn.Sequential(TensorLinear(repin,gated(repout)),TensorMaskBN(gated(repout)),GatedNonlinearity(repout))
+    return nn.Sequential(Sum2(BiLinear(repin,gated(repout)),LieLinear(repin,gated(repout))),
                          TensorMaskBN(gated(repout)),
                          GatedNonlinearity(repout))
 

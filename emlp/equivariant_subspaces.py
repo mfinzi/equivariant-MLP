@@ -89,6 +89,15 @@ class TensorRep(object):
             perm = rep_permutation(self)
             return dims, lambda t: lazy_projection(t)[perm].reshape(*self.shape)
 
+    def symmetric_projection(self):
+        lazy_projection = get_QQT(self.G,self)
+        if len(self.shape)==1:
+            return lazy_projection
+        else:
+            perm = rep_permutation(self)
+            invperm = torch.argsort(perm)
+            return lambda t: lazy_projection(t.reshape(-1)[invperm])[perm].reshape(*self.shape)
+
     def show_subspace(self):
         dims,projection = self.symmetric_subspace()
         vals = projection(torch.arange(dims).float()+1)
@@ -145,7 +154,7 @@ def projection_matrix(group,rank):
     constraints = []
     constraints.extend([drho(A,rank) for A in group.lie_algebra])
     constraints.extend([rho(h,rank)-np.eye(size(rank,group.d)) for h in group.discrete_generators])
-    P = np.concatenate(constraints,axis=0)
+    P = np.concatenate(constraints,axis=0) if constraints else np.zeros((1,size(rank,group.d)))
     return P
 
 def orthogonal_complement(proj):
@@ -159,7 +168,9 @@ def get_active_subspace(group,rank):
         this function computes the orthogonal complement to the projection
         matrix formed by stacking the rows of drho(Mi) together.
         Output [Q (r,) + (p+q)*(d,)] """
+    #from emlp.groups import Trivial
     if rank ==(0,0): return np.ones((1,1))
+    #if isinstance(group,Trivial): return np.eye(size(rank,group.d))
     P = projection_matrix(group,rank)
     Q = orthogonal_complement(P)
     return Q
@@ -207,41 +218,65 @@ def get_active_subspaces(group,rep):
         return Ws[...,inverse_perm] # reorder to original rank ordering
     return active_dims,lazy_projection
 
-# def get_QQT_projection(generators,rep):
-#     rank_multiplicites = rep.multiplicities()
-#     Qs = {rank:get_active_subspace(generators,rank) for rank in rank_multiplicites}
-#     Qs = {rank:torch.from_numpy(Q).cuda().float() for rank,Q in Qs.items()}
-#     active_dims = sum([rank_multiplicites[rank]*Qs[rank].shape[0] for rank in Qs.keys()])
-#     # Get the permutation of the vector when grouped by tensor rank
-#     perm =rank_permutation(rep.ranks,rep.d)
-#     inverse_perm = torch.argsort(perm)
-#     # Apply the projections for each rank, concatenate, and permute back to orig rank order
-#     def lazy_projection_down(array):
-#         array[...,perm]
-#         i=0
-#         Ws = []
-#         for rank, multiplicity in rank_multiplicites.items():
-#             Qr = Qs[rank].to(array.device)
-#             i_end = i+multiplicity*Qr.shape[0]
-#             elems = array[...,i:i_end].reshape(*array.shape[:-1],multiplicity,Qr.shape[0])@Qr
-#             Ws.append(elems.reshape(*array.shape[:-1],multiplicity*size(rank,rep.d)))
-#             i = i_end
-#         Ws = torch.cat(Ws,dim=-1) #concatenate over rep axis
-#         return Ws[...,inverse_perm] # reorder to original rank ordering
-#     # Apply the projections for each rank, concatenate, and permute back to orig rank order
-#     def lazy_projection_up(array):
-#         i=0
-#         Ws = []
-#         for rank, multiplicity in rank_multiplicites.items():
-#             Qr = Qs[rank].to(array.device)
-#             i_end = i+multiplicity*Qr.shape[0]
-#             elems = array[...,i:i_end].reshape(*array.shape[:-1],multiplicity,Qr.shape[0])@Qr
-#             Ws.append(elems.reshape(*array.shape[:-1],multiplicity*size(rank,rep.d)))
-#             i = i_end
-#         Ws = torch.cat(Ws,dim=-1) #concatenate over rep axis
-#         return Ws[...,inverse_perm] # reorder to original rank ordering
-#     return active_dims,lazy_projection
+def get_QQT(group,rep):
+    rank_multiplicites = rep.multiplicities()
+    Qs = {rank:get_active_subspace(group,rank) for rank in rank_multiplicites}
+    Qs = {rank:torch.from_numpy(Q).cuda().float() for rank,Q in Qs.items()}
+    # Get the permutation of the vector when grouped by tensor rank
+    perm = rank_permutation(rep.ranks,rep.d)
+    invperm = torch.argsort(perm)
+    # Apply the projections for each rank, concatenate, and permute back to orig rank order
+    def lazy_projection(W):
+        ordered_W = W[perm]
+        PWs = []
+        i=0
+        for rank, multiplicity in rank_multiplicites.items():
+            Qr = Qs[rank].to(W.device)
+            i_end = i+multiplicity*size(rank,rep.d)
+            PWs.append((Qr.T@(Qr@ordered_W[i:i_end].reshape(multiplicity,size(rank,rep.d)).T)).T.reshape(-1))
+            i = i_end
+        PWs = torch.cat(PWs,dim=-1) #concatenate over rep axis
+        return PWs[invperm] # reorder to original rank ordering
+    return lazy_projection
 
+def bilinear_weights(W_rep,x_rep):
+    W_multiplicities = W_rep.multiplicities()
+    x_multiplicities = x_rep.multiplicities()
+    x_multiplicities.pop((0,0),None)#[(0,0)]=0 # Remove scalars
+    active_dims = sum([W_multiplicities[rank]*n for rank,n in x_multiplicities.items()])
+    # Get the permutation of the vector when grouped by tensor rank
+    inverse_perm = torch.argsort(rank_permutation(W_rep.ranks,W_rep.d))
+    rank_indices_dict = tensor_indices_dict(x_rep)
+    # Apply the projections for each rank, concatenate, and permute back to orig rank order
+    def lazy_projection(params,x): # (*,r), (bs,c)
+        bs = x.shape[0]
+        i=0
+        Ws = []
+        for rank, W_mult in W_multiplicities.items():
+            x_mult = x_multiplicities[rank]
+            if rank not in x_multiplicities:
+                Ws.append(torch.zeros(bs,W_mult*size(rank,W_rep.d),device=x.device))
+                continue
+
+            i_end = i+W_mult*x_mult
+            bids =  rank_indices_dict[rank]
+            bilinear_params = params[i:i_end].reshape(W_mult,x_mult)
+            bilinear_elems = bilinear_params@x[:,bids].T.reshape(x_mult,size(rank,W_rep.d)*bs)
+            bilinear_elems = bilinear_elems.reshape(W_mult*size(rank,W_rep.d),bs).T
+            Ws.append(bilinear_elems)
+            i = i_end
+        Ws = torch.cat(Ws,dim=-1) #concatenate over rep axis
+        return Ws[:,inverse_perm] # reorder to original rank ordering
+    return active_dims,lazy_projection
+
+def tensor_indices_dict(rep):
+    index_dict = collections.defaultdict(list)
+    i=0
+    for rank in rep.ranks:
+        i_end = i+size(rank,rep.d)
+        index_dict[rank].append(np.arange(i,i_end))
+        i = i_end
+    return {rank:np.concatenate(ids) for rank,ids in index_dict.items()}
 
 @lru_cache()
 def rep_permutation(rep):

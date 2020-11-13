@@ -2,6 +2,9 @@
 import numpy as np
 from scipy.linalg import expm
 
+def rel_err(A,B):
+    return np.mean(np.abs(A-B))/(np.mean(np.abs(A)) + np.mean(np.abs(B))+1e-7)
+
 class Group(object):
     lie_algebra = NotImplemented
     discrete_generators = NotImplemented
@@ -31,6 +34,15 @@ class Group(object):
             k = np.random.randint(-5,5)
             g = g@np.linalg.matrix_power(h,k)
         return g
+
+    def is_unimodular(self):
+        unimodular = True
+        if self.lie_algebra.shape[0]!=0:
+            unimodular &= rel_err(-self.lie_algebra.transpose((0,2,1)),self.lie_algebra)<1e-6
+        h = self.discrete_generators
+        if h.shape[0]!=0:
+            unimodular &= rel_err(h.transpose((0,2,1))@h,np.eye(self.d))<1e-6
+        return unimodular
 
     def __mul__(self,G2):
         return CrossProductGroup(self,G2)

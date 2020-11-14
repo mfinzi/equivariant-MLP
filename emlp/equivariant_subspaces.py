@@ -9,8 +9,8 @@ import random
 
 class OrderedCounter(collections.Counter,collections.OrderedDict): pass
 
-def repsize(rep,d):
-    return sum(d**(p+q) for (p,q) in rep)
+def repsize(ranks,d):
+    return sum(d**(p+q) for (p,q) in ranks)
 
 class TensorRep(object):
     def __init__(self,ranks,G=None,shapes=None):
@@ -20,6 +20,7 @@ class TensorRep(object):
         self.shapes = shapes or (self.ranks,)
         self.G=G
         self.d = self.G.d if self.G is not None else None
+        self.__name__=self.__class__
 
     def __eq__(self, other):
         return len(self)==len(other) and all(r==rr for r,rr in zip(self.ranks,other.ranks))
@@ -51,8 +52,8 @@ class TensorRep(object):
     def __rmul__(self, other):
         if isinstance(other, int): return TensorRep(other * self.ranks, self.G)
         else: assert False, f"Unsupported operand Rep*{type(other)}"
-    def __iter__(self):
-        return iter(self.ranks)
+    # def __iter__(self):
+    #     return iter(self.ranks)
     @property
     def T(self):
         """ only swaps to adjoint representation, does not reorder elems"""
@@ -62,14 +63,14 @@ class TensorRep(object):
         raise NotImplementedError
 
     def multiplicities(self):
-        if self.G.is_unimodular(): # orthogonal subgroup-> collaps T(p,q) to T(p+q)
+        if self.G is not None and self.G.is_unimodular(): # orthogonal subgroup-> collapse T(p,q) to T(p+q)
             return OrderedCounter((p+q,0) for (p,q) in self.ranks)
         return OrderedCounter(self.ranks)
 
     def __repr__(self):
         multiplicities=  self.multiplicities()
         tensors = "+".join(f"{v if v > 1 else ''}T{key}" for key, v in multiplicities.items())
-        if self.G.is_unimodular():
+        if self.G is not None and self.G.is_unimodular():
             tensors = "+".join(f"{v if v > 1 else ''}T({q})" for (q,p), v in multiplicities.items())
         return tensors+f" @ d={self.d}" if self.d is not None else tensors
     def __str__(self):
@@ -108,7 +109,7 @@ class TensorRep(object):
     def argsort(self):
         """ get the permutation given by converting
             from the order in ranks to the order when the ranks are grouped by
-            first occurrence of a given type (p,q)."""
+            first occurrence of a given type (p,q). (Bucket sort)"""
         ranks_indices = collections.OrderedDict(((rank, []) for rank in self.multiplicities()))
         i=0
         for (p,q) in self.ranks:

@@ -9,7 +9,7 @@ def gate_indices(rep):
     indices = np.arange(channels)
     num_nonscalars = 0
     i=0
-    for rank in rep:
+    for rank in rep.ranks:
         if rank!=(0,0):
             indices[i:i+size(rank,rep.d)] = channels+num_nonscalars
             num_nonscalars+=1
@@ -20,7 +20,7 @@ def scalar_mask(rep):
     channels = rep.size()
     mask = torch.ones(channels)>0
     i=0
-    for rank in rep:
+    for rank in rep.ranks:
         if rank!=(0,0): mask[i:i+size(rank,rep.d)] = False
         i+=size(rank,rep.d)
     return mask

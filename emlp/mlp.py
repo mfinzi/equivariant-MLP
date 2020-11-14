@@ -6,6 +6,7 @@ from emlp.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad,size
 from emlp.equivariant_subspaces import capped_tensor_ids,rep_permutation,bilinear_weights
 from emlp.batchnorm import TensorMaskBN,gate_indices
 import collections
+from oil.utils.utils import Named
 
 # class LieLinear(nn.Module):  #
 #     def __init__(self, repin, repout):
@@ -77,7 +78,7 @@ class Sum2(nn.Module):
         return self.m1(*args,**kwargs)+self.m2(*args,**kwargs)
 
 def gated(rep):#
-    return rep+sum([1 for t in rep if t!=(0,0)])*Scalar
+    return rep+sum([1 for t in rep.ranks if t!=(0,0)])*Scalar
 
 class GatedNonlinearity(nn.Module):
     def __init__(self,rep):
@@ -118,13 +119,13 @@ def TensorLinearBNSwish(repin,repout):
                          TensorMaskBN(gated(repout)),
                          GatedNonlinearity(repout))
 
-class EMLP(nn.Module):
-    def __init__(self,rep_in,rep_out,rep_middle,num_layers,algebra):#@
+class EMLP(nn.Module,metaclass=Named):
+    def __init__(self,rep_in,rep_out,rep_middle,num_layers,group):#@
         super().__init__()
-        reps = [rep_in(algebra)]+(num_layers-1)*[rep_middle(algebra)]
+        reps = [rep_in(group)]+(num_layers-1)*[rep_middle(group)]
         self.network = nn.Sequential(
             *[TensorLinearBNSwish(rin,rout) for rin,rout in zip(reps,reps[1:])],#
-            TensorLinear(rep_middle(algebra),rep_out(algebra))
+            TensorLinear(rep_middle(group),rep_out(group))
         )
     def forward(self,x):
         return self.network(x).squeeze(-1)
@@ -136,13 +137,13 @@ class Swish(nn.Module):
 def LinearBNSwish(cin,cout):
     return nn.Sequential(nn.Linear(cin,cout),nn.BatchNorm1d(cout),Swish())
 
-class MLP(nn.Module):
-    def __init__(self,rep_in,rep_out,rep_middle,num_layers,algebra):
+class MLP(nn.Module,metaclass=Named):
+    def __init__(self,rep_in,rep_out,rep_middle,num_layers,group):
         super().__init__()
-        cin = rep_in(algebra).size()
-        cmid = rep_middle(algebra).size()
-        cmid=256
-        cout = rep_out(algebra).size()
+        cin = rep_in(group).size()
+        cmid = rep_middle(group).size()
+        #cmid=256
+        cout = rep_out(group).size()
         self.network = nn.Sequential(
             LinearBNSwish(cin,cmid),
             LinearBNSwish(cmid,cmid),

@@ -1,18 +1,20 @@
 
 import numpy as np
 from scipy.linalg import expm
+from oil.utils.utils import Named
 
 def rel_err(A,B):
     return np.mean(np.abs(A-B))/(np.mean(np.abs(A)) + np.mean(np.abs(B))+1e-7)
 
-class Group(object):
+class Group(object,metaclass=Named):
     lie_algebra = NotImplemented
     discrete_generators = NotImplemented
-    def __init__(self):
+    def __init__(self,*args,**kwargs):
         if self.lie_algebra is NotImplemented:
             self.lie_algebra = np.zeros((0,self.d,self.d))
         if self.discrete_generators is NotImplemented:
             self.discrete_generators = np.zeros((0,self.d,self.d))
+        self.args = args
     def exp(self,A):
         return expm(A)
 
@@ -46,6 +48,10 @@ class Group(object):
 
     def __mul__(self,G2):
         return CrossProductGroup(self,G2)
+    def __str__(self):
+        return repr(self)
+    def __repr__(self):
+        return f"{self.__class__}{list(self.args)}"
 
 class CrossProductGroup(Group):
     def __init__(self,G1,G2):
@@ -55,7 +61,7 @@ class CrossProductGroup(Group):
 class Trivial(Group): #""" The trivial group G={I} in N dimensions """
     def __init__(self,N):
         self._d = N
-        super().__init__()
+        super().__init__(N)
 
 class SO(Group): #""" The special orthogonal group SO(N) in N dimensions"""
     def __init__(self,N):
@@ -66,7 +72,7 @@ class SO(Group): #""" The special orthogonal group SO(N) in N dimensions"""
                 self.lie_algebra[k,i,j] = 1
                 self.lie_algebra[k,j,i] = -1
                 k+=1
-        super().__init__()
+        super().__init__(N)
 
 class O(SO): #""" The Orthogonal group O(N) in N dimensions"""
     def __init__(self,N):
@@ -79,7 +85,7 @@ class C(Group): #""" The Cyclic group Ck in 2 dimensions"""
         theta = 2*np.pi/k
         self.discrete_generators = np.zeros((1,2,2))
         self.discrete_generators[0,:,:] = np.array([[np.cos(theta),np.sin(theta)],[-np.sin(theta),np.cos(theta)]])
-        super().__init__()
+        super().__init__(k)
 
 class D(C): #""" The Dihedral group Dk in 2 dimensions"""
     def __init__(self,k):
@@ -89,7 +95,7 @@ class D(C): #""" The Dihedral group Dk in 2 dimensions"""
 class Scaling(Group):
     def __init__(self,N):
         self.lie_algebra = np.eye(N)[None]
-        super().__init__()
+        super().__init__(N)
 
 class Parity(Group): #""" The spacial parity group in 1+3 dimensions"""
     discrete_generators = -np.eye(4)[None]

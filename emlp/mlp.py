@@ -7,6 +7,9 @@ from emlp.equivariant_subspaces import capped_tensor_ids,rep_permutation,bilinea
 from emlp.batchnorm import TensorMaskBN,gate_indices
 import collections
 from oil.utils.utils import Named
+import scipy as sp
+import scipy.special
+import random
 
 # class LieLinear(nn.Module):  #
 #     def __init__(self, repin, repout):
@@ -69,13 +72,13 @@ class Sum(nn.Sequential):
         return sum(mod(*args,**kwargs) for mod in self)
 
 
-class Sum2(nn.Module):
-    def __init__(self,m1,m2):
-        super().__init__()
-        self.m1=m1
-        self.m2=m2
-    def forward(self,*args,**kwargs):
-        return self.m1(*args,**kwargs)+self.m2(*args,**kwargs)
+# class Sum2(nn.Module):
+#     def __init__(self,m1,m2):
+#         super().__init__()
+#         self.m1=m1
+#         self.m2=m2
+#     def forward(self,*args,**kwargs):
+#         return self.m1(*args,**kwargs)+self.m2(*args,**kwargs)
 
 def gated(rep):#
     return rep+sum([1 for t in rep.ranks if t!=(0,0)])*Scalar
@@ -115,17 +118,50 @@ class TensorLinear(LieLinear):
 
 def TensorLinearBNSwish(repin,repout):
     #return nn.Sequential(TensorLinear(repin,gated(repout)),TensorMaskBN(gated(repout)),GatedNonlinearity(repout))
-    return nn.Sequential(Sum2(BiLinear(repin,gated(repout)),LieLinear(repin,gated(repout))),
+    return nn.Sequential(Sum(BiLinear(repin,gated(repout)),LieLinear(repin,gated(repout))),
                          TensorMaskBN(gated(repout)),
                          GatedNonlinearity(repout))
 
+
+
+def uniform_rep(ch,group):
+    """ A heuristic method for allocating a given number of channels (ch)
+        into tensor types. Attempts to distribute the channels evenly across
+        the different tensor types. """
+    d = group.d
+    Ns = np.zeros((lambertW(ch,d)+1,),int) # number of tensors of each rank
+    while ch>0:
+        max_rank = lambertW(ch,d) # compute the max rank tensor that can fit up to
+        Ns[:max_rank+1] += np.array([d**(max_rank-r) for r in range(max_rank+1)],dtype=int)
+        ch -= (max_rank+1)*d**max_rank # compute leftover channels
+    return sum(uniform_allocation(nr,r)(group) for r,nr in enumerate(Ns))
+
+def lambertW(ch,d):
+    """ Returns solution to x*d^x = ch rounded down."""
+    max_rank=0
+    while (max_rank+1)*d**max_rank <= ch:
+        max_rank += 1
+    max_rank -= 1
+    return max_rank
+
+def uniform_allocation(N,rank):
+    """ Uniformly allocates N of tensors of total rank r=(p+q) into
+        T(k,r-k) for k=0,1,...,r. For unimodular groups there is no
+        distinction between p and q, so this op is equivalent to N*T(rank)."""
+    if N==0: return 0
+    even_split = sum((N//(rank+1))*T(k,rank-k) for k in range(rank+1))
+    ragged = sum(random.sample([T(k,rank-k) for k in range(rank+1)],N%(rank+1)))
+    return even_split+ragged
+
+
 class EMLP(nn.Module,metaclass=Named):
-    def __init__(self,rep_in,rep_out,rep_middle,num_layers,group):#@
+    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
         super().__init__()
-        reps = [rep_in(group)]+(num_layers-1)*[rep_middle(group)]
+        repmiddle = uniform_rep(ch,group)
+        reps = [rep_in(group)]+num_layers*[repmiddle]
         self.network = nn.Sequential(
             *[TensorLinearBNSwish(rin,rout) for rin,rout in zip(reps,reps[1:])],#
-            TensorLinear(rep_middle(group),rep_out(group))
+            TensorLinear(repmiddle,rep_out(group))
         )
     def forward(self,x):
         return self.network(x).squeeze(-1)
@@ -138,17 +174,14 @@ def LinearBNSwish(cin,cout):
     return nn.Sequential(nn.Linear(cin,cout),nn.BatchNorm1d(cout),Swish())
 
 class MLP(nn.Module,metaclass=Named):
-    def __init__(self,rep_in,rep_out,rep_middle,num_layers,group):
+    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
         super().__init__()
         cin = rep_in(group).size()
-        cmid = rep_middle(group).size()
-        #cmid=256
+        chs = [cin]+num_layers*[ch]
         cout = rep_out(group).size()
         self.network = nn.Sequential(
-            LinearBNSwish(cin,cmid),
-            LinearBNSwish(cmid,cmid),
-            LinearBNSwish(cmid,cmid),
-            nn.Linear(cmid,cout)
+            *[LinearBNSwish(c1,c2) for c1,c2 in zip(chs,chs[1:])],
+            nn.Linear(chs[-1],cout)
         )
     def forward(self,x):
         return self.network(x).squeeze(-1)

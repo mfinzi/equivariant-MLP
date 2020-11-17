@@ -53,7 +53,7 @@ class BiLinear(nn.Module):
         print(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
     def forward(self, x):
-        W = self.weight_proj(self._weight_params*self.random_mask.to(x.device),x)[:,self.matrix_perm].reshape(x.shape[0],*self.W_shape)
+        W = self.weight_proj(self._weight_params,x)[:,self.matrix_perm].reshape(x.shape[0],*self.W_shape)
         #print(x.shape,W.shape)
         return .05*(W@x.unsqueeze(-1)).squeeze(-1)
 
@@ -65,20 +65,20 @@ class TensorBiLinear(LieLinear):
         in_vals = torch.cat([values,self.bilinear(values)/10],dim=-1)
         return super().forward(in_vals)
 
-class Sum(nn.Sequential):
+class Sum2(nn.Sequential):
     def __init__(self,*modules):
         super().__init__(*modules)
     def forward(self,*args,**kwargs):
         return sum(mod(*args,**kwargs) for mod in self)
 
 
-# class Sum2(nn.Module):
-#     def __init__(self,m1,m2):
-#         super().__init__()
-#         self.m1=m1
-#         self.m2=m2
-#     def forward(self,*args,**kwargs):
-#         return self.m1(*args,**kwargs)+self.m2(*args,**kwargs)
+class Sum(nn.Module):
+    def __init__(self,m1,m2):
+        super().__init__()
+        self.m1=m1
+        self.m2=m2
+    def forward(self,*args,**kwargs):
+        return self.m1(*args,**kwargs)+self.m2(*args,**kwargs)
 
 def gated(rep):#
     return rep+sum([1 for t in rep.ranks if t!=(0,0)])*Scalar
@@ -122,8 +122,6 @@ def TensorLinearBNSwish(repin,repout):
                          TensorMaskBN(gated(repout)),
                          GatedNonlinearity(repout))
 
-
-
 def uniform_rep(ch,group):
     """ A heuristic method for allocating a given number of channels (ch)
         into tensor types. Attempts to distribute the channels evenly across
@@ -152,7 +150,6 @@ def uniform_allocation(N,rank):
     even_split = sum((N//(rank+1))*T(k,rank-k) for k in range(rank+1))
     ragged = sum(random.sample([T(k,rank-k) for k in range(rank+1)],N%(rank+1)))
     return even_split+ragged
-
 
 class EMLP(nn.Module,metaclass=Named):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@

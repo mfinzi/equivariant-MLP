@@ -257,7 +257,10 @@ def bilinear_weights(W_rep,x_rep):
         Ws = []
         #params = params.detach()
         #x = x.detach()
+        #all_xs = 
         for rank, W_mult in W_multiplicities.items():
+            #Ws.append(torch.zeros(bs,W_mult*size(rank,d),device=x.device))
+            #continue
             x_mult = x_multiplicities[rank]
             if rank not in x_multiplicities:
                 Ws.append(torch.zeros(bs,W_mult*size(rank,d),device=x.device))

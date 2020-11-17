@@ -114,3 +114,22 @@ class SO13p(Group): #""" The component of Lorentz group connected to identity"""
 SO13 = SO13p()*TimeReversal() # The parity preserving Lorentz group
 
 Lorentz = O13 = SO13p()*Parity()*TimeReversal() # The full lorentz group with P,T transformations
+
+class Symplectic(Group):
+    def __init__(self,m):
+        self.lie_algebra = np.zeros((m*(2*m+1),2*m,2*m))
+        k=0
+        for i in range(m): # block diagonal elements
+            for j in range(m):
+                self.lie_algebra[k,i,j] = 1
+                self.lie_algebra[k,m+j,m+i] = -1
+                k+=1
+        for i in range(m):
+            for j in range(i+1):
+                self.lie_algebra[k,m+i,j] = 1
+                self.lie_algebra[k,m+j,i] = 1
+                k+=1
+                self.lie_algebra[k,i,m+j] = 1
+                self.lie_algebra[k,j,m+i] = 1
+                k+=1
+        super().__init__(m)

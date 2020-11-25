@@ -33,6 +33,7 @@ import random
 class LieLinear(nn.Linear):  #
     def __init__(self, repin, repout):
         super().__init__(repin.size(),repout.size())
+        #print("Linear sizes:",repin.size(),repout.size())
         rep_W = repout*repin.T
         rep_bias = repout
         self.weight_proj = rep_W.symmetric_projection()
@@ -57,6 +58,20 @@ class BiLinear(nn.Module):
         #print(x.shape,W.shape)
         return .05*(W@x.unsqueeze(-1)).squeeze(-1)
 
+class BiLinearNew(nn.Module):
+    def __init__(self, repin, repout):
+        super().__init__()
+        rep_W = repout*repin.T
+        self.matrix_perm = rep_permutation(rep_W)
+        self.W_shape = rep_W.shape
+        Wdim, self.weight_proj = bilinear_weights(rep_W,repin)
+        self._weight_params = nn.Parameter(torch.randn(Wdim))
+        self.random_mask = torch.rand(Wdim)>0#<.1
+        print(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
+
+    def forward(self, x):
+        return .05*self.weight_proj(self._weight_params,x)
+
 class TensorBiLinear(LieLinear):
     def __init__(self,repin,repout):
         super().__init__(repin+repout,repout)
@@ -78,7 +93,10 @@ class Sum(nn.Module):
         self.m1=m1
         self.m2=m2
     def forward(self,*args,**kwargs):
-        return self.m1(*args,**kwargs)+self.m2(*args,**kwargs)
+        a1 = self.m1(*args,**kwargs)
+        a2 = self.m2(*args,**kwargs)
+        #print(a1.shape,a2.shape)
+        return a1+a2
 
 def gated(rep):#
     return rep+sum([1 for t in rep.ranks if t!=(0,0)])*Scalar
@@ -156,6 +174,7 @@ class EMLP(nn.Module,metaclass=Named):
         super().__init__()
         repmiddle = uniform_rep(ch,group)
         reps = [rep_in(group)]+num_layers*[repmiddle]
+        print(reps)
         self.network = nn.Sequential(
             *[TensorLinearBNSwish(rin,rout) for rin,rout in zip(reps,reps[1:])],#
             TensorLinear(repmiddle,rep_out(group))

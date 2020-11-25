@@ -36,6 +36,8 @@ class Group(object,metaclass=Named):
             k = np.random.randint(-5,5)
             g = g@np.linalg.matrix_power(h,k)
         return g
+    def samples(self,N):
+        return np.stack(self.sample() for _ in range(N))
 
     def is_unimodular(self):
         unimodular = True
@@ -51,12 +53,21 @@ class Group(object,metaclass=Named):
     def __str__(self):
         return repr(self)
     def __repr__(self):
-        return f"{self.__class__}{list(self.args)}"
+        return f"{self.__class__}{list(self.args) if self.args else ''}"
+    def __eq__(self,G2): #TODO: check that spans are equal?
+        return (self.lie_algebra==G2.lie_algebra).all() and (self.discrete_generators==G2.discrete_generators).all()
+    def __hash__(self):
+        return hash((self.lie_algebra.tostring(),self.discrete_generators.tostring()))
 
 class CrossProductGroup(Group):
     def __init__(self,G1,G2):
         self.lie_algebra = np.concatenate((G1.lie_algebra,G2.lie_algebra))
         self.discrete_generators = np.concatenate((G1.discrete_generators,G2.discrete_generators))
+        self.names = (repr(G1),repr(G2))
+        super().__init__()
+        
+    def __repr__(self):
+        return f"{self.names[0]}x{self.names[1]}"
 
 class Trivial(Group): #""" The trivial group G={I} in N dimensions """
     def __init__(self,N):

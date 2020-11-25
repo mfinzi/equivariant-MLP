@@ -1,11 +1,13 @@
 import numpy as np
 import torch
 import collections,itertools
-from functools import lru_cache
+from functools import lru_cache as cache
+from emlp.utils import disk_cache
 import scipy as sp
 import scipy.linalg
 import functools
 import random
+from scipy.sparse.linalg import LinearOperator
 
 class OrderedCounter(collections.Counter,collections.OrderedDict): pass
 
@@ -137,7 +139,7 @@ def size(rank,d):
 def rho(G,rank):
     p,q = rank
     Gp = functools.reduce(np.kron,p*[G],1)
-    GpGinvTq = functools.reduce(np.kron,q*[np.linalg.inv(G).T],Gp)
+    GpGinvTq = functools.reduce(np.kron,q*[np.linalg.inv(G).T],Gp) # shouldn't this be backwards?
     return GpGinvTq
 
 def drho(M,rank):
@@ -154,8 +156,52 @@ def drho(M,rank):
     for r in range(1,p+1):
         rep_M += np.kron(np.kron(Ikron_powers[r-1],M),Ikron_powers[p-r+q])
     for s in range(1,q+1):
-        rep_M -= np.kron(np.kron(Ikron_powers[p+s-1],M.T),Ikron_powers[q-s])
+       rep_M -= np.kron(np.kron(Ikron_powers[p+s-1],M.T),Ikron_powers[q-s])
     return rep_M
+
+class rho_lazy(LinearOperator):
+    def __init__(self,M,rank):
+        self.d = M.shape[0]
+        self.M = M
+        self.rank = rank
+        self.c = size(rank,self.d)
+        self.dtype=np.float64
+    @property
+    def shape(self):
+        return (self.c,self.c)
+    def _matmat(self,V): #(c,k)
+        c,k = V.shape
+        p,q = self.rank
+        eV = V.reshape((p+q)*[self.d]+[k])
+        for i in range(p):
+            eV = np.moveaxis(np.dot(self.M,eV),0,i)
+        for i in range(p,p+q):
+            eV = np.moveaxis(np.dot(np.linalg.inv(self.M.T),eV),0,i)
+        return eV.reshape(*V.shape)
+
+class drho_lazy(LinearOperator):
+    def __init__(self,M,rank):
+        self.d = M.shape[0]
+        self.M = M
+        self.rank = rank
+        self.c = size(rank,self.d)
+        self.dtype=np.float64
+    @property
+    def shape(self):
+        return (self.c,self.c)
+    def _matmat(self,V): #(c,k)
+        c,k = V.shape
+        p,q = self.rank
+        eV = V.reshape((p+q)*[self.d]+[k])
+        out = np.zeros_like(eV)
+        for i in range(p):
+            out += np.moveaxis(np.dot(self.M,eV),0,i)
+        for i in range(p,p+q):
+            out -= np.moveaxis(np.dot(self.M.T,eV),0,i)
+        return out.reshape(*V.shape)
+    def _adjoint(self):
+        return drho_lazy(self.M.T,self.rank)
+
 
 def projection_matrix(group,rank):
     """ Given a sequence of exponential generators [A1,A2,...]
@@ -174,6 +220,7 @@ def orthogonal_complement(proj):
     rank = (S>1e-10).sum()
     return VT[rank:]
 
+@disk_cache('_subspace_cache.dat')
 def get_active_subspace(group,rank):
     """ Given an array of generators [M1,M2,...] and tensor rank (p,q)
         this function computes the orthogonal complement to the projection
@@ -255,12 +302,7 @@ def bilinear_weights(W_rep,x_rep):
         bs = x.shape[0]
         i=0
         Ws = []
-        #params = params.detach()
-        #x = x.detach()
-        #all_xs = 
         for rank, W_mult in W_multiplicities.items():
-            #Ws.append(torch.zeros(bs,W_mult*size(rank,d),device=x.device))
-            #continue
             x_mult = x_multiplicities[rank]
             if rank not in x_multiplicities:
                 Ws.append(torch.zeros(bs,W_mult*size(rank,d),device=x.device))
@@ -269,13 +311,52 @@ def bilinear_weights(W_rep,x_rep):
             i_end = i+W_mult*n
             bids =  reduced_indices_dict[rank]
             bilinear_params = params[i:i_end].view(W_mult,n)
-            i = i_end
+            i = i_end  # (bs,W_mult,d^r) = (W_mult,n)@(n,d^r,bs)
             bilinear_elems = bilinear_params@x[:,bids].T.reshape(n,size(rank,d)*bs)
             bilinear_elems = bilinear_elems.view(W_mult*size(rank,d),bs).T
             Ws.append(bilinear_elems)
         Ws = torch.cat(Ws,dim=-1) #concatenate over rep axis
         return Ws[:,inverse_perm] # reorder to original rank ordering
     return active_dims,lazy_projection
+
+# def bilinear_weights(W_rep,x_rep):
+#     W_multiplicities = W_rep.multiplicities()
+#     x_multiplicities = x_rep.multiplicities()
+#     x_multiplicities.pop((0,0),None)#[(0,0)]=0 # Remove scalars
+#     d = x_rep.d
+#     nelems = lambda nx,rank: min(nx,size(rank,d))
+#     active_dims = sum([W_multiplicities[rank]*nelems(n,rank) for rank,n in x_multiplicities.items()])
+#     # Get the permutation of the vector when grouped by tensor rank
+#     inverse_perm = torch.argsort(W_rep.argsort())
+#     rank_indices_dict = tensor_indices_dict(x_rep)
+#     reduced_indices_dict = {rank:np.concatenate(random.sample(ids,nelems(len(ids),rank)))\
+#                                 for rank,ids in rank_indices_dict.items()}
+#     matrix_perm = rep_permutation(rep_W)
+#     # Apply the projections for each rank, concatenate, and permute back to orig rank order
+#     def lazy_projection(params,x): # (*,r), (bs,c) #TODO: find out why backwards of this function is so slow
+#         bs = x.shape[0]
+#         i=0
+#         j=0
+#         Ws = torch.zeros(x.shape[0],W_rep.size(),device=x.device)
+#         for rank, W_mult in W_multiplicities.items():
+            
+#             x_mult = x_multiplicities[rank]
+#             if rank not in x_multiplicities: continue
+#             n = nelems(x_mult,rank)
+#             i_end = i+W_mult*n
+#             bids =  reduced_indices_dict[rank]
+#             bilinear_params = params[i:i_end].view(W_mult,n)
+#             i = i_end
+#             elems = torch.einsum('bnd,wn->bwd',x[:,bids].view(bs,n,size(rank,d)).cpu(),bilinear_params.cpu()).cuda()
+#             # (bs,W_mult,d^r) = (W_mult,n)@(n,d^r,bs)
+#             # xa = x[:,bids].T.reshape(n,size(rank,d)*bs)
+#             # bilinear_elems = sum(bilinear_params[:,i,None]*xa[None,i] for i in range(n))
+#             # bilinear_elems = bilinear_elems.view(W_mult*size(rank,d),bs).T
+#             jend = j+W_mult*size(rank,d)
+#             Ws[:,j:jend] = elems.reshape(bs,-1)
+#             j = jend
+#         return Ws#[:,inverse_perm] # reorder to original rank ordering
+#     return active_dims,lazy_projection
 
 def tensor_indices_dict(rep):
     index_dict = collections.defaultdict(list)
@@ -287,7 +368,7 @@ def tensor_indices_dict(rep):
         i = i_end
     return index_dict#{rank:np.concatenate(ids) for rank,ids in index_dict.items()}
 
-@lru_cache()
+@cache()
 def rep_permutation(rep):
     arange = torch.arange(rep.size())
     size_cumsums = [np.cumsum([0] + [rep.d ** (p + q) for (p, q) in reps]) for reps in rep.shapes]
@@ -302,7 +383,7 @@ def rep_permutation(rep):
         i += chunk_size
     return permutation.reshape(-1).long()
 
-@lru_cache() #TODO: pre add self connections in tensor product before random choice (cause of variance)
+@cache() #TODO: pre add self connections in tensor product before random choice (cause of variance)
 def capped_tensor_ids(repin,maxrep):
     """Returns rep and ids for tensor product repin@repin
        but with terms >repin removed """
@@ -330,3 +411,4 @@ def capped_tensor_ids(repin,maxrep):
     # and then the multiplicity sorted order and the original ordering
     ids = torch.argsort(rep_permutation(product_rep))[sorted_perm[all_ids]]
     return out_rep,ids
+

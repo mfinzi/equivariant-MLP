@@ -144,3 +144,16 @@ class Symplectic(Group):
                 self.lie_algebra[k,j,m+i] = 1
                 k+=1
         super().__init__(m)
+
+class Permutation(Group):
+    def __init__(self,n):
+        self.discrete_generators = np.zeros((n-1,n,n))
+        self.discrete_generators += np.eye(n)
+        self.discrete_generators[:,0,0]=0
+        for i in range(n-1):
+            self.discrete_generators[i,0,i+1]=1
+            self.discrete_generators[i,i+1,0]=1
+            self.discrete_generators[i,i+1,i+1]=0
+        super().__init__()
+
+

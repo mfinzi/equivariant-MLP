@@ -78,8 +78,9 @@ class TensorRep(object):
     def __str__(self):
         return repr(self)
     def __hash__(self):
-        return hash(tuple(tuple(ranks) for ranks in self.shapes))
-
+        return hash((tuple(tuple(ranks) for ranks in self.shapes),self.G))
+    def __eq__(self,other):
+        return (tuple(ranks)==tuple(other_ranks) for ranks,other_ranks in zip(self.shapes,other.shapes)) and (self.G==other.G)
     def symmetric_subspace(self):
         dims,lazy_projection = get_active_subspaces(self.G,self)
         if len(self.shape)==1:

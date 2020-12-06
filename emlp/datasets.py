@@ -51,9 +51,7 @@ class Fr(Dataset,metaclass=Named):
     def __len__(self):
         return self.X.shape[0]
     def default_aug_layers(self):
-        rotate = lambda x: (torch.from_numpy(self.rep_in.rho(\
-            self.symmetry.samples(x.shape[0]))).to(x.device)@x.unsqueeze(-1)).squeeze(-1)
-        return nn.Sequential(Expression(rotate))
+        return GroupAugmentation(self.rep_in,self.symmetry)
 
 @export
 class ParticleInteraction(Dataset,metaclass=Named):
@@ -63,7 +61,7 @@ class ParticleInteraction(Dataset,metaclass=Named):
         self.dim = 4*4
         self.rep_in = 4*Vector
         self.rep_out = Scalar
-        self.X = torch.randn(N,self.dim)
+        self.X = torch.randn(N,self.dim)/4
         P = self.X.reshape(N,4,4)
         p1,p2,p3,p4 = P.permute(1,0,2)
         𝜂 = torch.diag(torch.tensor([1.,-1.,-1.,-1.]))
@@ -79,7 +77,17 @@ class ParticleInteraction(Dataset,metaclass=Named):
     def __len__(self):
         return self.X.shape[0]
     def default_aug_layers(self):
-        rotate = lambda x: (torch.from_numpy(self.rep_in.rho(\
-            self.symmetry.samples(x.shape[0]))).to(x.device)@x.unsqueeze(-1)).squeeze(-1)
-        return nn.Sequential(Expression(rotate))
+        return GroupAugmentation(self.rep_in,self.symmetry)
     
+class GroupAugmentation(nn.Module):
+    def __init__(self,rep,group):
+        super().__init__()
+        self.rep=rep
+        self.group=group
+    def forward(self,x):
+        if self.training:
+            rhog = np.stack([self.rep.rho(g) for g in self.group.samples(x.shape[0])])
+            rhog = torch.from_numpy(rhog).to(device=x.device,dtype=x.dtype)
+            return  (rhog@x.unsqueeze(-1)).squeeze(-1)
+        else:
+            return x

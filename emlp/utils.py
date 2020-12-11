@@ -1,5 +1,14 @@
 import pickle, atexit
 
+class NoCache(object):
+    def __enter__(self):
+        self.settings = CacheSettings.disk_caching
+        CacheSettings.disk_caching=False
+        return self
+    def __exit__(self, *exc):
+        CacheSettings.disk_caching=self.settings
+        return False
+
 class CacheSettings(object):
     memory_caching=True
     disk_caching=True

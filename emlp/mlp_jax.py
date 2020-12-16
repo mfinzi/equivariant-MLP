@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
-import haiku as hk#import objax.nn as nn
+import objax.nn as nn
+import objax.functional as F
 import numpy as np
 from emlp.equivariant_subspaces_jax import T,Scalar,Vector,Matrix,Quad,size
 from emlp.equivariant_subspaces_jax import capped_tensor_ids,rep_permutation,bilinear_weights
@@ -11,83 +12,84 @@ import scipy as sp
 import scipy.special
 import random
 import logging
+from objax.variable import TrainVar, StateVar
+from objax.nn.init import kaiming_normal, xavier_normal
+from objax.module import Module
 
-class LieLinear(hk.Module):  #
-    def __init__(self, repin, repout,name=None):
-        super().__init__(name)
-        cin,cout = repin.size(),repout.size()
-        scale= 1. / np.sqrt(cin)
-        w_init = hk.initializers.TruncatedNormal(scale)
-        self.W = hk.get_parameter("w", shape=[cout, cin], init=w_init)
-        self.b = hk.get_parameter("b", shape=[cout], init=hk.initializers.RandomUniform(-scale,scale))
+
+def Sequential(*args):
+    return nn.Sequential(args)
+
+class LieLinear(nn.Linear):  #
+    def __init__(self, repin, repout):
+        super().__init__(repin.size(),repout.size())
         #print("Linear sizes:",repin.size(),repout.size())
         rep_W = repout*repin.T
         rep_bias = repout
         self.weight_proj = rep_W.symmetric_projection()
         self.bias_proj = rep_bias.symmetric_projection()
         logging.info(f"Linear W components:{rep_W.size()} shape:{rep_W.shape} rep:{rep_W}")
-    def __call__(self, x,is_training=True): # (cin) -> (cout)
+    def __call__(self, x): # (cin) -> (cout)
         logging.debug(f"linear in shape: {x.shape}")
-        W = self.weight_proj(self.W)
-        b = self.bias_proj(self.b)
+        W = self.weight_proj(self.w.value)
+        b = self.bias_proj(self.b.value)
         out = x@W.T+b
         logging.debug(f"linear out shape:{out.shape}")
         return out
 
-class BiLinear(hk.Module):
-    def __init__(self, repin, repout,name=None):
-        super().__init__(name)
+class BiLinear(Module):
+    def __init__(self, repin, repout):
+        super().__init__()
         rep_W = repout*repin.T
         self.matrix_perm = rep_permutation(rep_W)
         self.W_shape = rep_W.shape
         Wdim, self.weight_proj = bilinear_weights(rep_W,repin)
-        w_init = hk.initializers.TruncatedNormal(1./np.sqrt(Wdim))
-        self._weight_params = hk.get_parameter("w",shape=[Wdim],init=w_init)
+        self._weight_params = TrainVar(xavier_normal((Wdim,)))
         logging.info(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
-    def __call__(self, x,is_training=True):
+    def __call__(self, x,training=True):
         logging.debug(f"bilinear in shape: {x.shape}")
-        W = self.weight_proj(self._weight_params,x)[:,self.matrix_perm].reshape(-1,*self.W_shape)
+        W = self.weight_proj(self._weight_params.value,x)[:,self.matrix_perm].reshape(-1,*self.W_shape)
         out= .05*(W@x[...,None])[...,0]
         #import pdb; pdb.set_trace()
         logging.debug(f"bilinear out shape: {out.shape}")
         return out
 
-class Sequential(hk.Sequential):
-    def __call__(self,*args,**kwargs):
-        for mod in self.layers:
-            args = (mod(*args,**kwargs),)
-            #print(args[0].shape)
-        return args[0]
-
-class Sum(hk.Sequential):
-    def __call__(self,*args,**kwargs):
-        return sum(mod(*args,**kwargs) for mod in self.layers)
-
-
 def gated(rep):
     return rep+sum([1 for t in rep.ranks if t!=(0,0)])*Scalar
 
-class GatedNonlinearity(hk.Module):
-    def __init__(self,rep,name=None):
-        super().__init__(name)
+class GatedNonlinearity(Module):
+    def __init__(self,rep):
+        super().__init__()
         self.rep=rep
-    def __call__(self,values,is_training=True):
+    def __call__(self,values):
         gate_scalars = values[..., gate_indices(self.rep)]
         activations = jax.nn.sigmoid(gate_scalars) * values[..., :self.rep.size()]
         return activations
 
 
-def LieLinearBNSwish(repin,repout):
-    return Sequential([LieLinear(repin,gated(repout)),
-                         TensorMaskBN(gated(repout)),
-                         GatedNonlinearity(repout)])
+# def LieLinearBNSwish(repin,repout):
+#     return Sequential([LieLinear(repin,gated(repout)),
+#                          TensorMaskBN(gated(repout)),
+#                          GatedNonlinearity(repout)])
 
-def TensorLinearBNSwish(repin,repout): #TODO: investigate BiLinear after LieLinear instead of parallel
-    #return nn.Sequential(TensorLinear(repin,gated(repout)),TensorMaskBN(gated(repout)),GatedNonlinearity(repout))
-    return Sequential([Sum([BiLinear(repin,gated(repout)),LieLinear(repin,gated(repout))]),
-                         TensorMaskBN(gated(repout)),
-                         GatedNonlinearity(repout)])
+# def TensorLinearBNSwish(repin,repout): #TODO: investigate BiLinear after LieLinear instead of parallel
+#     #return Sequential(TensorLinear(repin,gated(repout)),TensorMaskBN(gated(repout)),GatedNonlinearity(repout))
+#     return Sequential([Sum([BiLinear(repin,gated(repout)),LieLinear(repin,gated(repout))]),
+#                          TensorMaskBN(gated(repout)),
+#                          GatedNonlinearity(repout)])
+
+class EMLPBlock(Module):
+    def __init__(self,rep_in,rep_out):
+        super().__init__()
+        self.linear = LieLinear(rep_in,gated(rep_out))
+        self.bilinear = BiLinear(rep_in,gated(rep_out))
+        self.bn = TensorMaskBN(gated(rep_out))
+        self.nonlinearity = GatedNonlinearity(rep_out)
+    def __call__(self,x,training=True):
+        preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
+        return self.nonlinearity(preact)
+
 
 def uniform_rep(ch,group):
     """ A heuristic method for allocating a given number of channels (ch)
@@ -118,39 +120,44 @@ def uniform_allocation(N,rank):
     ragged = sum(random.sample([T(k,rank-k) for k in range(rank+1)],N%(rank+1)))
     return even_split+ragged
 
-class EMLP(hk.Module):
-    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3,name=None):#@
-        super().__init__(name)
+class EMLP(Module):
+    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
+        super().__init__()
         logging.warning("Initing EMLP")
         repmiddle = uniform_rep(ch,group)
         reps = [rep_in(group)]+num_layers*[repmiddle]
         logging.debug(reps)
-        self.network = hk.Sequential(
-            [TensorLinearBNSwish(rin,rout) for rin,rout in zip(reps,reps[1:])]+
-            [LieLinear(repmiddle,rep_out(group))]
+        self.network = Sequential(
+            *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+            LieLinear(repmiddle,rep_out(group))
         )
-    def __call__(self,x,is_training=True):
-        return self.network(x,is_training=is_training).squeeze(-1)
+    def __call__(self,x,training):
+        return self.network(x,training=training).squeeze(-1)
 
 def swish(x):
     return jax.nn.sigmoid(x)*x
 
-def LinearBNSwish(cout):
-    return hk.Sequential([hk.Linear(cout),hk.BatchNorm(True,True,.9),swish])
+def MLPBlock(cin,cout): # works better without batchnorm?
+    return Sequential(nn.Linear(cin,cout),nn.BatchNorm0D(cout,momentum=.9),swish)#,
 
-def mlp(repin,repout,group,ch,num_layers):
-    return hk.nets.MLP(num_layers*[ch]+[repout.size()],activation=swish)
+# class MLPBlock(Module):
+#     def __init__(self,cin,cout):
+#         super().__init__()
+#         self.linear = nn.Linear(cin,cout)
+#         self.bn = nn.BatchNorm0D(cout,momentum=.9)
+#     def __call__(self,x,training=True):
+#         return swish(self.bn(self.linear(x),training=training))
 
-class MLP(hk.Module):
+class MLP(Module):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
         super().__init__()
-        self.chs = num_layers*[ch]
-        self.cout = rep_out(group).size()
+        chs = [rep_in(group).size()] + num_layers*[ch]
+        cout = rep_out(group).size()
         logging.warning("Initing MLP")
-    def __call__(self,x,is_training):
-        for c in self.chs:
-            x = hk.Linear(c)(x)
-            x = hk.BatchNorm(True,True,.9)(x,is_training=is_training)
-            x = swish(x)
-        x = hk.Linear(self.cout)(x)
-        return x.squeeze(-1) if self.cout==1 else x
+        self.net = Sequential(
+            *[MLPBlock(cin,cout) for cin,cout in zip(chs,chs[1:])],
+            nn.Linear(chs[-1],cout)
+        )
+    def __call__(self,x,training=True):
+        y = self.net(x,training=training)
+        return y.squeeze(-1) if y.shape[-1]==1 else y

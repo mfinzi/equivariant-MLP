@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import copy
 import numpy as np
-import haiku as hk
+import objax.nn as nn
 import jax
 import jax.numpy as jnp
 from emlp.equivariant_subspaces_jax import size
 import logging
+import objax.functional as F
 
 def gate_indices(rep):
     channels = rep.size()
@@ -29,52 +30,25 @@ def scalar_mask(rep):
         i+=size(rank,rep.d)
     return mask
 
-class TensorMaskBN(hk.BatchNorm):
+class TensorMaskBN(nn.BatchNorm0D): #TODO find discrepancies with pytorch version
     """ Equivariant Batchnorm for tensor representations.
         Applies BN on Scalar channels and Mean only BN on others """
-    def __init__(self,rep,on=None):
-        super().__init__(create_scale=True,create_offset=True,decay_rate=0.9)
+    def __init__(self,rep):
+        super().__init__(rep.size(),momentum=0.9)
         self.rep=rep
-        self.on=on
-        self.scale = hk.get_parameter("scale", [rep.size()], init=jnp.ones)
-        self.offset = hk.get_parameter("offset", [rep.size()], init =jnp.zeros)
-    def __call__(self,inp,is_training=True,test_local_stats=False):
-        logging.debug(f"bn input shape{inp.shape}")
-        if self.on:
-            x = inp[self.on]
-            mask = inp.get("mask",jnp.ones_like(x[...,0])>0)
-        else:
-            x = inp
-            mask = jnp.ones_like(x[...,0])>0
-        #x_or_zero = torch.where(mask.unsqueeze(-1), x, torch.zeros_like(x))  # replace elements outside mask
-        x_or_zero=x
-        if is_training or test_local_stats:
-            sum_dims = list(range(len(x.shape[:-1])))
-            xsum = x_or_zero.sum(sum_dims)
-            xxsum = (x_or_zero * x_or_zero).sum(sum_dims)
-            numel_mask = (mask).sum()
-            xmean = xsum / numel_mask
-            sumvar = xxsum - xsum * xmean
-            unbias_var = sumvar / (numel_mask - 1)
-            bias_var = sumvar / numel_mask
-        else:
-            xmean, bias_var = self.mean_ema.average, self.var_ema.average
-        if is_training:
-            self.mean_ema(xmean)
-            self.var_ema(unbias_var)
 
-        eps = jax.lax.convert_element_type(self.eps, bias_var.dtype)
-        std = jax.lax.clamp(eps,bias_var,np.inf)** 0.5
-        smask = jax.device_put(scalar_mask(self.rep))
-        #ratio = torch.where(mask,self.weight / std,torch.ones_like(self.weight))
-        #output = (x_or_zero * ratio + (self.bias - xmean * ratio)*mask)
-        output = jnp.where(smask,x_or_zero*self.scale/std + (self.offset-xmean*self.scale/std),x_or_zero)
-        logging.debug(f"bn output shape: {output.shape}")
-        if self.on:
-            out_dict = copy.copy(inp)
-            out_dict[self.on] = output
-            return out_dict
+    def __call__(self,x,training):
+        #logging.debug(f"bn input shape{inp.shape}")
+
+        if training:
+            m = x.mean(self.redux, keepdims=True)
+            v = (x ** 2).mean(self.redux, keepdims=True) - m ** 2
+            self.running_mean.value += (1 - self.momentum) * (m - self.running_mean.value)
+            self.running_var.value += (1 - self.momentum) * (v - self.running_var.value)
         else:
-            return output
+            m, v = self.running_mean.value, self.running_var.value
+        smask = jax.device_put(scalar_mask(self.rep))
+        y = jnp.where(smask,self.gamma.value * (x - m) * F.rsqrt(v + self.eps) + self.beta.value,x)
+        return y # switch to or (x-m)
 
 

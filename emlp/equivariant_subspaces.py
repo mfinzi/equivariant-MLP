@@ -412,4 +412,3 @@ def capped_tensor_ids(repin,maxrep):
     # and then the multiplicity sorted order and the original ordering
     ids = torch.argsort(rep_permutation(product_rep))[sorted_perm[all_ids]]
     return out_rep,ids
-

@@ -3,9 +3,10 @@ import jax.numpy as jnp
 import objax.nn as nn
 import objax.functional as F
 import numpy as np
-from emlp.equivariant_subspaces_jax import T,Scalar,Vector,Matrix,Quad,size
-from emlp.equivariant_subspaces_jax import capped_tensor_ids,rep_permutation,bilinear_weights
-from emlp.batchnorm_jax import TensorMaskBN,gate_indices
+from emlp_jax.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad,size
+from emlp_jax.equivariant_subspaces import capped_tensor_ids,rep_permutation,bilinear_weights
+from emlp_jax.groups import LearnedGroup
+from emlp_jax.batchnorm import TensorMaskBN,gate_indices
 import collections
 from oil.utils.utils import Named
 import scipy as sp
@@ -15,14 +16,18 @@ import logging
 from objax.variable import TrainVar, StateVar
 from objax.nn.init import kaiming_normal, xavier_normal
 from objax.module import Module
-
+import objax
+from objax.nn.init import orthogonal
 
 def Sequential(*args):
     return nn.Sequential(args)
 
 class LieLinear(nn.Linear):  #
     def __init__(self, repin, repout):
-        super().__init__(repin.size(),repout.size())
+        nin,nout = repin.size(),repout.size()
+        super().__init__(nin,nout)
+        self.b = TrainVar(objax.random.uniform((nout,))/jnp.sqrt(nout))
+        self.w = TrainVar(orthogonal((nin, nout)))
         #print("Linear sizes:",repin.size(),repout.size())
         rep_W = repout*repin.T
         rep_bias = repout
@@ -55,6 +60,22 @@ class BiLinear(Module):
         logging.debug(f"bilinear out shape: {out.shape}")
         return out
 
+class LieLinearLearned(nn.Linear):
+    def __init__(self, repin, repout):
+        super().__init__(repin.size(),repout.size())
+        #print("Linear sizes:",repin.size(),repout.size())
+        self.rep_W = repout*repin.T
+        self.rep_bias = repout
+    def __call__(self, x): # (cin) -> (cout)
+        logging.debug(f"linear in shape: {x.shape}")
+        weight_proj = self.rep_W.symmetric_projection()
+        bias_proj = self.rep_bias.symmetric_projection()
+        W = weight_proj(self.w.value)
+        b = bias_proj(self.b.value)
+        out = x@W.T+b
+        logging.debug(f"linear out shape:{out.shape}")
+        return out
+
 def gated(rep):
     return rep+sum([1 for t in rep.ranks if t!=(0,0)])*Scalar
 
@@ -83,6 +104,17 @@ class EMLPBlock(Module):
     def __init__(self,rep_in,rep_out):
         super().__init__()
         self.linear = LieLinear(rep_in,gated(rep_out))
+        self.bilinear = BiLinear(rep_in,gated(rep_out))
+        self.bn = TensorMaskBN(gated(rep_out))
+        self.nonlinearity = GatedNonlinearity(rep_out)
+    def __call__(self,x,training=True):
+        preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
+        return self.nonlinearity(preact)
+
+class EMLPBlockLearned(Module):
+    def __init__(self,rep_in,rep_out):
+        super().__init__()
+        self.linear = LieLinearLearned(rep_in,gated(rep_out))
         self.bilinear = BiLinear(rep_in,gated(rep_out))
         self.bn = TensorMaskBN(gated(rep_out))
         self.nonlinearity = GatedNonlinearity(rep_out)
@@ -131,8 +163,28 @@ class EMLP(Module):
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
             LieLinear(repmiddle,rep_out(group))
         )
-    def __call__(self,x,training):
-        return self.network(x,training=training).squeeze(-1)
+    def __call__(self,x,training=True):
+        y = self.network(x,training=training)
+        return y.squeeze(-1) if y.shape[-1]==1 else y
+
+class EMLPLearned(Module):
+    def __init__(self,rep_in,rep_out,d,ch=384,num_layers=3):#@
+        super().__init__()
+        self.group = LearnedGroup(d,ndiscrete=0)
+        logging.warning("Initing EMLP")
+        repmiddle = uniform_rep(ch,self.group)
+        reps = [rep_in(self.group)]+num_layers*[repmiddle]
+        logging.debug(reps)
+        self.network = Sequential(
+            *[EMLPBlockLearned(rin,rout) for rin,rout in zip(reps,reps[1:])],
+            LieLinearLearned(repmiddle,rep_out(self.group))
+        )
+    def __call__(self,x,training=True):
+        # if training: 
+        #     logging.info(f"Learned Lie Algebra: {str(self.group.lie_algebra)}")
+        #     logging.info(f"Learned generators: {str(self.group.discrete_generators)}")
+        y = self.network(x,training=training)
+        return y.squeeze(-1)# if y.shape[-1]==1 else y
 
 def swish(x):
     return jax.nn.sigmoid(x)*x

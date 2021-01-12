@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from emlp.equivariant_subspaces_jax import Scalar,Vector,Matrix
+from emlp_jax.equivariant_subspaces import Scalar,Vector,Matrix
 from torch.utils.data import Dataset
 from oil.utils.utils import export,Named,Expression,FixedNumpySeed
 from emlp.groups import SO,O,Trivial,Lorentz

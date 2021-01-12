@@ -5,7 +5,7 @@ import numpy as np
 import objax.nn as nn
 import jax
 import jax.numpy as jnp
-from emlp.equivariant_subspaces_jax import size
+from emlp_jax.equivariant_subspaces import size
 import logging
 import objax.functional as F
 

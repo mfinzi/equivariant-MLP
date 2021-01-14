@@ -13,6 +13,7 @@ import scipy.linalg
 import functools
 import random
 from scipy.sparse.linalg import LinearOperator
+import logging
 
 class OrderedCounter(collections.Counter,collections.OrderedDict): pass
 
@@ -30,11 +31,11 @@ class TensorRep(object):
         self.__name__=self.__class__
 
     def __eq__(self, other):
-        return len(self)==len(other) and all(r==rr for r,rr in zip(self.ranks,other.ranks))
+        return len(self)==len(other) and all(r==rr for r,rr in zip(self.ranks,other.ranks)) and self.G==other.G
     def __len__(self):
         return len(self.ranks)
     @property
-    def shape(self):
+    def shape(self): # Returns the total shape of the object the rep represents, e.g. (cin,cout) for a matrix
         return tuple(repsize(r, self.d) for r in self.shapes)
     def size(self):
         if not self.d: return None
@@ -95,7 +96,9 @@ class TensorRep(object):
             return dims, lambda t: lazy_projection(t)[perm].reshape(*self.shape)
 
     def symmetric_projection(self):
+        logging.debug("start QQT")
         lazy_projection = get_QQT(self.G,self)
+        logging.debug("end QQT")
         if len(self.shape)==1:
             return lazy_projection
         else:
@@ -120,15 +123,19 @@ class TensorRep(object):
         """ get the permutation given by converting
             from the order in ranks to the order when the ranks are grouped by
             first occurrence of a given type (p,q). (Bucket sort)"""
-        ranks_indices = collections.OrderedDict(((rank, []) for rank in self.multiplicities()))
-        i=0
-        for (p,q) in self.ranks:
-            tensor_size = self.d**(p+q)
-            rrank = (p+q,0) if self.G.is_unimodular() else (p,q)
-            ranks_indices[rrank].append(jnp.arange(tensor_size)+i)
-            i+= tensor_size
-        permutation = jnp.concatenate([jnp.concatenate([idx for idx in indices]) for indices in ranks_indices.values()])
-        return permutation
+        return fast_argsort(self.ranks,self.d,self.G.is_unimodular())
+
+#@partial(jit,static_argnums=(2,))
+def fast_argsort(ranks,d,orth):
+    ranks_indices = collections.defaultdict(list)
+    i=0
+    for (p,q) in ranks:
+        tensor_size = d**(p+q)
+        rrank = (p+q,0) if orth else (p,q)
+        ranks_indices[rrank].append(np.arange(tensor_size)+i)
+        i+= tensor_size
+    permutation = np.concatenate([np.concatenate(indices) for indices in ranks_indices.values()])
+    return permutation
 
 
 def T(p,q=0,G=None):
@@ -188,6 +195,8 @@ class rho_lazy(LinearOperator):
         for i in range(p,p+q):
             eV = np.moveaxis(np.dot(np.linalg.inv(self.M.T),eV),0,i)
         return eV.reshape(*V.shape)
+    def _adjoint(self):
+        return rho_lazy(self.M.T,self.rank)
 
 class drho_lazy(LinearOperator):
     def __init__(self,M,rank):
@@ -195,7 +204,7 @@ class drho_lazy(LinearOperator):
         self.M = M
         self.rank = rank
         self.c = size(rank,self.d)
-        self.dtype=np.float64
+        self.dtype=np.float32
     @property
     def shape(self):
         return (self.c,self.c)
@@ -211,6 +220,63 @@ class drho_lazy(LinearOperator):
         return out.reshape(*V.shape)
     def _adjoint(self):
         return drho_lazy(self.M.T,self.rank)
+# def drho_mvm(V,M,d,p,q):
+#     c,k = V.shape
+#     p,q = self.rank
+#     eV = V.reshape((p+q)*[self.d]+[k])
+#     out = np.zeros_like(eV)
+#     for i in range(p):
+#         out += np.moveaxis(np.dot(self.M,eV),0,i)
+#     for i in range(p,p+q):
+#         out -= np.moveaxis(np.dot(self.M.T,eV),0,i)
+#     return out.reshape(*V.shape)
+
+class projection_lazy(LinearOperator):
+    def __init__(self,group,rank):
+        self.d = group.d
+        self.hi = group.discrete_generators
+        self.Ai = group.lie_algebra
+        self.group=group
+        self.n_constraints= len(self.hi)+len(self.Ai)
+        if not self.n_constraints: raise NotImplementedError
+        self.rank = rank
+        self.c = size(rank,self.d)
+        self.dtype=np.float32
+    @property
+    def shape(self):
+        return (self.c*self.n_constraints,self.c)
+    def _matmat(self,V): #(c,k)
+        constraints = []
+        constraints.extend([drho_lazy(A,self.rank)@V for A in self.Ai])
+        constraints.extend([rho_lazy(h,self.rank)@V-V for h in self.hi])
+        CV = np.concatenate(constraints,axis=0)
+        return CV
+    def _rmatmat(self,V):
+        n_constraints = len(self.hi)+len(self.Ai)
+        Vi = np.split(V,self.n_constraints)
+        out = 0
+        out += sum([drho_lazy(A,self.rank).T@Vi[i] for i,A in enumerate(self.Ai)])
+        out += sum([rho_lazy(h,self.rank).T@Vi[i+len(self.Ai)] for i,h in enumerate(self.hi)])
+        return out
+#     @property
+#     def T(self):
+#         return projection_lazyT(self.group,self.rank)
+#         #return LinearOperator(self.shape[::-1],matmat=self._rmatmat,rmatmat=self._matmat,dtype=self.dtype)
+
+# class projection_lazyT(projection_lazy):
+#     @property
+#     def shape(self):
+#         return (self.c,self.c*self.n_constraints)
+#     def _matmat(self,V):
+#         n_constraints = len(self.hi)+len(self.Ai)
+#         Vi = np.split(V,self.n_constraints)
+#         out = 0
+#         out += sum([drho_lazy(A,self.rank).T@Vi[i] for i,A in enumerate(self.Ai)])
+#         out += sum([rho_lazy(h,self.rank).T@Vi[i+len(self.Ai)] for i,h in enumerate(self.hi)])
+#         return out
+#     @property
+#     def T(self):
+#         return projection_lazy(self.group,self.rank)
 
 #@partial(jit,static_argnums=(0,1))
 def projection_matrix(group,rank):
@@ -230,8 +296,7 @@ def orthogonal_complement(proj):
     rank = (S>1e-5).sum()
     return VT[rank:]
 
-#@disk_cache('_subspace_cache_jax.dat')
-@cache()
+@disk_cache('./_subspace_cache_jax.dat')
 def get_active_subspace(group,rank):
     """ Given an array of generators [M1,M2,...] and tensor rank (p,q)
         this function computes the orthogonal complement to the projection
@@ -301,10 +366,12 @@ def get_active_subspaces(group,rep):
 def get_QQT(group,rep):
     rank_multiplicites = rep.multiplicities()
     Ps = {rank:group.get_projector(rank) for rank in rank_multiplicites}
+    logging.debug("finished projector")
     #Qs = {rank:jax.device_put(Q.astype(np.float32)) for rank,Q in Qs.items()}
     # Get the permutation of the vector when grouped by tensor rank
     perm = rep.argsort()
     invperm = jnp.argsort(perm)
+    logging.debug("finished argsorting")
     # Apply the projections for each rank, concatenate, and permute back to orig rank order
     def lazy_projection(W):
         ordered_W = W[perm]
@@ -354,7 +421,7 @@ def bilinear_weights(W_rep,x_rep):
         return Ws[:,inverse_perm] # reorder to original rank ordering
     return active_dims,lazy_projection
 
-#@partial(jit,static_argnums=(1,))
+#@cache()
 def tensor_indices_dict(rep):
     index_dict = collections.defaultdict(list)
     i=0

@@ -1,13 +1,13 @@
 
 import numpy as np
 from scipy.linalg import expm
-from oil.utils.utils import Named
+from oil.utils.utils import Named,export
 import jax
 import jax.numpy as jnp
 from objax.nn.init import kaiming_normal, xavier_normal
 from objax.module import Module
 import objax
-from .equivariant_subspaces import get_active_subspace
+import emlp_jax.equivariant_subspaces as equivariant_subspaces
 
 
 def rel_err(A,B):
@@ -71,7 +71,7 @@ class Group(object,metaclass=Named):
         return hash((algebra,gens))
 
     def get_projector(self,rank):
-        Q = get_active_subspace(self,rank)
+        Q = equivariant_subspaces.get_active_subspace(self,rank)
         P = Q.T@Q
         return lambda w: P@w
 
@@ -132,7 +132,7 @@ class Trivial(Group): #""" The trivial group G={I} in N dimensions """
     def __init__(self,N):
         self._d = N
         super().__init__(N)
-
+@export
 class SO(Group): #""" The special orthogonal group SO(N) in N dimensions"""
     def __init__(self,N):
         self.lie_algebra = np.zeros(((N*(N-1))//2,N,N))
@@ -143,25 +143,25 @@ class SO(Group): #""" The special orthogonal group SO(N) in N dimensions"""
                 self.lie_algebra[k,j,i] = -1
                 k+=1
         super().__init__(N)
-
+@export
 class O(SO): #""" The Orthogonal group O(N) in N dimensions"""
     def __init__(self,N):
         self.discrete_generators = np.eye(N)[None]
         self.discrete_generators[0,0,0]=-1
         super().__init__(N)
-
+@export
 class C(Group): #""" The Cyclic group Ck in 2 dimensions"""
     def __init__(self,k):
         theta = 2*np.pi/k
         self.discrete_generators = np.zeros((1,2,2))
         self.discrete_generators[0,:,:] = np.array([[np.cos(theta),np.sin(theta)],[-np.sin(theta),np.cos(theta)]])
         super().__init__(k)
-
+@export
 class D(C): #""" The Dihedral group Dk in 2 dimensions"""
     def __init__(self,k):
         super().__init__(k)
         self.discrete_generators = np.concatenate((self.discrete_generators,np.array([[[-1,0],[0,1]]])))
-
+@export
 class Scaling(Group):
     def __init__(self,N):
         self.lie_algebra = np.eye(N)[None]
@@ -174,7 +174,7 @@ class Parity(Group): #""" The spacial parity group in 1+3 dimensions"""
 class TimeReversal(Group): #""" The time reversal group in 1+3 dimensions"""
     discrete_generators = np.eye(4)[None]
     discrete_generators[0,0,0] = -1
-
+@export
 class SO13p(Group): #""" The component of Lorentz group connected to identity"""
     lie_algebra = np.zeros((6,4,4))
     lie_algebra[3:,1:,1:] = SO(3).lie_algebra
@@ -184,7 +184,7 @@ class SO13p(Group): #""" The component of Lorentz group connected to identity"""
 SO13 = SO13p()&TimeReversal() # The parity preserving Lorentz group
 
 Lorentz = O13 = SO13p()&Parity()&TimeReversal() # The full lorentz group with P,T transformations
-
+@export
 class Symplectic(Group):
     def __init__(self,m):
         self.lie_algebra = np.zeros((m*(2*m+1),2*m,2*m))
@@ -203,7 +203,7 @@ class Symplectic(Group):
                 self.lie_algebra[k,j,m+i] = 1
                 k+=1
         super().__init__(m)
-
+@export
 class Permutation(Group):
     def __init__(self,n):
         self.discrete_generators = np.zeros((n-1,n,n))
@@ -214,7 +214,7 @@ class Permutation(Group):
             self.discrete_generators[i,i+1,0]=1
             self.discrete_generators[i,i+1,i+1]=0
         super().__init__()
-
+@export
 class DiscreteTranslation(Group):
     def __init__(self,n):
         self.discrete_generators = np.roll(np.eye(n),1,axis=1)[None]

@@ -1,5 +1,5 @@
 import pickle, atexit
-
+import logging
 class NoCache(object):
     def __enter__(self):
         self.settings = CacheSettings.disk_caching
@@ -35,7 +35,9 @@ def disk_cache(file_name):
             if not CacheSettings.disk_caching: return func(*args,**kwargs)
             key = make_key(args,kwargs)
             if key not in cache:
+                logging.info(f"{key} cache miss")
                 cache[key] = func(*args,**kwargs)
+            logging.info(f"{key} cache hit")
             return cache[key]
         return new_func
 

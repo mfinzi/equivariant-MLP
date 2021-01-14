@@ -8,7 +8,7 @@ from emlp_jax.equivariant_subspaces import capped_tensor_ids,rep_permutation,bil
 from emlp_jax.groups import LearnedGroup
 from emlp_jax.batchnorm import TensorMaskBN,gate_indices
 import collections
-from oil.utils.utils import Named
+from oil.utils.utils import Named,export
 import scipy as sp
 import scipy.special
 import random
@@ -49,12 +49,12 @@ class BiLinear(Module):
         self.matrix_perm = rep_permutation(rep_W)
         self.W_shape = rep_W.shape
         Wdim, self.weight_proj = bilinear_weights(rep_W,repin)
-        self._weight_params = TrainVar(xavier_normal((Wdim,)))
+        self.w = TrainVar(xavier_normal((Wdim,)))
         logging.info(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
     def __call__(self, x,training=True):
         logging.debug(f"bilinear in shape: {x.shape}")
-        W = self.weight_proj(self._weight_params.value,x)[:,self.matrix_perm].reshape(-1,*self.W_shape)
+        W = self.weight_proj(self.w.value,x)[:,self.matrix_perm].reshape(-1,*self.W_shape)
         out= .05*(W@x[...,None])[...,0]
         #import pdb; pdb.set_trace()
         logging.debug(f"bilinear out shape: {out.shape}")
@@ -111,6 +111,19 @@ class EMLPBlock(Module):
         preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
         return self.nonlinearity(preact)
 
+# class EMLPBlock(Module):
+#     def __init__(self,rep_in,rep_out):
+#         super().__init__()
+#         self.linear = LieLinear(rep_in,gated(rep_out))
+#         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
+#         self.bn = TensorMaskBN(gated(rep_out))
+#         self.nonlinearity = GatedNonlinearity(rep_out)
+#     def __call__(self,x,training=True):
+#         lin = self.linear(x)
+#         preact = self.bn(self.bilinear(lin)+lin,training=training)
+#         #preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
+#         return self.nonlinearity(preact)
+
 class EMLPBlockLearned(Module):
     def __init__(self,rep_in,rep_out):
         super().__init__()
@@ -152,10 +165,11 @@ def uniform_allocation(N,rank):
     ragged = sum(random.sample([T(k,rank-k) for k in range(rank+1)],N%(rank+1)))
     return even_split+ragged
 
+@export
 class EMLP(Module):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
         super().__init__()
-        logging.warning("Initing EMLP")
+        logging.info("Initing EMLP")
         repmiddle = uniform_rep(ch,group)
         reps = [rep_in(group)]+num_layers*[repmiddle]
         logging.debug(reps)
@@ -171,7 +185,7 @@ class EMLPLearned(Module):
     def __init__(self,rep_in,rep_out,d,ch=384,num_layers=3):#@
         super().__init__()
         self.group = LearnedGroup(d,ndiscrete=0)
-        logging.warning("Initing EMLP")
+        logging.info("Initing EMLP")
         repmiddle = uniform_rep(ch,self.group)
         reps = [rep_in(self.group)]+num_layers*[repmiddle]
         logging.debug(reps)
@@ -200,6 +214,7 @@ def MLPBlock(cin,cout): # works better without batchnorm?
 #     def __call__(self,x,training=True):
 #         return swish(self.bn(self.linear(x),training=training))
 
+@export
 class MLP(Module):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
         super().__init__()

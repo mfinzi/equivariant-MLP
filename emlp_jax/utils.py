@@ -37,7 +37,7 @@ def disk_cache(file_name):
             if key not in cache:
                 logging.info(f"{key} cache miss")
                 cache[key] = func(*args,**kwargs)
-            logging.info(f"{key} cache hit")
+            logging.debug(f"{key} cache hit")
             return cache[key]
         return new_func
 

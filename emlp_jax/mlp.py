@@ -100,40 +100,30 @@ class GatedNonlinearity(Module):
 #                          TensorMaskBN(gated(repout)),
 #                          GatedNonlinearity(repout)])
 
-class EMLPBlock(Module):
-    def __init__(self,rep_in,rep_out):
-        super().__init__()
-        self.linear = LieLinear(rep_in,gated(rep_out))
-        self.bilinear = BiLinear(rep_in,gated(rep_out))
-        self.bn = TensorMaskBN(gated(rep_out))
-        self.nonlinearity = GatedNonlinearity(rep_out)
-    def __call__(self,x,training=True):
-        preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
-        return self.nonlinearity(preact)
-
 # class EMLPBlock(Module):
 #     def __init__(self,rep_in,rep_out):
 #         super().__init__()
 #         self.linear = LieLinear(rep_in,gated(rep_out))
-#         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
+#         self.bilinear = BiLinear(rep_in,gated(rep_out))
 #         self.bn = TensorMaskBN(gated(rep_out))
 #         self.nonlinearity = GatedNonlinearity(rep_out)
 #     def __call__(self,x,training=True):
-#         lin = self.linear(x)
-#         preact = self.bn(self.bilinear(lin)+lin,training=training)
-#         #preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
+#         preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
 #         return self.nonlinearity(preact)
 
-class EMLPBlockLearned(Module):
+class EMLPBlock(Module):
     def __init__(self,rep_in,rep_out):
         super().__init__()
-        self.linear = LieLinearLearned(rep_in,gated(rep_out))
-        self.bilinear = BiLinear(rep_in,gated(rep_out))
+        self.linear = LieLinear(rep_in,gated(rep_out))
+        self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
         self.bn = TensorMaskBN(gated(rep_out))
         self.nonlinearity = GatedNonlinearity(rep_out)
     def __call__(self,x,training=True):
-        preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
+        lin = self.linear(x)
+        preact = self.bn(self.bilinear(lin)+lin,training=training)
+        #preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
         return self.nonlinearity(preact)
+
 
 
 def uniform_rep(ch,group):
@@ -170,35 +160,37 @@ class EMLP(Module):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
         super().__init__()
         logging.info("Initing EMLP")
+        self.rep_in =rep_in(group)
+        self.rep_out = rep_out(group)
         repmiddle = uniform_rep(ch,group)
-        reps = [rep_in(group)]+num_layers*[repmiddle]
+        reps = [self.rep_in]+num_layers*[repmiddle]
         logging.debug(reps)
         self.network = Sequential(
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            LieLinear(repmiddle,rep_out(group))
+            LieLinear(repmiddle,self.rep_out)
         )
     def __call__(self,x,training=True):
         y = self.network(x,training=training)
-        return y.squeeze(-1) if y.shape[-1]==1 else y
+        return y
 
-class EMLPLearned(Module):
-    def __init__(self,rep_in,rep_out,d,ch=384,num_layers=3):#@
-        super().__init__()
-        self.group = LearnedGroup(d,ndiscrete=0)
-        logging.info("Initing EMLP")
-        repmiddle = uniform_rep(ch,self.group)
-        reps = [rep_in(self.group)]+num_layers*[repmiddle]
-        logging.debug(reps)
-        self.network = Sequential(
-            *[EMLPBlockLearned(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            LieLinearLearned(repmiddle,rep_out(self.group))
-        )
-    def __call__(self,x,training=True):
-        # if training: 
-        #     logging.info(f"Learned Lie Algebra: {str(self.group.lie_algebra)}")
-        #     logging.info(f"Learned generators: {str(self.group.discrete_generators)}")
-        y = self.network(x,training=training)
-        return y.squeeze(-1)# if y.shape[-1]==1 else y
+# class EMLPLearned(Module):
+#     def __init__(self,rep_in,rep_out,d,ch=384,num_layers=3):#@
+#         super().__init__()
+#         self.group = LearnedGroup(d,ndiscrete=0)
+#         logging.info("Initing EMLP")
+#         repmiddle = uniform_rep(ch,self.group)
+#         reps = [rep_in(self.group)]+num_layers*[repmiddle]
+#         logging.debug(reps)
+#         self.network = Sequential(
+#             *[EMLPBlockLearned(rin,rout) for rin,rout in zip(reps,reps[1:])],
+#             LieLinearLearned(repmiddle,rep_out(self.group))
+#         )
+#     def __call__(self,x,training=True):
+#         # if training: 
+#         #     logging.info(f"Learned Lie Algebra: {str(self.group.lie_algebra)}")
+#         #     logging.info(f"Learned generators: {str(self.group.discrete_generators)}")
+#         y = self.network(x,training=training)
+#         return y.squeeze(-1)# if y.shape[-1]==1 else y
 
 def swish(x):
     return jax.nn.sigmoid(x)*x
@@ -218,8 +210,10 @@ def MLPBlock(cin,cout): # works better without batchnorm?
 class MLP(Module):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
         super().__init__()
-        chs = [rep_in(group).size()] + num_layers*[ch]
-        cout = rep_out(group).size()
+        self.rep_in =rep_in(group)
+        self.rep_out = rep_out(group)
+        chs = [self.rep_in.size()] + num_layers*[ch]
+        cout = self.rep_out.size()
         logging.warning("Initing MLP")
         self.net = Sequential(
             *[MLPBlock(cin,cout) for cin,cout in zip(chs,chs[1:])],
@@ -227,4 +221,15 @@ class MLP(Module):
         )
     def __call__(self,x,training=True):
         y = self.net(x,training=training)
-        return y.squeeze(-1) if y.shape[-1]==1 else y
+        return y
+
+@export
+class Standardize(Module):
+    def __init__(self,model,ds_stats):
+        super().__init__()
+        self.model = model
+        self.ds_stats=ds_stats
+    def __call__(self,x,training,Training=True):
+        muin,sin,muout,sout = self.ds_stats
+        y = sout*self.model((x-muin)/sin,training=training)+muout
+        return y

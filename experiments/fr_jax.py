@@ -5,7 +5,7 @@ import jax
 import optax
 from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector,Quad,repsize
 from emlp_jax.groups import SO,O,Trivial,Lorentz,O13,SO13,SO13p
-from emlp_jax.mlp import EMLP,LieLinear
+from emlp_jax.mlp import EMLP,LieLinear,Standardize
 import itertools
 import numpy as np
 import torch
@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from slax.utils.utils import LoaderTo,cosLr, islice, export,FixedNumpySeed
 from slax.tuning.study import train_trial
 from slax.datasetup.datasets import split_dataset
-from slax.model_trainers.classifier import Regressor
+from emlp_jax.model_trainer import RegressorPlus
 from slax.tuning.args import argupdated_config
 from functools import partial
 import torch.nn as nn
@@ -27,27 +27,18 @@ import emlp_jax
 def makeTrainer(*,dataset=Fr,network=EMLP,num_epochs=500,ndata=1000+1000,seed=2020,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':-1,'test':1000},
                 net_config={'num_layers':3,'group':SO(3)},log_level='info',
-                trainer_config={'log_dir':None,'log_args':{'minPeriod':.02}},save=False):
-    #logging.basicConfig(level='logging.'+log_level)
-    levels = {
-    'critical': logging.CRITICAL,
-    'error': logging.ERROR,
-    'warn': logging.WARNING,
-    'warning': logging.WARNING,
-    'info': logging.INFO,
-    'debug': logging.DEBUG
-    }
-    logging.getLogger().setLevel(levels[log_level])
+                trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.25}},save=False):
+    #logging.basicConfig(level='logging.'+log_level)    
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed):
         datasets = split_dataset(dataset(ndata),splits=split)
-    model = network(datasets['train'].rep_in,datasets['train'].rep_out,**net_config)
+    model = Standardize(network(datasets['train'].rep_in,datasets['train'].rep_out,**net_config),datasets['train'].stats)
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=bs,shuffle=(k=='train'),
                 num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
     lr_sched = lambda e: lr*cosLr(num_epochs)(e)
-    return Regressor(model,dataloaders,opt_constr,lr_sched,**trainer_config)
+    return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":
     Trial = train_trial(makeTrainer)

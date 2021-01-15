@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from emlp_jax.equivariant_subspaces import Scalar,Vector,Matrix
+from emlp_jax.equivariant_subspaces import Scalar,Vector,Matrix,T
 from torch.utils.data import Dataset
 from oil.utils.utils import export,Named,Expression,FixedNumpySeed
 from emlp.groups import SO,O,Trivial,Lorentz
@@ -26,13 +26,14 @@ class Inertia(Dataset,metaclass=Named):
         self.symmetry = O(3)
         self.X = self.X.numpy()
         self.Y = self.Y.numpy()
-        # One has to be careful computing mean and std in a way so that standardizing
+        # One has to be careful computing offset and scale in a way so that standardizing
         # does not violate equivariance
         Xmean = self.X.mean(0)
+        Xmean[k:] = 0
         Xstd = np.zeros_like(Xmean)
         Xstd[:k] = self.X[:,:k].std(0)
-        Xstd[k:] = (np.sqrt(((self.X[:,k:]-Xmean[k:]).reshape(N,k,3)**2).mean((0,2))[:,None]) + np.zeros((k,3))).reshape(k*3)
-        Ymean = self.Y.mean(0)
+        Xstd[k:] = (np.sqrt((self.X[:,k:].reshape(N,k,3)**2).mean((0,2))[:,None]) + np.zeros((k,3))).reshape(k*3)
+        Ymean = 0*self.Y.mean(0)
         Ystd = np.sqrt(((self.Y-Ymean)**2).mean((0,1))) + np.zeros_like(Ymean)
         self.stats = Xmean,Xstd,Ymean,Ystd
 
@@ -60,9 +61,8 @@ class Fr(Dataset,metaclass=Named):
         # One has to be careful computing mean and std in a way so that standardizing
         # does not violate equivariance
         Xmean = self.X.mean(0) # can add and subtract arbitrary tensors
-        Xstd = np.repeat(np.sqrt(((self.X-Xmean).reshape(N,2,d)**2).mean((0,2)))[:,None],\
-                         d,axis=-1).reshape(self.dim)
-        self.stats = 0,1,0,1#Xmean,Xstd,self.Y.mean(axis=0),self.Y.std(axis=0)
+        Xscale = (np.sqrt((self.X.reshape(N,2,d)**2).mean((0,2)))[:,None]+0*ri[0].numpy()).reshape(self.dim)
+        self.stats = 0,Xscale,self.Y.mean(axis=0),self.Y.std(axis=0)
 
     def __getitem__(self,i):
         return (self.X[i],self.Y[i])
@@ -93,7 +93,9 @@ class ParticleInteraction(Dataset,metaclass=Named):
         self.Y = self.Y.numpy()[...,None]
         # One has to be careful computing mean and std in a way so that standardizing
         # does not violate equivariance
-        self.stats = 0,1,0,1#self.X.mean(axis=0),self.X.std(axis=0),self.Y.mean(axis=0),self.Y.std(axis=0)
+        self.Xscale = np.sqrt((np.abs((self.X.reshape(N,4,4)@𝜂.numpy())*self.X.reshape(N,4,4)).mean(-1)).mean(0))
+        self.Xscale = (self.Xscale[:,None]+np.zeros((4,4))).reshape(-1)
+        self.stats = 0,self.Xscale,self.Y.mean(axis=0),self.Y.std(axis=0)#self.X.mean(axis=0),self.X.std(axis=0),
     def __getitem__(self,i):
         return (self.X[i],self.Y[i])
     def __len__(self):

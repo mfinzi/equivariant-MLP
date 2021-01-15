@@ -27,33 +27,10 @@ class RegressorPlus(Regressor):
         and getAccuracy (full dataset) """
     def __init__(self,model,*args,**kwargs):
         super().__init__(model,*args,**kwargs)
-        predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
-        #forward = objax.Jit(objax.ForceArgs(model.__call__,training=True),model.vars())
-        #self.model.__call__ = lambda x,training=True: forward(x) if training else predict(x)
-        #self.model =model= objax.Jit(model,static_argnums=(1,))
         fastloss = objax.Jit(self.loss,model.vars())
         self.gradvals = objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
-        
-        self.model.predict = predict
-        #self._model = model
-        #self.model= objax.Jit(objax.ForceArgs(model,training=True)) #TODO: figure out static nums
-        #self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
-        #self._model = model
-        #self.model = objax.ForceArgs(model,training=True)
-        #self.model.predict = objax.ForceArgs(model.__call__,training=False)
-        #self.model = objax.Jit(lambda x, training: model(x,training=training),model.vars(),static_argnums=(1,))
-        #self.model = objax.Jit(model,static_argnums=(1,))
-    # def loss(self,minibatch):
-    #     """ Standard cross-entropy loss """
-    #     x,y = minibatch
-    #     #l2 = 0.5 * sum((v.value ** 2).sum() for k, v in self._model.vars().items() if k.endswith('.w'))
-    #     #extra_loss = sum(exl.value for k, exl in self._model.vars().items() if k.endswith('.extra_loss'))
-    #     mse = jnp.mean((self.model(x,training=True)-y)**2)
-    #     return mse
+        self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
 
-    # def metrics(self,loader):
-    #     mse = lambda mb: np.asarray(jax.device_get(jnp.mean((self.model.predict(mb[0])-mb[1])**2)))
-    #     return {'MSE':self.evalAverageMetrics(loader,mse)}
     def loss(self,minibatch):
         """ Standard cross-entropy loss """
         x,y = minibatch
@@ -66,6 +43,6 @@ class RegressorPlus(Regressor):
     def logStuff(self, step, minibatch=None):
         metrics = {}
         metrics['test_equivar_err'] = self.evalAverageMetrics(islice(self.dataloaders['test'],0,None,5),
-                                        partial(equivariance_err,self.model))
+                                partial(equivariance_err,self.model)) # subsample by 5x so it doesn't take too long
         self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)

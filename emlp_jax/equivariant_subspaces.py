@@ -114,10 +114,10 @@ class TensorRep(object):
         return out
 
     def rho(self,G):
-        return sp.linalg.block_diag(*[rho(G,rank) for rank in self.ranks])
+        return jax.scipy.linalg.block_diag(*[rho(G,rank) for rank in self.ranks])
 
     def drho(self,A):
-        return sp.linalg.block_diag(*[drho(A,rank) for rank in self.ranks])
+        return jax.scipy.linalg.block_diag(*[drho(A,rank) for rank in self.ranks])
 
     def argsort(self):
         """ get the permutation given by converting

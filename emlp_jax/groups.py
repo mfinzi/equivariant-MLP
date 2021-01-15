@@ -8,7 +8,8 @@ from objax.nn.init import kaiming_normal, xavier_normal
 from objax.module import Module
 import objax
 import emlp_jax.equivariant_subspaces as equivariant_subspaces
-
+from jax import jit,vmap
+from functools import partial
 
 def rel_err(A,B):
     return jnp.mean(jnp.abs(A-B))/(jnp.mean(jnp.abs(A)) + jnp.mean(jnp.abs(B))+1e-6)
@@ -36,17 +37,14 @@ class Group(object,metaclass=Named):
         return self._d
 
     def sample(self):
-        g = np.eye(self.d)
-        if self.lie_algebra.shape[0]:
-            z = np.random.randn(self.lie_algebra.shape[0])
-            A = (z[:,None,None]*self.lie_algebra).sum(0)
-            g = g@self.exp(A)
-        for h in self.discrete_generators:
-            k = np.random.randint(-5,5)
-            g = g@np.linalg.matrix_power(h,k)
-        return g
+        z = np.random.randn(self.lie_algebra.shape[0])
+        k = np.random.randint(-5,5,size=(self.discrete_generators.shape[0],))
+        return noise2sample(z,k,self.lie_algebra,self.discrete_generators)
+        
     def samples(self,N):
-        return np.stack(self.sample() for _ in range(N))
+        z = np.random.randn(N,self.lie_algebra.shape[0])
+        k = np.random.randint(-5,5,size=(N,self.discrete_generators.shape[0]))
+        return noise2samples(z,k,self.lie_algebra,self.discrete_generators)
 
     def is_unimodular(self):
         unimodular = True
@@ -74,6 +72,21 @@ class Group(object,metaclass=Named):
         Q = equivariant_subspaces.get_active_subspace(self,rank)
         P = Q.T@Q
         return lambda w: P@w
+@jit
+def noise2sample(z,ks,lie_algebra,discrete_generators):
+    """ [zs (D,)] [ks (M,)] [lie_algebra (D,d,d)] [discrete_generators (M,d,d)] """
+    g = jnp.eye(lie_algebra.shape[-1])
+    if lie_algebra.shape[0]:
+        A = (z[:,None,None]*lie_algebra).sum(0)
+        g = g@jax.scipy.linalg.expm(A)
+    for k,h in zip(ks,discrete_generators):
+        g = g@jnp.linalg.matrix_power(h,k)
+    return g
+
+@jit
+def noise2samples(zs,ks,lie_algebra,discrete_generators):
+    return vmap(noise2sample,(0,0,None,None),0)(zs,ks,lie_algebra,discrete_generators)
+
 
 class CombinedGenerators(Group):
     def __init__(self,G1,G2):

@@ -104,7 +104,10 @@ class TensorRep(object):
         else:
             perm = rep_permutation(self)
             invperm = jnp.argsort(perm)
-            return lambda t: lazy_projection(t.reshape(-1)[invperm])[perm].reshape(*self.shape)
+            def permuted_projection(tensor):
+                assert tensor.shape==self.shape, f"Incompatible shapes {tensor.shape} and {self.shape} for projection"
+                return lazy_projection(tensor.reshape(-1)[invperm])[perm].reshape(*self.shape)
+            return permuted_projection
 
     def show_subspace(self):
         dims,projection = self.symmetric_subspace()
@@ -134,7 +137,9 @@ def fast_argsort(ranks,d,orth):
         rrank = (p+q,0) if orth else (p,q)
         ranks_indices[rrank].append(np.arange(tensor_size)+i)
         i+= tensor_size
+    #logging.error(f"rank indices {ranks_indices.keys()}")
     permutation = np.concatenate([np.concatenate(indices) for indices in ranks_indices.values()])
+    #logging.error(f"bucket perm: {permutation}")
     return permutation
 
 
@@ -153,6 +158,7 @@ def size(rank,d):
 
 @partial(jit,static_argnums=(1,))
 def rho(G,rank):
+    """ Representation matrix rho(g) for the tensor T(p,q)"""
     p,q = rank
     Gp = functools.reduce(jnp.kron,p*[G],1)
     GpGinvTq = functools.reduce(jnp.kron,q*[jnp.linalg.inv(G).T],Gp) # shouldn't this be backwards?
@@ -434,6 +440,7 @@ def tensor_indices_dict(rep):
 
 @cache()
 def rep_permutation(rep):
+    """Permutation from flattened ordering to block ordering """
     arange = np.arange(rep.size())
     size_cumsums = [np.cumsum([0] + [rep.d ** (p + q) for (p, q) in reps]) for reps in rep.shapes]
     permutation = np.zeros([cumsum[-1] for cumsum in size_cumsums]).astype(np.int)

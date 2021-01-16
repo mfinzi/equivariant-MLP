@@ -10,6 +10,7 @@ import objax
 import emlp_jax.equivariant_subspaces as equivariant_subspaces
 from jax import jit,vmap
 from functools import partial
+import logging
 
 def rel_err(A,B):
     return jnp.mean(jnp.abs(A-B))/(jnp.mean(jnp.abs(A)) + jnp.mean(jnp.abs(B))+1e-6)
@@ -40,19 +41,20 @@ class Group(object,metaclass=Named):
         z = np.random.randn(self.lie_algebra.shape[0])
         k = np.random.randint(-5,5,size=(self.discrete_generators.shape[0],))
         return noise2sample(z,k,self.lie_algebra,self.discrete_generators)
-        
+
     def samples(self,N):
         z = np.random.randn(N,self.lie_algebra.shape[0])
         k = np.random.randint(-5,5,size=(N,self.discrete_generators.shape[0]))
         return noise2samples(z,k,self.lie_algebra,self.discrete_generators)
 
-    def is_unimodular(self):
+    def is_unimodular(self):#TODO: fix name, should be is_orthogonal_rep
         unimodular = True
         if self.lie_algebra.shape[0]!=0:
             unimodular &= rel_err(-self.lie_algebra.transpose((0,2,1)),self.lie_algebra)<1e-6
         h = self.discrete_generators
         if h.shape[0]!=0:
             unimodular &= rel_err(h.transpose((0,2,1))@h,np.eye(self.d))<1e-6
+        if not unimodular: logging.debug('Not unimodular trigger')
         return unimodular
 
     def __and__(self,G2):
@@ -64,14 +66,22 @@ class Group(object,metaclass=Named):
     def __eq__(self,G2): #TODO: check that spans are equal?
         return (self.lie_algebra==G2.lie_algebra).all() and (self.discrete_generators==G2.discrete_generators).all()
     def __hash__(self):
-        algebra = jax.device_get(self.lie_algebra).tostring()
-        gens = jax.device_get(self.discrete_generators).tostring()
+        algebra = jax.device_get(self.lie_algebra).tobytes()
+        gens = jax.device_get(self.discrete_generators).tobytes()
         return hash((algebra,gens))
 
     def get_projector(self,rank):
         Q = equivariant_subspaces.get_active_subspace(self,rank)
         P = Q.T@Q
         return lambda w: P@w
+
+@jit
+def matrix_power_simple(M,n):
+    out = jnp.eye(M.shape[-1])
+    body = lambda Mn: jax.lax.fori_loop(0,Mn[1],lambda i,g: Mn[0]@g,out)
+    out = jax.lax.cond(n<0,(jnp.linalg.inv(M),-n),body,(M,n),body)
+    return out
+    
 @jit
 def noise2sample(z,ks,lie_algebra,discrete_generators):
     """ [zs (D,)] [ks (M,)] [lie_algebra (D,d,d)] [discrete_generators (M,d,d)] """
@@ -79,8 +89,8 @@ def noise2sample(z,ks,lie_algebra,discrete_generators):
     if lie_algebra.shape[0]:
         A = (z[:,None,None]*lie_algebra).sum(0)
         g = g@jax.scipy.linalg.expm(A)
-    for k,h in zip(ks,discrete_generators):
-        g = g@jnp.linalg.matrix_power(h,k)
+    for i in range(discrete_generators.shape[0]):
+        g = g@matrix_power_simple(discrete_generators[i],ks[i])#jnp.linalg.matrix_power(discrete_generators[i],ks[i])
     return g
 
 @jit

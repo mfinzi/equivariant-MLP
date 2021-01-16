@@ -27,9 +27,9 @@ class LieLinear(nn.Linear):  #
         nin,nout = repin.size(),repout.size()
         super().__init__(nin,nout)
         self.b = TrainVar(objax.random.uniform((nout,))/jnp.sqrt(nout))
-        self.w = TrainVar(orthogonal((nin, nout)))
+        self.w = TrainVar(orthogonal((nout, nin)))
         #print("Linear sizes:",repin.size(),repout.size())
-        rep_W = repout*repin.T
+        self.rep_W = rep_W = repout*repin.T
         rep_bias = repout
         self.weight_proj = rep_W.symmetric_projection()
         self.bias_proj = rep_bias.symmetric_projection()
@@ -37,6 +37,8 @@ class LieLinear(nn.Linear):  #
     def __call__(self, x): # (cin) -> (cout)
         logging.debug(f"linear in shape: {x.shape}")
         W = self.weight_proj(self.w.value)
+        #logging.error(f"W shape {self.w.value.shape}, repW shape {self.rep_W.shape}")
+        #assert False
         b = self.bias_proj(self.b.value)
         out = x@W.T+b
         logging.debug(f"linear out shape:{out.shape}")
@@ -49,32 +51,17 @@ class BiLinear(Module):
         self.matrix_perm = rep_permutation(rep_W)
         self.W_shape = rep_W.shape
         Wdim, self.weight_proj = bilinear_weights(rep_W,repin)
-        self.w = TrainVar(xavier_normal((Wdim,)))
+        self.w = TrainVar(objax.random.normal((Wdim,)))#xavier_normal((Wdim,))) #TODO: revert to xavier
         logging.info(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
     def __call__(self, x,training=True):
         logging.debug(f"bilinear in shape: {x.shape}")
         W = self.weight_proj(self.w.value,x)[:,self.matrix_perm].reshape(-1,*self.W_shape)
-        out= .05*(W@x[...,None])[...,0]
+        out= .25*(W@x[...,None])[...,0] #TODO: set back to .05
         #import pdb; pdb.set_trace()
         logging.debug(f"bilinear out shape: {out.shape}")
         return out
 
-class LieLinearLearned(nn.Linear):
-    def __init__(self, repin, repout):
-        super().__init__(repin.size(),repout.size())
-        #print("Linear sizes:",repin.size(),repout.size())
-        self.rep_W = repout*repin.T
-        self.rep_bias = repout
-    def __call__(self, x): # (cin) -> (cout)
-        logging.debug(f"linear in shape: {x.shape}")
-        weight_proj = self.rep_W.symmetric_projection()
-        bias_proj = self.rep_bias.symmetric_projection()
-        W = weight_proj(self.w.value)
-        b = bias_proj(self.b.value)
-        out = x@W.T+b
-        logging.debug(f"linear out shape:{out.shape}")
-        return out
 
 def gated(rep):
     return rep+sum([1 for t in rep.ranks if t!=(0,0)])*Scalar
@@ -108,23 +95,60 @@ class GatedNonlinearity(Module):
 #         self.bn = TensorMaskBN(gated(rep_out))
 #         self.nonlinearity = GatedNonlinearity(rep_out)
 #     def __call__(self,x,training=True):
-#         preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
+#         preact = self.bn(self.linear(x)+self.bilinear(x),training=training)#training=training)
 #         return self.nonlinearity(preact)
 
-class EMLPBlock(Module):
+# class EMLPBlock(Module):
+#     def __init__(self,rep_in,rep_out):
+#         super().__init__()
+#         self.linear = LieLinear(rep_in,gated(rep_out))
+#         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
+#         self.bn = TensorMaskBN(gated(rep_out))
+#         self.nonlinearity = GatedNonlinearity(rep_out)
+#     def __call__(self,x,training=True):
+#         lin = self.linear(x)
+#         preact = self.bn(self.bilinear(lin)+lin,training=training)
+#         #preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
+#         return self.nonlinearity(preact)
+# Linear variant for testing
+def EMLPBlock(rep_in,rep_out):
+    return LieLinear(rep_in,rep_out)
+# class EMLPBlock(Module):
+#     def __init__(self,rep_in,rep_out):
+#         super().__init__()
+#         self.linear = LieLinear(rep_in,gated(rep_out))
+#         self.bilinear = BiLinear(rep_in,gated(rep_out))
+#         self.bn = TensorMaskBN(gated(rep_out))
+#         self.nonlinearity = GatedNonlinearity(rep_out)
+#     def __call__(self,x,training=True):
+#         preact = self.bn(self.linear(x)+self.bilinear(x),training=training)#training=training)
+#         return self.nonlinearity(preact)
+
+class EResBlock(Module):
     def __init__(self,rep_in,rep_out):
         super().__init__()
-        self.linear = LieLinear(rep_in,gated(rep_out))
-        self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
-        self.bn = TensorMaskBN(gated(rep_out))
-        self.nonlinearity = GatedNonlinearity(rep_out)
+        grep_in = gated(rep_in)
+        grep_out = gated(rep_out)
+
+        self.bn1 = TensorMaskBN(grep_in)
+        self.nonlinearity1 = GatedNonlinearity(rep_in)
+        self.linear1 = LieLinear(rep_in,grep_out)
+
+        self.bn2 = TensorMaskBN(grep_out)
+        self.nonlinearity2 = GatedNonlinearity(rep_out)
+        self.linear2 = LieLinear(rep_out,grep_out)
+        
+
+        self.bilinear1 = BiLinear(grep_in,grep_out)
+        #self.bilinear2 = BiLinear(gated(rep_out),gated(rep_out))
+        self.shortcut = LieLinear(grep_in,grep_out) if rep_in!=rep_out else Sequential()
     def __call__(self,x,training=True):
-        lin = self.linear(x)
-        preact = self.bn(self.bilinear(lin)+lin,training=training)
-        #preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
-        return self.nonlinearity(preact)
 
-
+        z = self.nonlinearity1(self.bn1(x,training=training))
+        z = self.linear1(z)
+        z = self.nonlinearity2(self.bn2(x,training=training))
+        z = self.linear2(z)
+        return (z+self.shortcut(x)+self.bilinear1(x))/3
 
 def uniform_rep(ch,group):
     """ A heuristic method for allocating a given number of channels (ch)
@@ -165,14 +189,36 @@ class EMLP(Module):
         repmiddle = uniform_rep(ch,group)
         reps = [self.rep_in]+num_layers*[repmiddle]
         logging.debug(reps)
+        # self.network = Sequential(
+        #     *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+        #     LieLinear(repmiddle,self.rep_out)
+        # )
+        self.network = LieLinear(self.rep_in,self.rep_out)
+    def __call__(self,x,training=True):
+        y = self.network(x)#,training=training)
+        return y
+
+@export
+class EMLP2(Module):
+    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
+        super().__init__()
+        logging.info("Initing EMLP")
+        self.rep_in =rep_in(group)
+        self.rep_out = rep_out(group)
+        repmiddle = uniform_rep(ch,group)
+        #reps = [self.rep_in]+
+        reps = num_layers*[repmiddle]# + [self.rep_out]
+        logging.debug(reps)
         self.network = Sequential(
-            *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+            LieLinear(self.rep_in,gated(repmiddle)),
+            *[EResBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+            TensorMaskBN(gated(repmiddle)),
+            GatedNonlinearity(repmiddle),
             LieLinear(repmiddle,self.rep_out)
         )
     def __call__(self,x,training=True):
         y = self.network(x,training=training)
         return y
-
 # class EMLPLearned(Module):
 #     def __init__(self,rep_in,rep_out,d,ch=384,num_layers=3):#@
 #         super().__init__()

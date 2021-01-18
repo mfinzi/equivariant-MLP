@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from slax.utils.utils import export
 import jax
+from jax import vmap
 import jax.numpy as jnp
 import numpy as np
 import objax
@@ -15,8 +16,11 @@ def rel_err(a,b):
 def equivariance_err(model,mb,group=None):
     x,y = mb
     group = model.model.rep_in.G if group is None else group
-    rho_gin = jnp.stack([model.model.rep_in.rho(g) for g in group.samples(x.shape[0])])
-    rho_gout = jnp.stack([model.model.rep_out.rho(g) for g in group.samples(x.shape[0])])
+    gs = group.samples(x.shape[0])
+    rho_gin = vmap(model.model.rep_in.rho)(gs)
+    rho_gout = vmap(model.model.rep_out.rho)(gs)
+    #rho_gin = jnp.stack([model.model.rep_in.rho(g) for g in ])
+    #rho_gout = jnp.stack([model.model.rep_out.rho(g) for g in group.samples(x.shape[0])])
     y1 = model.predict((rho_gin@x[...,None])[...,0])
     y2 = (rho_gout@model.predict(x)[...,None])[...,0]
     return rel_err(y1,y2)
@@ -30,11 +34,11 @@ class RegressorPlus(Regressor):
         fastloss = objax.Jit(self.loss,model.vars())
         self.gradvals = objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
         self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
-
+        #self.model.predict = lambda x: self.model(x,training=False)
     def loss(self,minibatch):
         """ Standard cross-entropy loss """
         x,y = minibatch
-        mse = jnp.mean(jnp.abs(self.model(x,training=True)-y))
+        mse = jnp.mean((self.model(x,training=True)-y)**2)#jnp.mean(jnp.abs(self.model(x,training=True)-y))
         return mse
 
     def metrics(self,loader):

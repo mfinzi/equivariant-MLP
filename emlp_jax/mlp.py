@@ -48,15 +48,13 @@ class BiLinear(Module):
     def __init__(self, repin, repout):
         super().__init__()
         rep_W = repout*repin.T
-        self.matrix_perm = rep_permutation(rep_W)
-        self.W_shape = rep_W.shape
         Wdim, self.weight_proj = bilinear_weights(rep_W,repin)
         self.w = TrainVar(objax.random.normal((Wdim,)))#xavier_normal((Wdim,))) #TODO: revert to xavier
         logging.info(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
     def __call__(self, x,training=True):
         logging.debug(f"bilinear in shape: {x.shape}")
-        W = self.weight_proj(self.w.value,x)[:,self.matrix_perm].reshape(-1,*self.W_shape)
+        W = self.weight_proj(self.w.value,x)
         out= .25*(W@x[...,None])[...,0] #TODO: set back to .05
         #import pdb; pdb.set_trace()
         logging.debug(f"bilinear out shape: {out.shape}")
@@ -87,16 +85,16 @@ class GatedNonlinearity(Module):
 #                          TensorMaskBN(gated(repout)),
 #                          GatedNonlinearity(repout)])
 
-# class EMLPBlock(Module):
-#     def __init__(self,rep_in,rep_out):
-#         super().__init__()
-#         self.linear = LieLinear(rep_in,gated(rep_out))
-#         self.bilinear = BiLinear(rep_in,gated(rep_out))
-#         self.bn = TensorMaskBN(gated(rep_out))
-#         self.nonlinearity = GatedNonlinearity(rep_out)
-#     def __call__(self,x,training=True):
-#         preact = self.bn(self.linear(x)+self.bilinear(x),training=training)#training=training)
-#         return self.nonlinearity(preact)
+class EMLPBlock(Module):
+    def __init__(self,rep_in,rep_out):
+        super().__init__()
+        self.linear = LieLinear(rep_in,gated(rep_out))
+        self.bilinear = BiLinear(rep_in,gated(rep_out))
+        self.bn = TensorMaskBN(gated(rep_out))
+        self.nonlinearity = GatedNonlinearity(rep_out)
+    def __call__(self,x,training=True):
+        preact = self.bn(self.linear(x)+self.bilinear(x),training=training)#training=training)
+        return self.nonlinearity(preact)
 
 # class EMLPBlock(Module):
 #     def __init__(self,rep_in,rep_out):
@@ -111,8 +109,8 @@ class GatedNonlinearity(Module):
 #         #preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
 #         return self.nonlinearity(preact)
 # Linear variant for testing
-def EMLPBlock(rep_in,rep_out):
-    return LieLinear(rep_in,rep_out)
+# def EMLPBlock(rep_in,rep_out):
+#     return LieLinear(rep_in,rep_out)
 # class EMLPBlock(Module):
 #     def __init__(self,rep_in,rep_out):
 #         super().__init__()
@@ -189,13 +187,13 @@ class EMLP(Module):
         repmiddle = uniform_rep(ch,group)
         reps = [self.rep_in]+num_layers*[repmiddle]
         logging.debug(reps)
-        # self.network = Sequential(
-        #     *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-        #     LieLinear(repmiddle,self.rep_out)
-        # )
-        self.network = LieLinear(self.rep_in,self.rep_out)
+        self.network = Sequential(
+            *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+            LieLinear(repmiddle,self.rep_out)
+        )
+        #self.network = LieLinear(self.rep_in,self.rep_out)
     def __call__(self,x,training=True):
-        y = self.network(x)#,training=training)
+        y = self.network(x,training=training)
         return y
 
 @export

@@ -405,6 +405,7 @@ def bilinear_weights(W_rep,x_rep):
     rank_indices_dict = tensor_indices_dict(x_rep)
     reduced_indices_dict = {rank:jnp.concatenate(random.sample(ids,nelems(len(ids),rank)))\
                                 for rank,ids in rank_indices_dict.items()}
+    block_perm = rep_permutation(W_rep)
     # Apply the projections for each rank, concatenate, and permute back to orig rank order
     def lazy_projection(params,x): # (*,r), (bs,c) #TODO: find out why backwards of this function is so slow
         bs = x.shape[0]
@@ -424,7 +425,7 @@ def bilinear_weights(W_rep,x_rep):
             bilinear_elems = bilinear_elems.reshape(W_mult*size(rank,d),bs).T
             Ws.append(bilinear_elems)
         Ws = jnp.concatenate(Ws,axis=-1) #concatenate over rep axis
-        return Ws[:,inverse_perm] # reorder to original rank ordering
+        return Ws[:,inverse_perm][:,block_perm].reshape(-1,*W_rep.shape) # reorder to original rank ordering
     return active_dims,lazy_projection
 
 #@cache()

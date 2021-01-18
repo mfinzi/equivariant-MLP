@@ -18,6 +18,7 @@ def rel_err(A,B):
 class Group(object,metaclass=Named):
     lie_algebra = NotImplemented
     discrete_generators = NotImplemented
+    z_scale=None # For scale noise for sampling elements
     def __init__(self,*args,**kwargs):
         if self.lie_algebra is NotImplemented:
             self.lie_algebra = np.zeros((0,self.d,self.d))
@@ -38,14 +39,17 @@ class Group(object,metaclass=Named):
         return self._d
 
     def sample(self):
-        z = np.random.randn(self.lie_algebra.shape[0])
-        k = np.random.randint(-5,5,size=(self.discrete_generators.shape[0],))
-        return noise2sample(z,k,self.lie_algebra,self.discrete_generators)
+        return self.samples(1)[0]
 
     def samples(self,N):
         z = np.random.randn(N,self.lie_algebra.shape[0])
+        if self.z_scale is not None:
+            z*= self.z_scale
         k = np.random.randint(-5,5,size=(N,self.discrete_generators.shape[0]))
         return noise2samples(z,k,self.lie_algebra,self.discrete_generators)
+
+    def check_valid_group_elems(self,g):
+        return True
 
     def is_unimodular(self):#TODO: fix name, should be is_orthogonal_rep
         unimodular = True
@@ -64,11 +68,14 @@ class Group(object,metaclass=Named):
     def __repr__(self):
         return f"{self.__class__}{list(self.args) if self.args else ''}"
     def __eq__(self,G2): #TODO: check that spans are equal?
-        return (self.lie_algebra==G2.lie_algebra).all() and (self.discrete_generators==G2.discrete_generators).all()
+        if self.lie_algebra.shape!=G2.lie_algebra.shape or \
+            self.discrete_generators.shape!=G2.discrete_generators.shape:
+            return False
+        return  (self.lie_algebra==G2.lie_algebra).all() and (self.discrete_generators==G2.discrete_generators).all()
     def __hash__(self):
         algebra = jax.device_get(self.lie_algebra).tobytes()
         gens = jax.device_get(self.discrete_generators).tobytes()
-        return hash((algebra,gens))
+        return hash((algebra,gens,self.lie_algebra.shape,self.discrete_generators.shape))
 
     def get_projector(self,rank):
         Q = equivariant_subspaces.get_active_subspace(self,rank)
@@ -151,6 +158,7 @@ class SemiDirectProduct(Group):
     def __init__(self,G1,G2):
         raise NotImplementedError
 
+@export
 class Trivial(Group): #""" The trivial group G={I} in N dimensions """
     def __init__(self,N):
         self._d = N
@@ -197,12 +205,17 @@ class Parity(Group): #""" The spacial parity group in 1+3 dimensions"""
 class TimeReversal(Group): #""" The time reversal group in 1+3 dimensions"""
     discrete_generators = np.eye(4)[None]
     discrete_generators[0,0,0] = -1
+
 @export
 class SO13p(Group): #""" The component of Lorentz group connected to identity"""
     lie_algebra = np.zeros((6,4,4))
     lie_algebra[3:,1:,1:] = SO(3).lie_algebra
     for i in range(3):
-        lie_algebra[i,1+i,0] = lie_algebra[i,0,1+i] = 1
+        lie_algebra[i,1+i,0] = lie_algebra[i,0,1+i] = 1.
+
+    # Adjust variance for samples along boost generators. For equivariance checks
+    # the exps for high order tensors can get very large numbers
+    z_scale = np.array([.3,.3,.3,1,1,1])
 
 SO13 = SO13p()&TimeReversal() # The parity preserving Lorentz group
 
@@ -243,8 +256,54 @@ class DiscreteTranslation(Group):
         self.discrete_generators = np.roll(np.eye(n),1,axis=1)[None]
         super().__init__()
 
-
-class SU(Group):
+@export
+class U(Group): # Of dimension n^2
     def __init__(self,n):
+        lie_algebra_real = np.zeros((n**2,n,n))
+        lie_algebra_imag = np.zeros((n**2,n,n))
+        k=0
+        for i in range(n):
+            for j in range(i):
+                # Antisymmetric real generators
+                lie_algebra_real[k,i,j] = 1
+                lie_algebra_real[k,j,i] = -1
+                k+=1
+                # symmetric imaginary generators
+                lie_algebra_imag[k,i,j] = 1
+                lie_algebra_imag[k,j,i] = 1
+                k+=1
+        for i in range(n):
+            # diagonal imaginary generators
+            lie_algebra_imag[k,i,i] = 1
+            k+=1
+        I,J = np.eye(2),np.array([[0,1],[-1,0]])
+        self.lie_algebra = np.kron(lie_algebra_real,I)+np.kron(lie_algebra_imag,J)
+        super().__init__(n)
+@export
+class SU(Group): # Of dimension n^2-1
+    def __init__(self,n):
+        if n==1: return Trivial(1)
+        lie_algebra_real = np.zeros((n**2-1,n,n))
+        lie_algebra_imag = np.zeros((n**2-1,n,n))
+        k=0
+        for i in range(n):
+            for j in range(i):
+                # Antisymmetric real generators
+                lie_algebra_real[k,i,j] = 1
+                lie_algebra_real[k,j,i] = -1
+                k+=1
+                # symmetric imaginary generators
+                lie_algebra_imag[k,i,j] = 1
+                lie_algebra_imag[k,j,i] = 1
+                k+=1
+        for i in range(n-1):
+            # diagonal traceless imaginary generators
+            lie_algebra_imag[k,i,i] = 1
+            for j in range(n):
+                if i==j: continue
+                lie_algebra_imag[k,j,j] = -1/(n-1)
+            k+=1
+        I,J = np.eye(2),np.array([[0,1],[-1,0]])
+        self.lie_algebra = np.kron(lie_algebra_real,I)+np.kron(lie_algebra_imag,J)
+        super().__init__(n)
 
-        raise NotImplementedError

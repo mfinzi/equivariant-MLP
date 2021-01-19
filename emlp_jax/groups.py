@@ -29,7 +29,8 @@ class Group(object,metaclass=Named):
         self.discrete_generators = jax.device_put(self.discrete_generators)
     def exp(self,A):
         return expm(A)
-
+    def num_constraints(self):
+        return self.lie_algebra.shape[0]+self.discrete_generators.shape[0]
     @property
     def d(self):
         if self.lie_algebra is not NotImplemented:
@@ -216,10 +217,18 @@ class SO13p(Group): #""" The component of Lorentz group connected to identity"""
     # Adjust variance for samples along boost generators. For equivariance checks
     # the exps for high order tensors can get very large numbers
     z_scale = np.array([.3,.3,.3,1,1,1])
+@export
+class SO13(SO13p):
+    discrete_generators = -np.eye(4)[None]
 
-SO13 = SO13p()&TimeReversal() # The parity preserving Lorentz group
+@export
+class O13(SO13p):
+    discrete_generators = np.eye(4)[None] +np.zeros((2,1,1))
+    discrete_generators[0] *= -1
+    discrete_generators[1,0,0] = -1
+@export
+class Lorentz(O13): pass
 
-Lorentz = O13 = SO13p()&Parity()&TimeReversal() # The full lorentz group with P,T transformations
 @export
 class Symplectic(Group):
     def __init__(self,m):
@@ -249,12 +258,12 @@ class Permutation(Group):
             self.discrete_generators[i,0,i+1]=1
             self.discrete_generators[i,i+1,0]=1
             self.discrete_generators[i,i+1,i+1]=0
-        super().__init__()
+        super().__init__(n)
 @export
 class DiscreteTranslation(Group):
     def __init__(self,n):
         self.discrete_generators = np.roll(np.eye(n),1,axis=1)[None]
-        super().__init__()
+        super().__init__(n)
 
 @export
 class U(Group): # Of dimension n^2

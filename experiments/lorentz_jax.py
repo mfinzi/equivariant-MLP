@@ -5,7 +5,7 @@ import jax
 import optax
 from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector,Quad,repsize
 from emlp_jax.groups import SO,O,Trivial,Lorentz,O13,SO13,SO13p
-from emlp_jax.mlp import EMLP,LieLinear,Standardize
+from emlp_jax.mlp import EMLP,LieLinear,Standardize,EMLP2
 from emlp_jax.model_trainer import RegressorPlus
 import itertools
 import numpy as np
@@ -14,7 +14,7 @@ from emlp_jax.datasets import Inertia,Fr,ParticleInteraction
 import objax
 import torch
 from torch.utils.data import DataLoader
-from slax.utils.utils import LoaderTo,cosLr, islice, export,FixedNumpySeed
+from slax.utils.utils import LoaderTo,cosLr, islice, export,FixedNumpySeed,FixedPytorchSeed
 from slax.tuning.study import train_trial
 from slax.datasetup.datasets import split_dataset
 from slax.tuning.args import argupdated_config
@@ -25,12 +25,12 @@ import emlp_jax
 #repmiddle = 100*T(0)+30*T(1)+10*T(2)+3*T(3)#+1*T(4)
 
 
-def makeTrainer(*,dataset=ParticleInteraction,network=EMLP,num_epochs=500,ndata=1000+1000,seed=2020,aug=False,
+def makeTrainer(*,dataset=ParticleInteraction,network=EMLP2,num_epochs=500,ndata=1000+1000,seed=2020,aug=False,
                 bs=100,lr=1e-3,device='cuda',split={'train':-1,'test':1000},
                 net_config={'num_layers':3,'group':SO13p()},log_level='info',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.25}},save=False):
     # Prep the datasets splits, model, and dataloaders
-    with FixedNumpySeed(seed):
+    with FixedNumpySeed(seed),FixedPytorchSeed(seed):
         datasets = split_dataset(dataset(ndata),splits=split)
     model = Standardize(network(datasets['train'].rep_in,datasets['train'].rep_out,**net_config),datasets['train'].stats)
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=bs,shuffle=(k=='train'),

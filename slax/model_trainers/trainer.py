@@ -1,5 +1,4 @@
 import dill
-
 from oil.logging.lazyLogger import LazyLogger
 from oil.utils.utils import Eval, Named
 from oil.utils.mytqdm import tqdm
@@ -9,8 +8,6 @@ import glob
 import numpy as np
 from natsort import natsorted
 import jax
-import optax
-import haiku as hk
 import logging
 from functools import partial
 import objax

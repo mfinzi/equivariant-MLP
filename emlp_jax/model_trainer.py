@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from slax.utils.utils import export
+from oil.utils.utils import export
 import jax
 from jax import vmap
 import jax.numpy as jnp

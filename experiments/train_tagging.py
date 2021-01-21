@@ -2,7 +2,6 @@ from emlp_jax.mlp import MLP,EMLP#,LinearBNSwish
 from emlp_jax.datasets import Fr,ParticleInteraction
 import jax.numpy as jnp
 import jax
-import optax
 from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector,Quad,repsize
 from emlp_jax.groups import SO,O,Trivial,Lorentz,O13,SO13,SO13p
 from emlp_jax.mlp import EMLP,LieLinear,Standardize,EMLP2
@@ -15,10 +14,11 @@ from emlp_jax.particle_dataset import TopTagging,collate_fn
 import objax
 import torch
 from torch.utils.data import DataLoader
-from slax.utils.utils import LoaderTo,cosLr, islice, export,FixedNumpySeed,FixedPytorchSeed
-from slax.tuning.study import train_trial
-from slax.datasetup.datasets import split_dataset
-from slax.tuning.args import argupdated_config
+from oil.utils.utils import cosLr, islice, export,FixedNumpySeed,FixedPytorchSeed
+from slax.utils import LoaderTo
+from oil.tuning.study import train_trial
+from oil.datasetup.datasets import split_dataset
+from oil.tuning.args import argupdated_config
 from slax.model_trainers import Classifier,Trainer
 from functools import partial
 import torch.nn as nn

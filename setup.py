@@ -8,9 +8,9 @@ setup(name="Equivariant-MLP",
       author_email='maf820@nyu.edu',
       license='MIT',
       python_requires='>=3.6',
-      install_requires=['h5py','tables',
+      install_requires=['h5py','tables','objax',
       'olive-oil-ml @ git+https://github.com/mfinzi/olive-oil-ml',
-      'torchdiffeq @ git+https://github.com/rtqichen/torchdiffeq'],#
+      'torchdiffeq @ git+https://github.com/rtqichen/torchdiffeq'],#'objax'
       packages=find_packages(),
       long_description=open('README.md').read(),
 )

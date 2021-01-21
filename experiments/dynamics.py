@@ -55,7 +55,7 @@ class ECHNN(CHNN):
 
 # network = HNN, LNN, NN, CHNN
 def makeTrainer(*,network=ECHNN,net_cfg={},lr=3e-3,n_train=800,regen=False,
-        dataset=RigidBodyDataset,body=systems.MagnetPendulum(),C=5,
+        dataset=RigidBodyDataset,body=systems.CoupledPendulum(3),C=5,
         dtype=torch.float32,device=torch.device("cuda"),
         bs=200,num_epochs=100,trainer_config={},
         opt_cfg={'weight_decay':1e-5}):

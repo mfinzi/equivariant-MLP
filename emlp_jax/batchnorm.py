@@ -61,16 +61,16 @@ class TensorMaskBN(nn.BatchNorm0D): #TODO find discrepancies with pytorch versio
     def __init__(self,rep):
         super().__init__(rep.size(),momentum=0.9)
         self.rep=rep
-        object_wise_tensor_prod_rep = TensorRep([(2*p,2*q) for p,q in rep.ranks],rep.G)
-        self.dual_rep = object_wise_tensor_prod_rep.T
-        b = self.dual_rep.symmetric_projection()(np.random.randn(self.dual_rep.size()))
-        self.bilinear = []
-        i=0
-        for rank in self.dual_rep.ranks:
-            v = b[i:i+size(rank,rep.d)]
-            self.bilinear.append(v / jnp.abs(v).mean())
-            i+= size(rank,rep.d)
-        self.bilinear = jnp.concatenate(self.bilinear)
+        # object_wise_tensor_prod_rep = TensorRep([(2*p,2*q) for p,q in rep.ranks],rep.G)
+        # self.dual_rep = object_wise_tensor_prod_rep.T
+        # b = self.dual_rep.symmetric_projection()(np.random.randn(self.dual_rep.size()))
+        # self.bilinear = []
+        # i=0
+        # for rank in self.dual_rep.ranks:
+        #     v = b[i:i+size(rank,rep.d)]
+        #     self.bilinear.append(v / jnp.abs(v).mean())
+        #     i+= size(rank,rep.d)
+        # self.bilinear = jnp.concatenate(self.bilinear)
 
     def __call__(self,x,training):
         #logging.debug(f"bn input shape{inp.shape}")
@@ -94,6 +94,26 @@ class TensorMaskBN(nn.BatchNorm0D): #TODO find discrepancies with pytorch versio
         
         y = jnp.where(smask,self.gamma.value * (x - m) * F.rsqrt(v + self.eps) + self.beta.value,x)#(x-m)*F.rsqrt(v + self.eps))
         return y # switch to or (x-m)
+
+
+class MaskBN(nn.BatchNorm0D): #TODO find discrepancies with pytorch version
+    """ Equivariant Batchnorm for tensor representations.
+        Applies BN on Scalar channels and Mean only BN on others """
+    def __init__(self,ch):
+        super().__init__(ch,momentum=0.9)
+
+    def __call__(self,vals,mask,training=True):
+        sum_dims = list(range(len(vals.shape[:-1])))
+        x_or_zero = jnp.where(mask[...,None],vals,0*vals)
+        if training:
+            num_valid = mask.sum(sum_dims)
+            m = x_or_zero.sum(sum_dims)/num_valid
+            v = (x_or_zero ** 2).sum(sum_dims)/num_valid - m ** 2
+            self.running_mean.value += (1 - self.momentum) * (m - self.running_mean.value)
+            self.running_var.value += (1 - self.momentum) * (v - self.running_var.value)
+        else:
+            m, v = self.running_mean.value, self.running_var.value
+        return ((x_or_zero-m)*self.gamma.value*F.rsqrt(v + self.eps) + self.beta.value,mask)
 
 #@partial(jit,static_argnums=(1,))
 def objectwise_outer_prod(x,x_rep):

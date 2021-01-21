@@ -7,7 +7,6 @@ from torch.utils.data import Dataset
 from oil.utils.utils import export,Named,Expression,FixedNumpySeed
 from emlp.groups import SO,O,Trivial,Lorentz
 
-
 @export
 class Inertia(Dataset,metaclass=Named):
     def __init__(self,N=1024,k=5):
@@ -31,11 +30,13 @@ class Inertia(Dataset,metaclass=Named):
         Xmean = self.X.mean(0)
         Xmean[k:] = 0
         Xstd = np.zeros_like(Xmean)
-        Xstd[:k] = self.X[:,:k].std(0)
-        Xstd[k:] = (np.sqrt((self.X[:,k:].reshape(N,k,3)**2).mean((0,2))[:,None]) + np.zeros((k,3))).reshape(k*3)
+        Xstd[:k] = np.abs(self.X[:,:k]).mean(0)#.std(0)
+        #Xstd[k:] = (np.sqrt((self.X[:,k:].reshape(N,k,3)**2).mean((0,2))[:,None]) + np.zeros((k,3))).reshape(k*3)
+        Xstd[k:] = (np.abs(self.X[:,k:].reshape(N,k,3)).mean((0,2))[:,None] + np.zeros((k,3))).reshape(k*3)
         Ymean = 0*self.Y.mean(0)
-        Ystd = np.sqrt(((self.Y-Ymean)**2).mean((0,1))) + np.zeros_like(Ymean)
-        self.stats = Xmean,Xstd,Ymean,Ystd
+        #Ystd = np.sqrt(((self.Y-Ymean)**2).mean((0,1)))+ np.zeros_like(Ymean)
+        Ystd = np.abs(self.Y-Ymean).mean((0,1)) + np.zeros_like(Ymean)
+        self.stats =0,1,0,1#Xmean,Xstd,Ymean,Ystd
 
     def __getitem__(self,i):
         return (self.X[i],self.Y[i])

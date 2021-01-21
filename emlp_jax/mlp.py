@@ -273,7 +273,7 @@ class Standardize(Module):
         super().__init__()
         self.model = model
         self.ds_stats=ds_stats
-    def __call__(self,x,training,Training=True):
+    def __call__(self,x,training):
         muin,sin,muout,sout = self.ds_stats
         y = sout*self.model((x-muin)/sin,training=training)+muout
         return y

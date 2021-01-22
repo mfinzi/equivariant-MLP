@@ -21,7 +21,7 @@ class TopTagging(Dataset,metaclass=Named):
     def __init__(self,root='~/datasets/top',split='train'):
         super().__init__()
         root = os.path.expanduser(root)
-        if not os.path.exists(root+f"{split}.h5"):
+        if not os.path.exists(root+f"/{split}.h5"):
             os.makedirs(root,exist_ok=True)
             subprocess.call(f"wget -O {split}.h5 https://zenodo.org/record/2603256/files/{split}.h5?download=1",shell=True)
             subprocess.call(f'cp {split}.h5 {root}',shell=True)
@@ -30,7 +30,7 @@ class TopTagging(Dataset,metaclass=Named):
         self.rep_in = 200*Vector
         self.rep_out = Scalar
         self.symmetry = Lorentz
-        df = pd.read_hdf(root+f"{split}.h5", key='table')
+        df = pd.read_hdf(root+f"/{split}.h5", key='table')
         self.X = np.stack([df[_col_list(a)].values for a in ['PX','PY','PZ','E']],axis=-1) #(B,200,4)
         self.mask = self.X[:,:,-1]>0
         self.Y = df['is_signal_new'].values>0

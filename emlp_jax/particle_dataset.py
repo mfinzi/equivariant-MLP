@@ -23,7 +23,7 @@ class TopTagging(Dataset,metaclass=Named):
         root = os.path.expanduser(root)
         if not os.path.exists(root+f"{split}.h5"):
             os.makedirs(root,exist_ok=True)
-            subprocess.call(f"wget https://zenodo.org/record/2603256/files/{split}.h5?download=1",shell=True)
+            subprocess.call(f"wget -O {split}.h5 https://zenodo.org/record/2603256/files/{split}.h5?download=1",shell=True)
             subprocess.call(f'cp {split}.h5 {root}',shell=True)
             subprocess.call(f'rm {split}.h5',shell=True)
         self.dim = 200*4

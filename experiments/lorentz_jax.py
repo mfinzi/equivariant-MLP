@@ -26,8 +26,8 @@ import emlp_jax
 
 
 def makeTrainer(*,dataset=ParticleInteraction,network=EMLP2,num_epochs=500,ndata=1000+1000,seed=2020,aug=False,
-                bs=100,lr=1e-3,device='cuda',split={'train':-1,'test':1000},
-                net_config={'num_layers':3,'group':SO13p()},log_level='info',
+                bs=500,lr=1e-3,device='cuda',split={'train':-1,'test':1000},
+                net_config={'num_layers':3,'ch':384,'group':SO13p()},log_level='info',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.25}},save=False):
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
@@ -38,7 +38,7 @@ def makeTrainer(*,dataset=ParticleInteraction,network=EMLP2,num_epochs=500,ndata
     dataloaders['Train'] = dataloaders['train']
     #equivariance_test(model,dataloaders['train'],net_config['group'])
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr*cosLr(num_epochs)(e)
+    lr_sched = lambda e: lr*cosLr(num_epochs)(e)*min(1,e/50)
     return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":

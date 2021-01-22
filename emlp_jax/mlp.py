@@ -73,54 +73,17 @@ class GatedNonlinearity(Module):
         activations = jax.nn.sigmoid(gate_scalars) * values[..., :self.rep.size()]
         return activations
 
-
-# def LieLinearBNSwish(repin,repout):
-#     return Sequential([LieLinear(repin,gated(repout)),
-#                          TensorMaskBN(gated(repout)),
-#                          GatedNonlinearity(repout)])
-
-# def TensorLinearBNSwish(repin,repout): #TODO: investigate BiLinear after LieLinear instead of parallel
-#     #return Sequential(TensorLinear(repin,gated(repout)),TensorMaskBN(gated(repout)),GatedNonlinearity(repout))
-#     return Sequential([Sum([BiLinear(repin,gated(repout)),LieLinear(repin,gated(repout))]),
-#                          TensorMaskBN(gated(repout)),
-#                          GatedNonlinearity(repout)])
-
 class EMLPBlock(Module):
     def __init__(self,rep_in,rep_out):
         super().__init__()
         self.linear = LieLinear(rep_in,gated(rep_out))
-        self.bilinear = BiLinear(rep_in,gated(rep_out))
+        self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
         self.bn = TensorMaskBN(gated(rep_out))
         self.nonlinearity = GatedNonlinearity(rep_out)
     def __call__(self,x,training=True):
-        preact = self.bn(self.linear(x)+self.bilinear(x),training=training)#training=training)
+        lin = self.linear(x)
+        preact = self.bn(self.bilinear(lin)+lin,training=training)
         return self.nonlinearity(preact)
-
-# class EMLPBlock(Module):
-#     def __init__(self,rep_in,rep_out):
-#         super().__init__()
-#         self.linear = LieLinear(rep_in,gated(rep_out))
-#         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
-#         self.bn = TensorMaskBN(gated(rep_out))
-#         self.nonlinearity = GatedNonlinearity(rep_out)
-#     def __call__(self,x,training=True):
-#         lin = self.linear(x)
-#         preact = self.bn(self.bilinear(lin)+lin,training=training)
-#         #preact = self.bn(self.linear(x)+self.bilinear(x),training=training)
-#         return self.nonlinearity(preact)
-# Linear variant for testing
-# def EMLPBlock(rep_in,rep_out):
-#     return LieLinear(rep_in,rep_out)
-# class EMLPBlock(Module):
-#     def __init__(self,rep_in,rep_out):
-#         super().__init__()
-#         self.linear = LieLinear(rep_in,gated(rep_out))
-#         self.bilinear = BiLinear(rep_in,gated(rep_out))
-#         self.bn = TensorMaskBN(gated(rep_out))
-#         self.nonlinearity = GatedNonlinearity(rep_out)
-#     def __call__(self,x,training=True):
-#         preact = self.bn(self.linear(x)+self.bilinear(x),training=training)#training=training)
-#         return self.nonlinearity(preact)
 
 class EResBlock(Module):
     def __init__(self,rep_in,rep_out):

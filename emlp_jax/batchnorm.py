@@ -84,6 +84,7 @@ class TensorMaskBN(nn.BatchNorm0D): #TODO find discrepancies with pytorch versio
             #oo = objectwise_outer_prod(x,self.rep)
             #logging.warning(f"oo shape {oo.shape}")
             #vbilinear = jnp.abs(ragged_gather_scatter(self.bilinear*oo,self.dual_rep)) # scalar, we can do whatever
+            v = jnp.where(smask,v,ragged_gather_scatter((x ** 2).mean(self.redux),self.rep))
             #v = jnp.where(smask,v,vbilinear)
             self.running_mean.value += (1 - self.momentum) * (m - self.running_mean.value)
             self.running_var.value += (1 - self.momentum) * (v - self.running_var.value)
@@ -92,7 +93,7 @@ class TensorMaskBN(nn.BatchNorm0D): #TODO find discrepancies with pytorch versio
             m, v = self.running_mean.value, self.running_var.value
         
         
-        y = jnp.where(smask,self.gamma.value * (x - m) * F.rsqrt(v + self.eps) + self.beta.value,x)#(x-m)*F.rsqrt(v + self.eps))
+        y = jnp.where(smask,self.gamma.value * (x - m) * F.rsqrt(v + self.eps) + self.beta.value,x*F.rsqrt(v+self.eps))#(x-m)*F.rsqrt(v + self.eps))
         return y # switch to or (x-m)
 
 
@@ -115,51 +116,11 @@ class MaskBN(nn.BatchNorm0D): #TODO find discrepancies with pytorch version
             m, v = self.running_mean.value, self.running_var.value
         return ((x_or_zero-m)*self.gamma.value*F.rsqrt(v + self.eps) + self.beta.value,mask)
 
-#@partial(jit,static_argnums=(1,))
-def objectwise_outer_prod(x,x_rep):
-    """ This routine is super slow at compiling for unknown reason"""
-    y = []
-    i=0
-    for rank in x_rep.ranks:
-        v = x[:,i:i+size(rank,x_rep.d)]
-        y.append((v[:,:,None]*v[:,None,:]).reshape(x.shape[0],-1))
-        i+=size(rank,x_rep.d)
-    return jnp.concatenate(y,-1)
-
 @partial(jit,static_argnums=(1,))
 def ragged_gather_scatter(x,x_rep):
     y = []
     i=0
     for rank in x_rep.ranks:
-        y.append(x[:,i:i+size(rank,x_rep.d)].sum(keepdims=True).repeat(x_rep.d**(sum(rank)//2),axis=-1))
+        y.append(x[i:i+size(rank,x_rep.d)].sum(keepdims=True).repeat(size(rank,x_rep.d),axis=-1))
         i+=size(rank,x_rep.d)
     return jnp.concatenate(y,-1)
-
-
-def capped_tensor_ids(repin,maxrep):
-    """Returns rep and ids for tensor product repin@repin
-       but with terms >repin removed """
-    product_rep = (repin*repin)
-    tensor_multiplicities = product_rep.multiplicities()
-    multiplicities = maxrep.multiplicities()
-    min_mults = collections.OrderedDict((rank,min(tm,multiplicities[rank]))
-                                        for rank,tm in tensor_multiplicities.items())
-    # randomly select up to maxrep from each of the tensor ranks
-    within_ids = collections.OrderedDict((rank,np.random.choice(v,min(v,multiplicities[rank])))
-                                                for rank,v in tensor_multiplicities.items())
-    all_ids= []
-    i_all = 0
-    d = repin.d
-    for (p,q),ids in within_ids.items():
-        interleaved_ids = (d**(p+q)*ids[:,None]+np.arange(d**(p+q))).reshape(-1)
-        all_ids.extend(interleaved_ids+i_all)
-        i_all += tensor_multiplicities[(p,q)]*d**(p+q)
-    sorted_perm = product_rep.argsort()
-    out_ranks = []
-    for rank,mul in min_mults.items():
-        out_ranks.extend(mul*[rank])
-    out_rep = TensorRep(out_ranks,G=repin.G)
-    # have to do some gnarly permuting to account for block ordering vs elemnt ordering
-    # and then the multiplicity sorted order and the original ordering
-    ids = jnp.argsort(rep_permutation(product_rep))[sorted_perm[all_ids]]
-    return out_rep,ids

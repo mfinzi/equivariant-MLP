@@ -6,7 +6,7 @@ import numpy as np
 from emlp_jax.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad,size
 from emlp_jax.equivariant_subspaces import capped_tensor_ids,rep_permutation,bilinear_weights
 from emlp_jax.groups import LearnedGroup
-from emlp_jax.batchnorm import TensorMaskBN,gate_indices
+from emlp_jax.batchnorm import TensorBN,gate_indices
 import collections
 from oil.utils.utils import Named,export
 import scipy as sp
@@ -78,7 +78,7 @@ class EMLPBlock(Module):
         super().__init__()
         self.linear = LieLinear(rep_in,gated(rep_out))
         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
-        self.bn = TensorMaskBN(gated(rep_out))
+        self.bn = TensorBN(gated(rep_out))
         self.nonlinearity = GatedNonlinearity(rep_out)
     def __call__(self,x,training=True):
         lin = self.linear(x)
@@ -91,11 +91,11 @@ class EResBlock(Module):
         grep_in = gated(rep_in)
         grep_out = gated(rep_out)
 
-        self.bn1 = TensorMaskBN(grep_in)
+        self.bn1 = TensorBN(grep_in)
         self.nonlinearity1 = GatedNonlinearity(rep_in)
         self.linear1 = LieLinear(rep_in,grep_out)
 
-        self.bn2 = TensorMaskBN(grep_out)
+        self.bn2 = TensorBN(grep_out)
         self.nonlinearity2 = GatedNonlinearity(rep_out)
         self.linear2 = LieLinear(rep_out,grep_out)
         
@@ -173,45 +173,19 @@ class EMLP2(Module):
         self.network = Sequential(
             LieLinear(self.rep_in,gated(repmiddle)),
             *[EResBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            TensorMaskBN(gated(repmiddle)),
+            TensorBN(gated(repmiddle)),
             GatedNonlinearity(repmiddle),
             LieLinear(repmiddle,self.rep_out)
         )
     def __call__(self,x,training=True):
         y = self.network(x,training=training)
         return y
-# class EMLPLearned(Module):
-#     def __init__(self,rep_in,rep_out,d,ch=384,num_layers=3):#@
-#         super().__init__()
-#         self.group = LearnedGroup(d,ndiscrete=0)
-#         logging.info("Initing EMLP")
-#         repmiddle = uniform_rep(ch,self.group)
-#         reps = [rep_in(self.group)]+num_layers*[repmiddle]
-#         logging.debug(reps)
-#         self.network = Sequential(
-#             *[EMLPBlockLearned(rin,rout) for rin,rout in zip(reps,reps[1:])],
-#             LieLinearLearned(repmiddle,rep_out(self.group))
-#         )
-#     def __call__(self,x,training=True):
-#         # if training: 
-#         #     logging.info(f"Learned Lie Algebra: {str(self.group.lie_algebra)}")
-#         #     logging.info(f"Learned generators: {str(self.group.discrete_generators)}")
-#         y = self.network(x,training=training)
-#         return y.squeeze(-1)# if y.shape[-1]==1 else y
 
 def swish(x):
     return jax.nn.sigmoid(x)*x
 
 def MLPBlock(cin,cout): # works better without batchnorm?
     return Sequential(nn.Linear(cin,cout),nn.BatchNorm0D(cout,momentum=.9),swish)#,
-
-# class MLPBlock(Module):
-#     def __init__(self,cin,cout):
-#         super().__init__()
-#         self.linear = nn.Linear(cin,cout)
-#         self.bn = nn.BatchNorm0D(cout,momentum=.9)
-#     def __call__(self,x,training=True):
-#         return swish(self.bn(self.linear(x),training=training))
 
 @export
 class MLP(Module):
@@ -237,6 +211,10 @@ class Standardize(Module):
         self.model = model
         self.ds_stats=ds_stats
     def __call__(self,x,training):
-        muin,sin,muout,sout = self.ds_stats
-        y = sout*self.model((x-muin)/sin,training=training)+muout
-        return y
+        if len(self.ds_stats)==2:
+            muin,sin = self.ds_stats
+            return self.model((x-muin)/sin,training=training)
+        else:
+            muin,sin,muout,sout = self.ds_stats
+            y = sout*self.model((x-muin)/sin,training=training)+muout
+            return y

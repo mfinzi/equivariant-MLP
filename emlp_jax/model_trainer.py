@@ -6,7 +6,7 @@ from jax import vmap
 import jax.numpy as jnp
 import numpy as np
 import objax
-from slax.model_trainers.classifier import Regressor
+from slax.model_trainers.classifier import Regressor,Classifier
 from functools import partial
 from itertools import islice
 
@@ -44,6 +44,26 @@ class RegressorPlus(Regressor):
     def metrics(self,loader):
         mse = lambda mb: np.asarray(jax.device_get(jnp.mean((self.model.predict(mb[0])-mb[1])**2)))
         return {'MSE':self.evalAverageMetrics(loader,mse)}
+    def logStuff(self, step, minibatch=None):
+        metrics = {}
+        metrics['test_equivar_err'] = self.evalAverageMetrics(islice(self.dataloaders['test'],0,None,5),
+                                partial(equivariance_err,self.model)) # subsample by 5x so it doesn't take too long
+        self.logger.add_scalars('metrics', metrics, step)
+        super().logStuff(step,minibatch)
+
+@export
+class ClassifierPlus(Classifier):
+    """ Trainer subclass. Implements loss (crossentropy), batchAccuracy
+        and getAccuracy (full dataset) """
+    def __init__(self,model,*args,**kwargs):
+        super().__init__(model,*args,**kwargs)
+        
+        fastloss = objax.Jit(self.loss,model.vars())
+        self.gradvals = objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
+        self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
+        #self.model.predict = lambda x: self.model(x,training=False)
+    
+
     def logStuff(self, step, minibatch=None):
         metrics = {}
         metrics['test_equivar_err'] = self.evalAverageMetrics(islice(self.dataloaders['test'],0,None,5),

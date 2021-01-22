@@ -52,15 +52,14 @@ class Group(object,metaclass=Named):
     def check_valid_group_elems(self,g):
         return True
 
-    def is_unimodular(self):#TODO: fix name, should be is_orthogonal_rep
-        unimodular = True
+    def is_orthogonal_rep(self):#TODO: fix name, should be is_orthogonal_rep
+        orthogonal = True
         if self.lie_algebra.shape[0]!=0:
-            unimodular &= rel_err(-self.lie_algebra.transpose((0,2,1)),self.lie_algebra)<1e-6
+            orthogonal &= rel_err(-self.lie_algebra.transpose((0,2,1)),self.lie_algebra)<1e-6
         h = self.discrete_generators
         if h.shape[0]!=0:
-            unimodular &= rel_err(h.transpose((0,2,1))@h,np.eye(self.d))<1e-6
-        if not unimodular: logging.debug('Not unimodular trigger')
-        return unimodular
+            orthogonal &= rel_err(h.transpose((0,2,1))@h,np.eye(self.d))<1e-6
+        return orthogonal
 
     def __and__(self,G2):
         return CombinedGenerators(self,G2)
@@ -116,25 +115,6 @@ class CombinedGenerators(Group):
     def __repr__(self):
         return f"{self.names[0]}&{self.names[1]}"
 
-class LearnedGroup(Group,Module):
-    def __init__(self,d,ncontinuous=3,ndiscrete=3):
-        self._d = d
-        #Module.__init__(self)
-        self._discrete_generators = objax.variable.TrainVar(objax.random.normal((ndiscrete,d,d)))
-        self._lie_algebra = objax.variable.TrainVar(objax.random.normal((ncontinuous,d,d)))
-    @property
-    def discrete_generators(self):
-        return self._discrete_generators.value
-    @property
-    def lie_algebra(self):
-        return self._lie_algebra.value
-
-    @property
-    def d(self):
-        return self._d
-    def is_unimodular(self):
-        return False
-
 
 class DirectProduct(Group):
     def __init__(self,G1,G2):
@@ -144,7 +124,7 @@ class DirectProduct(Group):
     def get_projector(self,rank):# Sketch
         r1,r2 = split(rank)
         P1 = self.G1.get_projector(r1)
-        P2 =self.G2.get_projector(r2)
+        P2 = self.G2.get_projector(r2)
         def P1kronP2projector(W):
             proj1 = P1(W.reshape(size(r1),size(r2),*W.shape[1:]))
             proj12 = jnp.swapaxes(P2(jnp.swapaxes(proj1,0,1)),0,1)

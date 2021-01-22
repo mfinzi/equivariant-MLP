@@ -42,7 +42,7 @@ class TestRepresentationSubspace(unittest.TestCase):
             for p in range(r+1):
                 for q in range(r-p+1):
                     if G.num_constraints()*G.d**(3*(p+q))>1e12: continue
-                    if G.is_unimodular() and q>0: continue
+                    if G.is_orthogonal_rep() and q>0: continue
                     #try:
                     rep = T(p,q)(G)
                     P = rep.symmetric_projection()

@@ -71,14 +71,14 @@ class TensorRep(object):
         raise NotImplementedError
 
     def multiplicities(self):
-        if self.G is not None and self.G.is_unimodular(): # orthogonal subgroup-> collapse T(p,q) to T(p+q)
+        if self.G is not None and self.G.is_orthogonal_rep(): # orthogonal subgroup-> collapse T(p,q) to T(p+q)
             return OrderedCounter((p+q,0) for (p,q) in self.ranks)
         return OrderedCounter(self.ranks)
 
     def __repr__(self):
         multiplicities=  self.multiplicities()
         tensors = "+".join(f"{v if v > 1 else ''}T{key}" for key, v in multiplicities.items())
-        if self.G is not None and self.G.is_unimodular():
+        if self.G is not None and self.G.is_orthogonal_rep():
             tensors = "+".join(f"{v if v > 1 else ''}T({q})" for (q,p), v in multiplicities.items())
         return tensors+f" @ d={self.d}" if self.d is not None else tensors
     def __str__(self):
@@ -126,7 +126,7 @@ class TensorRep(object):
         """ get the permutation given by converting
             from the order in ranks to the order when the ranks are grouped by
             first occurrence of a given type (p,q). (Bucket sort)"""
-        return fast_argsort(self.ranks,self.d,self.G.is_unimodular())
+        return fast_argsort(self.ranks,self.d,self.G.is_orthogonal_rep())
 
 #@partial(jit,static_argnums=(2,))
 def fast_argsort(ranks,d,orth):
@@ -346,28 +346,6 @@ def get_active_subspaces(group,rep):
         return Ws[...,inverse_perm] # reorder to original rank ordering
     return active_dims,lazy_projection
 
-# #@partial(jit,static_argnums=(0,1))
-# def get_QQT(group,rep):
-#     rank_multiplicites = rep.multiplicities()
-#     Qs = {rank:get_active_subspace(group,rank) for rank in rank_multiplicites}
-#     #Qs = {rank:jax.device_put(Q.astype(np.float32)) for rank,Q in Qs.items()}
-#     # Get the permutation of the vector when grouped by tensor rank
-#     perm = rep.argsort()
-#     invperm = jnp.argsort(perm)
-#     # Apply the projections for each rank, concatenate, and permute back to orig rank order
-#     def lazy_projection(W):
-#         ordered_W = W[perm]
-#         PWs = []
-#         i=0
-#         for rank, multiplicity in rank_multiplicites.items():
-#             Qr = Qs[rank]
-#             i_end = i+multiplicity*size(rank,rep.d)
-#             PWs.append((Qr.T@(Qr@ordered_W[i:i_end].reshape(multiplicity,size(rank,rep.d)).T)).T.reshape(-1))
-#             i = i_end
-#         PWs = jnp.concatenate(PWs,axis=-1) #concatenate over rep axis
-#         return PWs[invperm] # reorder to original rank ordering
-#     return lazy_projection
-
 #@partial(jit,static_argnums=(0,1))
 def get_QQT(group,rep):
     rank_multiplicites = rep.multiplicities()
@@ -433,7 +411,7 @@ def tensor_indices_dict(rep):
     index_dict = collections.defaultdict(list)
     i=0
     for (p,q) in rep.ranks:
-        rank = (p+q,0) if rep.G.is_unimodular() else (p,q)
+        rank = (p+q,0) if rep.G.is_orthogonal_rep() else (p,q)
         i_end = i+size(rank,rep.d)
         index_dict[rank].append(jnp.arange(i,i_end))
         i = i_end

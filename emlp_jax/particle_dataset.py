@@ -11,19 +11,26 @@ import pandas as pd
 import os
 import numpy as np
 import torch
+import pickle,subprocess
 
 def _col_list(prefix, max_particles=200):
     return ['%s_%d'%(prefix,i) for i in range(max_particles)]
 
 @export
 class TopTagging(Dataset,metaclass=Named):
-    def __init__(self,split='train'):
+    def __init__(self,root='~/datasets/top',split='train'):
         super().__init__()
+        root = os.path.expanduser(root)
+        if not os.path.exists(root+f"{split}.h5"):
+            os.makedirs(root,exist_ok=True)
+            subprocess.call(f"wget https://zenodo.org/record/2603256/files/{split}.h5?download=1",shell=True)
+            subprocess.call(f'cp {split}.h5 {root}',shell=True)
+            subprocess.call(f'rm {split}.h5',shell=True)
         self.dim = 200*4
         self.rep_in = 200*Vector
         self.rep_out = Scalar
         self.symmetry = Lorentz
-        df = pd.read_hdf(os.path.expanduser("~/datasets/top/")+f"{split}.h5", key='table')
+        df = pd.read_hdf(root+f"{split}.h5", key='table')
         self.X = np.stack([df[_col_list(a)].values for a in ['PX','PY','PZ','E']],axis=-1) #(B,200,4)
         self.mask = self.X[:,:,-1]>0
         self.Y = df['is_signal_new'].values>0

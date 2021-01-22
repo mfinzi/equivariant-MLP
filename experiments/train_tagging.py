@@ -24,7 +24,7 @@ from functools import partial
 import torch.nn as nn
 import logging
 import emlp_jax
-from emlp_jax.pointconv_emlp import ResNet
+from emlp_jax.pointconv_base import ResNet
 
 class ClassifierPlus(Classifier):
     """ Trainer subclass. Implements loss (crossentropy), batchAccuracy

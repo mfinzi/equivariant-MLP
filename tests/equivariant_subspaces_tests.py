@@ -1,68 +1,142 @@
 
 import numpy as np#
 import copy
-from emlp.equivariant_subspaces import *
+from emlp_jax.equivariant_subspaces import *
+from emlp_jax.groups import *
+from emlp_jax.mlp import uniform_rep
 import unittest
+from jax import vmap
+import jax.numpy as jnp
+import logging
 
 def rel_error(t1,t2):
-    return np.mean(np.abs(t1-t2))/(np.mean(np.abs(t1)) + np.mean(np.abs(t2))+1e-7)
+    return jnp.mean(jnp.abs(t1-t2))/(jnp.mean(jnp.abs(t1)) + jnp.mean(jnp.abs(t2))+1e-7)
 
-def rot(angle):
-    R =np.zeros((2,2))
-    R[...,0,0] = R[...,1,1] = np.cos(angle)
-    R[...,0,1] = np.sin(angle)
-    R[...,1,0] = - np.sin(angle)
-    return R
-
-def rep_act_on_tensor(G,tensor,rank):
-    p,q = rank
-    Ginv = np.linalg.inv(G)
-    tensor_out = copy.deepcopy(tensor)
-    batch_dims = len(tensor.shape[:-(p+q)])
-    for i in range(p):
-        tensor_out = (tensor_out.swapaxes(-1,batch_dims+i)@G.T).swapaxes(-1,batch_dims+i)
-    for j in range(q):
-        tensor_out = (tensor_out.swapaxes(-1,batch_dims+p+j)@Ginv).swapaxes(-1,batch_dims+p+j)
-    return tensor_out
-
-def rep_act_on_representation(G,rep_vector,ranks,d=2):
-    batch_shape = rep_vector.shape[:-1]
-    vector_out = np.zeros_like(rep_vector)
-    i=0
-    for (p,q) in ranks:
-        size = d**(p+q)
-        tensor = rep_vector[...,i:i+size].reshape(*batch_shape,(d,)*(p+q))
-        vector_out[...,i:i+size] = rep_act_on_tensor(G,tensor,(p,q)).reshape(*batch_shape,-1)
-        i+=size
-    return vector_out
+def scale_adjusted_rel_error(t1,t2,g):
+    return jnp.mean(jnp.abs(t1-t2))/(jnp.mean(jnp.abs(t1)) + jnp.mean(jnp.abs(t2))+jnp.mean(jnp.abs(g-jnp.eye(g.shape[-1])))+1e-7)
 
 class TestRepresentationSubspace(unittest.TestCase):
-    def test_composite_representation(self):
-        rxy = np.array([[0,1,0],[-1,0,0],[0,0,0]])
-        gens = (rxy,)
-        ranks = T(0,0)+T(1,0)+T(0,0)+T(1,1)+T(1,0)
-        active_dims, proj = ranks(gens).symmetric_subspace()#get_active_subspaces(gens,ranks)
-        random_rep_vec = proj(torch.randn(active_dims)).data.numpy()
-        self.assertTrue(rel_error(random_rep_vec[1:3],np.zeros(2))<1e-7)
-        self.assertTrue(rel_error(random_rep_vec[-3:-1],np.zeros(2))<1e-7)
-        A = random_rep_vec[5:5+3*3].reshape(3,3)
-        commutator = A@rxy-rxy@A
-        self.assertTrue(rel_error(commutator,np.zeros((3,3)))<1e-7)
+    test_groups = [SO(n) for n in [1,2,3,4]]+[O(n) for n in [1,2,3,4]]+\
+                    [SU(n) for n in [2,3,4]]+[U(n) for n in [1,2,3,4]]+\
+                    [C(k) for k in [2,3,4,8]]+[D(k) for k in [2,3,4,8]]+\
+                    [Permutation(n) for n in [2,5,6]]+\
+                    [DiscreteTranslation(n) for n in [2,5,6]]+[SO13p(),SO13(),O13()] ##[Symplectic(n) for n in [1,2,3,4]]+
 
-    def test_equivariant_matrix_subspace(self):
-        repin = 2*Scalar+3*Vector+T(1,2) + Matrix+Vector
-        repout = T(2,1)+2*Vector+ 3*Scalar+Quad
-        gens = [np.array([[0,-1],[1,0]])]
-        active_dims,P = (repout*repin.T)(gens).symmetric_subspace()#matrix_active_subspaces(gens,repout,repin)
-        params = torch.randn(active_dims).cuda()
-        W = P(params).cpu()
-        x = torch.randn(repsize(repin,2))
-        Wx = (x.unsqueeze(0)@W.T).squeeze(0)
-        for angle in np.linspace(-np.pi,np.pi,10):
-            R = rot(angle)
-            pWx = rep_act_on_representation(R,Wx.numpy(),repout)
-            Wpx = (rep_act_on_representation(R,x.numpy(),repin)[None]@W.T.numpy())[0]
-            self.assertTrue(rel_error(pWx,Wpx)<1e-7)
+
+    # def test_symmetric_vector(self):
+    #     N=5
+    #     rep = T(0,0)+T(1,0)+T(0,0)+T(1,1)+T(1,0)+T(0,2)
+    #     for G in self.test_groups:
+    #         rep = rep(G)
+    #         P = rep.symmetric_projector()
+    #         v = np.random.rand(rep.size())
+    #         v = P@v
+    #         gv = (vmap(rep.rho)(G.samples(N))*v).sum(-1)
+    #         err = rel_error(gv,v+jnp.zeros_like(gv))
+    #         self.assertTrue(err<1e-5,f"Symmetric vector fails err {err:.3e} with G={G}")
+
+    # def test_high_rank_representations(self):
+    #     N=5
+    #     r = 10
+    #     for G in [SO13p(),SO13(),O13()]:#self.test_groups:
+    #         for p in range(r+1):
+    #             for q in range(r-p+1):
+    #                 if G.num_constraints()*G.d**(3*(p+q))>1e12: continue
+    #                 if G.is_orthogonal and q>0: continue
+    #                 #try:
+    #                 rep = T(p,q)(G)
+    #                 P = rep.symmetric_projector()
+    #                 v = np.random.rand(rep.size())
+    #                 v = P@v
+    #                 g = vmap(rep.rho)(G.samples(N))
+    #                 gv = (g*v).sum(-1)
+    #                 #print(f"v{v.shape}, g{g.shape},gv{gv.shape},{G},T{p,q}")
+    #                 err = vmap(scale_adjusted_rel_error)(gv,v+jnp.zeros_like(gv),g).mean()
+    #                 self.assertTrue(err<3e-5,f"Symmetric vector fails err {err:.3e} with T{p,q} and G={G}")
+    #                 print(f"Success with T{p,q} and G={G}")
+    #                 # except Exception as e:
+    #                 #     print(f"Failed with G={G} and T({p,q})")
+    #                 #     raise e
+                    
+    def test_equivariant_matrix(self):
+        N=5
+        testcases = [(SO(3),5*T(0)+5*T(1),3*T(0)+T(2)+2*T(1)),
+        #             (SO13p(),4*T(1,0),10*T(0)+3*T(1,0)+3*T(0,1)+T(0,2)+T(2,0)+T(1,1))]
+        #testcases = [(SO(3),T(0)+T(1),T(0)+2*T(1))]
+        for G,repin,repout in testcases:
+            repin = repin(G)
+            repout = repout(G)
+            repW = repout*repin.T
+            P = repW.symmetric_projector()
+            W = np.random.rand(repout.size(),repin.size())
+            W = (P@W.reshape(-1)).reshape(*W.shape)
+            
+            x = np.random.rand(N,repin.size())
+            gs = G.samples(N)
+            ring = vmap(repin.rho)(gs)
+            routg = vmap(repout.rho)(gs)
+            gx = (ring@x[...,None])[...,0]
+            Wgx =gx@W.T
+            #print(g.shape,(x@W.T).shape)
+            gWx = (routg@(x@W.T)[...,None])[...,0]
+            equiv_err = rel_error(Wgx,gWx)
+            self.assertTrue(equiv_err<1e-5,f"Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G}")
+            gvecW = (vmap(repW.rho)(G.samples(N))*W.reshape(-1)).sum(-1)
+            for i in range(N):
+                gWerr = rel_error(gvecW[i],W.reshape(-1))
+                self.assertTrue(gWerr<1e-6,f"Symmetric gvec(W)=vec(W) fails err {gWerr:.3e} with G={G}")
+                #TODO fix composite representation matrix? will require reordering ranks
+
+
+    # def test_bilinear_layer(self):
+    #     N=5
+    #     testcases = [(SO(3),5*T(0)+5*T(1),3*T(0)+T(2)+2*T(1)),
+    #                 (SO13p(),4*T(1,0),10*T(0)+3*T(1,0)+3*T(0,1)+T(0,2)+T(2,0)+T(1,1))]
+        
+    #     for G,repin,repout in testcases:
+    #         repin = repin(G)
+    #         repout = repout(G)
+    #         repW = repout*repin.T
+    #         Wdim,P = bilinear_weights(repW,repin)
+    #         x = np.random.rand(N,repin.size())
+    #         gs = G.samples(N)
+    #         ring = vmap(repin.rho)(gs)
+    #         routg = vmap(repout.rho)(gs)
+    #         gx = (ring@x[...,None])[...,0]
+            
+    #         W = np.random.rand(Wdim)
+    #         W_x = P(W,x)
+    #         Wxx = (W_x@x[...,None])[...,0]
+    #         gWxx = (routg@Wxx[...,None])[...,0]
+    #         Wgxgx =(P(W,gx)@gx[...,None])[...,0]
+    #         equiv_err = rel_error(Wgxgx,gWxx)
+    #         self.assertTrue(equiv_err<1e-6,f"Bilinear Equivariance fails err {equiv_err:.3e} with G={G}")
+
+    # def test_large_representations(self):
+    #     N=5
+    #     ch = 256
+    #     test_groups = [SO(n) for n in [2,3]]+[O(n) for n in [2,3]]+\
+    #                 [SU(n) for n in [2,3]]+[U(n) for n in [1,2,3]]+\
+    #                 [Permutation(n) for n in [5,6]]+\
+    #                 [DiscreteTranslation(n) for n in [5,6]]
+    #     for G in test_groups:#self.test_groups:
+    #         rep =repin=repout= uniform_rep(ch,G)
+    #         repW = rep*rep.T
+    #         P = repW.symmetric_projector()
+    #         W = np.random.rand(repout.size(),repin.size())
+    #         W = (P@W.reshape(-1)).reshape(*W.shape)
+            
+    #         x = np.random.rand(N,repin.size())
+    #         gs = G.samples(N)
+    #         ring = vmap(repin.rho)(gs)
+    #         routg = vmap(repout.rho)(gs)
+    #         gx = (ring@x[...,None])[...,0]
+    #         Wgx =gx@W.T
+    #         #print(g.shape,(x@W.T).shape)
+    #         gWx = (routg@(x@W.T)[...,None])[...,0]
+    #         equiv_err = rel_error(Wgx,gWx)
+    #         self.assertTrue(equiv_err<1e-5,f"Large Rep Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G}")
+    #         print(f"Success with G={G}")
 
 if __name__ == '__main__':
     unittest.main()

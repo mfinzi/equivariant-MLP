@@ -3,9 +3,8 @@ import jax.numpy as jnp
 import objax.nn as nn
 import objax.functional as F
 import numpy as np
-from emlp_jax.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad,size
-from emlp_jax.equivariant_subspaces import capped_tensor_ids,rep_permutation,bilinear_weights
-from emlp_jax.groups import LearnedGroup
+from emlp_jax.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad
+from emlp_jax.equivariant_subspaces import rep_permutation,bilinear_weights
 from emlp_jax.batchnorm import TensorBN,gate_indices
 import collections
 from oil.utils.utils import Named,export
@@ -31,15 +30,15 @@ class LieLinear(nn.Linear):  #
         #print("Linear sizes:",repin.size(),repout.size())
         self.rep_W = rep_W = repout*repin.T
         rep_bias = repout
-        self.weight_proj = rep_W.symmetric_projection()
-        self.bias_proj = rep_bias.symmetric_projection()
+        self.Pw = rep_W.symmetric_projector()
+        self.Pb = rep_bias.symmetric_projector()
         logging.info(f"Linear W components:{rep_W.size()} shape:{rep_W.shape} rep:{rep_W}")
     def __call__(self, x): # (cin) -> (cout)
         logging.debug(f"linear in shape: {x.shape}")
-        W = self.weight_proj(self.w.value)
+        W = (self.Pw@self.w.value.reshape(-1)).reshape(*self.w.value.shape)
         #logging.error(f"W shape {self.w.value.shape}, repW shape {self.rep_W.shape}")
         #assert False
-        b = self.bias_proj(self.b.value)
+        b = self.Pb@self.b.value
         out = x@W.T+b
         logging.debug(f"linear out shape:{out.shape}")
         return out
@@ -61,8 +60,8 @@ class BiLinear(Module):
         return out
 
 
-def gated(rep):
-    return rep+sum([1 for t in rep.ranks if t!=(0,0)])*Scalar
+def gated(sumrep):
+    return sumrep+sum([1 for rep in sumrep.reps if rep!=Scalar])*Scalar
 
 class GatedNonlinearity(Module):
     def __init__(self,rep):
@@ -147,6 +146,7 @@ class EMLP(Module):
         logging.info("Initing EMLP")
         self.rep_in =rep_in(group)
         self.rep_out = rep_out(group)
+        self.G=group
         repmiddle = uniform_rep(ch,group)
         reps = [self.rep_in]+num_layers*[repmiddle]
         logging.debug(reps)
@@ -193,6 +193,7 @@ class MLP(Module):
         super().__init__()
         self.rep_in =rep_in(group)
         self.rep_out = rep_out(group)
+        self.G = group
         chs = [self.rep_in.size()] + num_layers*[ch]
         cout = self.rep_out.size()
         logging.warning("Initing MLP")

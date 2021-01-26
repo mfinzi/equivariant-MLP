@@ -6,31 +6,31 @@ import objax.nn as nn
 import jax
 from jax import jit
 import jax.numpy as jnp
-from emlp_jax.equivariant_subspaces import size,TensorRep
+from emlp_jax.equivariant_subspaces import TensorRep,Scalar
 import logging
 import objax.functional as F
 from functools import partial
 import objax
 
-def gate_indices(rep):
-    channels = rep.size()
+def gate_indices(sumrep):
+    channels = sumrep.size()
     indices = np.arange(channels)
     num_nonscalars = 0
     i=0
-    for rank in rep.ranks:
-        if rank!=(0,0):
-            indices[i:i+size(rank,rep.d)] = channels+num_nonscalars
+    for rep in sumrep.reps:
+        if rep!=Scalar:
+            indices[i:i+rep.size()] = channels+num_nonscalars
             num_nonscalars+=1
-        i+=size(rank,rep.d)
+        i+=rep.size()
     return indices
 
-def scalar_mask(rep):
-    channels = rep.size()
+def scalar_mask(sumrep):
+    channels = sumrep.size()
     mask = np.ones(channels)>0
     i=0
-    for rank in rep.ranks:
-        if rank!=(0,0): mask[i:i+size(rank,rep.d)] = False
-        i+=size(rank,rep.d)
+    for rep in sumrep.reps:
+        if rep!=Scalar: mask[i:i+rep.size()] = False
+        i+=rep.size()
     return mask
 
 
@@ -101,7 +101,7 @@ class TensorMaskBN(nn.BatchNorm0D): #TODO find discrepancies with pytorch versio
 def ragged_gather_scatter(x,x_rep):
     y = []
     i=0
-    for rank in x_rep.ranks:
-        y.append(x[i:i+size(rank,x_rep.d)].sum(keepdims=True).repeat(size(rank,x_rep.d),axis=-1))
-        i+=size(rank,x_rep.d)
+    for rep in x_rep.reps:
+        y.append(x[i:i+rep.size()].sum(keepdims=True).repeat(rep.size(),axis=-1))
+        i+=rep.size()
     return jnp.concatenate(y,-1)

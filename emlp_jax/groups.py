@@ -27,6 +27,14 @@ class Group(object,metaclass=Named):
         self.args = args
         self.lie_algebra = jax.device_put(self.lie_algebra)
         self.discrete_generators = jax.device_put(self.discrete_generators)
+
+        # Set orthogonal flag
+        self.is_orthogonal = True
+        if self.lie_algebra.shape[0]!=0:
+            self.is_orthogonal &= rel_err(-self.lie_algebra.transpose((0,2,1)),self.lie_algebra)<1e-6
+        h = self.discrete_generators
+        if h.shape[0]!=0:
+            self.is_orthogonal &= rel_err(h.transpose((0,2,1))@h,jnp.eye(self.d))<1e-6
     def exp(self,A):
         return expm(A)
     def num_constraints(self):
@@ -52,15 +60,6 @@ class Group(object,metaclass=Named):
     def check_valid_group_elems(self,g):
         return True
 
-    def is_orthogonal_rep(self):#TODO: fix name, should be is_orthogonal_rep
-        orthogonal = True
-        if self.lie_algebra.shape[0]!=0:
-            orthogonal &= rel_err(-self.lie_algebra.transpose((0,2,1)),self.lie_algebra)<1e-6
-        h = self.discrete_generators
-        if h.shape[0]!=0:
-            orthogonal &= rel_err(h.transpose((0,2,1))@h,np.eye(self.d))<1e-6
-        return orthogonal
-
     def __and__(self,G2):
         return CombinedGenerators(self,G2)
     def __str__(self):
@@ -68,19 +67,18 @@ class Group(object,metaclass=Named):
     def __repr__(self):
         return f"{self.__class__}{list(self.args) if self.args else ''}"
     def __eq__(self,G2): #TODO: check that spans are equal?
-        if self.lie_algebra.shape!=G2.lie_algebra.shape or \
-            self.discrete_generators.shape!=G2.discrete_generators.shape:
-            return False
-        return  (self.lie_algebra==G2.lie_algebra).all() and (self.discrete_generators==G2.discrete_generators).all()
+        return repr(self)==repr(G2)
+        # if self.lie_algebra.shape!=G2.lie_algebra.shape or \
+        #     self.discrete_generators.shape!=G2.discrete_generators.shape:
+        #     return False
+        # return  (self.lie_algebra==G2.lie_algebra).all() and (self.discrete_generators==G2.discrete_generators).all()
     def __hash__(self):
-        algebra = jax.device_get(self.lie_algebra).tobytes()
-        gens = jax.device_get(self.discrete_generators).tobytes()
-        return hash((algebra,gens,self.lie_algebra.shape,self.discrete_generators.shape))
-
-    def get_projector(self,rank):
-        Q = equivariant_subspaces.get_active_subspace(self,rank)
-        P = Q.T@Q
-        return lambda w: P@w
+        return hash(repr(self))
+        # algebra = jax.device_get(self.lie_algebra).tobytes()
+        # gens = jax.device_get(self.discrete_generators).tobytes()
+        # return hash((algebra,gens,self.lie_algebra.shape,self.discrete_generators.shape))
+    def __lt__(self, other):
+        return hash(self) < hash(other) #For sorting purposes only
 
 @jit
 def matrix_power_simple(M,n):
@@ -114,22 +112,6 @@ class CombinedGenerators(Group):
         
     def __repr__(self):
         return f"{self.names[0]}&{self.names[1]}"
-
-
-class DirectProduct(Group):
-    def __init__(self,G1,G2):
-        self.G1 = G1
-        self.G2 = G2
-
-    def get_projector(self,rank):# Sketch
-        r1,r2 = split(rank)
-        P1 = self.G1.get_projector(r1)
-        P2 = self.G2.get_projector(r2)
-        def P1kronP2projector(W):
-            proj1 = P1(W.reshape(size(r1),size(r2),*W.shape[1:]))
-            proj12 = jnp.swapaxes(P2(jnp.swapaxes(proj1,0,1)),0,1)
-            return proj12
-        return P1kronP2projector
 
 class WreathProduct(Group):
     def __init__(self,G1,G2):
@@ -239,6 +221,10 @@ class Permutation(Group):
             self.discrete_generators[i,i+1,0]=1
             self.discrete_generators[i,i+1,i+1]=0
         super().__init__(n)
+
+@export
+class S(Permutation): pass #Alias permutation group with Sn.
+
 @export
 class DiscreteTranslation(Group):
     def __init__(self,n):

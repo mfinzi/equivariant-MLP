@@ -2,7 +2,7 @@ from emlp_jax.mlp import MLP,EMLP#,LinearBNSwish
 from emlp_jax.datasets import Fr,ParticleInteraction
 import jax.numpy as jnp
 import jax
-from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector,Quad,repsize
+from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector
 from emlp_jax.groups import SO,O,Trivial,Lorentz,O13,SO13,SO13p
 from emlp_jax.mlp import EMLP,LieLinear,Standardize,EMLP2
 from emlp_jax.model_trainer import RegressorPlus
@@ -25,10 +25,14 @@ import emlp_jax
 #repmiddle = 100*T(0)+30*T(1)+10*T(2)+3*T(3)#+1*T(4)
 
 
-def makeTrainer(*,dataset=ParticleInteraction,network=EMLP2,num_epochs=500,ndata=1000+1000,seed=2020,aug=False,
+def makeTrainer(*,dataset=ParticleInteraction,network=EMLP,num_epochs=500,ndata=1000+1000,seed=2020,aug=False,
                 bs=500,lr=1e-3,device='cuda',split={'train':-1,'test':1000},
                 net_config={'num_layers':3,'ch':384,'group':SO13p()},log_level='info',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.25}},save=False):
+    levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
+                        'warn': logging.WARNING,'warning': logging.WARNING,
+                        'info': logging.INFO,'debug': logging.DEBUG}
+    logging.getLogger().setLevel(levels[log_level])
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
         datasets = split_dataset(dataset(ndata),splits=split)
@@ -38,7 +42,7 @@ def makeTrainer(*,dataset=ParticleInteraction,network=EMLP2,num_epochs=500,ndata
     dataloaders['Train'] = dataloaders['train']
     #equivariance_test(model,dataloaders['train'],net_config['group'])
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr*cosLr(num_epochs)(e)*min(1,e/50)
+    lr_sched = lambda e: lr*cosLr(num_epochs)(e)*min(1,.e/(num_epochs/10))
     return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":

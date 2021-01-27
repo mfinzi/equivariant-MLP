@@ -5,6 +5,7 @@ from jax import jit
 from functools import partial
 import jax.numpy as jnp
 from jax import device_put
+import optax
 import collections,itertools
 from functools import lru_cache as cache
 from emlp_jax.utils import disk_cache
@@ -15,6 +16,7 @@ import functools
 import random
 import logging
 import emlp_jax
+from oil.utils.mytqdm import tqdm
 
 class OrderedCounter(collections.Counter,collections.OrderedDict): pass
 
@@ -37,7 +39,7 @@ class Rep(object):
         else: return NotImplemented # Tensor product representation R1 x R2
     @property
     def T(self): raise NotImplementedError # dual representation V*, rho*, drho*
-    def __repr__(self): raise NotImplementedError
+    def __repr__(self): return str(self)#raise NotImplementedError
     def __str__(self): raise NotImplementedError 
     def __call__(self,G): raise NotImplementedError # set the symmetry group
     def rho(self,M): raise NotImplementedError # Group representation of matrix M (n,n)
@@ -63,8 +65,11 @@ class Rep(object):
             Output [Q (r,) + (p+q)*(d,)] """
         if self==Scalar: return jnp.ones((1,1))
         #if isinstance(group,Trivial): return np.eye(size(rank,group.d))
-        Q = orthogonal_complement(self.constraint_matrix())
-        return Q
+        if (self.size()**2)*self.G.num_constraints()>3e7 and isinstance(self,TensorRep): #Too large to use SVD
+            #TODO: make more extensible
+            return krylov_constraint_solve(tensor_constraints_lazy(self.G,self.rank))
+        else:
+            return orthogonal_complement(self.constraint_matrix())
     
     def symmetric_projector(self):
         Q = self.symmetric_basis()
@@ -128,6 +133,10 @@ class SumRep(Rep):
             and possibly the symmetry generators gen."""
         self.reps = reps
         self.shapes = (self.reps,) if shapes is None else shapes
+        # try:
+        #     print(f"sumrep of shape {self.shape}")
+        # except AttributeError:
+        #     print("Not yet initialized")
         # shapes how the reps are arranged when in matrix or tensor form
         # ie R1+R2 self.shapes = ([R1,R2],)
         # R1 x (R2+R3) sel.shapes = ([R1],[R2,R3])
@@ -139,13 +148,12 @@ class SumRep(Rep):
         return len(self.reps)
     @property
     def shape(self): # Returns the total shape of the object the rep represents, e.g. (cin,cout) for a matrix
+        # for reps in self.shapes:
+        #     print([rep.size() for rep in reps])
+        #     print([str(rep) for rep in reps])
         return tuple(sum(rep.size() for rep in reps) for reps in self.shapes)
     def size(self):
         return sum(rep.size() for rep in self.reps)
-    # def __call__(self,G):
-    #     self.G=G
-    #     self.d = self.G.d
-    #     return self
     def __add__(self, other):
         if isinstance(other,int):
             return self+other*Scalar
@@ -167,6 +175,7 @@ class SumRep(Rep):
         elif isinstance(other,SumRep): #TODO: account for the shape?
             return SumRep([rep1*rep2 for rep1,rep2 in itertools.product(self.reps,other.reps)],self.shapes+other.shapes)
         elif isinstance(other,Rep):
+            #print("should not be called")
             return SumRep([rep*other for rep in self.reps])
         else: assert False, f"Unsupported operand Rep.__mul__{type(other)}"
 
@@ -182,7 +191,7 @@ class SumRep(Rep):
     @property
     def T(self):
         """ only swaps to adjoint representation, does not reorder elems"""
-        return SumRep([rep.T for rep in self.reps])
+        return SumRep([rep.T for rep in self.reps],self.shapes)
 
     def multiplicities(self):
         return OrderedCounter(self.reps)
@@ -239,13 +248,13 @@ class SumRep(Rep):
         #Qs = {rep:jax.device_put(Q.astype(np.float32)) for rep,Q in Qs.items()}
         # Get the permutation of the vector when grouped by tensor rep
         perm = self.argsort()
-        invperm = jnp.argsort(perm)
+        invperm = np.argsort(perm)
         block_perm = rep_permutation(self)
-        inv_block_perm = jnp.argsort(block_perm)
+        inv_block_perm = np.argsort(block_perm)
         logging.debug("finished argsorting")
+        
         # Apply the projections for each rep, concatenate, and permute back to orig rep order
         def lazy_QQT(W):
-            print(f"W shape {W.shape}")
             ordered_W = W[inv_block_perm][perm] if len(self.shape)>1 else W[perm]
             PWs = []
             i=0
@@ -255,7 +264,6 @@ class SumRep(Rep):
                 PWs.append((P@ordered_W[i:i_end].reshape(multiplicity,rep.size()).T).T.reshape(-1))
                 i = i_end
             PWs = jnp.concatenate(PWs,axis=-1) #concatenate over rep axis
-            print(f"QQT shape {self.shape}")
             inp_ordered_PWs = PWs[invperm][block_perm] if len(self.shape)>1 else PWs[invperm]
             return  inp_ordered_PWs # reorder to original rep ordering
         return LinearOperator(shape=(self.size(),self.size()),matvec=lazy_QQT)
@@ -269,16 +277,18 @@ class SumRep(Rep):
         #TODO: add switching to use lazy matrices depending on size
         rho_blocks = jax.scipy.linalg.block_diag(*[rep.rho(M) for rep in self.reps])
         block_perm = rep_permutation(self)
-        inv_block_perm = jnp.argsort(block_perm)
+        #inv_block_perm = jnp.argsort(block_perm)
         #print(rho_blocks.shape,block_perm.shape,inv_block_perm.shape)
         #print(block_perm)
-        out = rho_blocks[inv_block_perm,:][:,block_perm]#[inv_block_perm,block_perm]
+        out = rho_blocks[block_perm,:][:,block_perm]#[inv_block_perm,block_perm] #Still not working as intended?
         #print(out.shape)
         return out
 
     def drho(self,A): #Incorrect rho for tensor products of sums? Needs to be permuted
         #TODO: add switching to use lazy matrices depending on size
-        return jax.scipy.linalg.block_diag(*[rep.drho(A) for rep in self.reps])
+        drhoA_blocks = jax.scipy.linalg.block_diag(*[rep.drho(A) for rep in self.reps])
+        block_perm = rep_permutation(self)
+        return drhoA_blocks[block_perm,:][:,block_perm]
 
     def argsort(self):
         """ get the permutation given by converting
@@ -330,30 +340,33 @@ class tensor_rho_lazy(LinearOperator):
         self.d = M.shape[0]
         self.M = M
         self.rank = rank
-        self.c = size(rank,self.d)
-        self.dtype=np.float64
+        self.c = self.d**sum(rank)
+        self.dtype=np.float32
     @property
     def shape(self):
         return (self.c,self.c)
     def _matmat(self,V): #(c,k) #Still needs to be tested??
         c,k = V.shape
         p,q = self.rank
-        MinvT = np.linalg.inv(self.M.T)
+        if q: 
+            MinvT = self.M.invT() if hasattr(self.M,"invT") else jnp.linalg.inv(self.M.T)
         eV = V.reshape((p+q)*[self.d]+[k])
         for i in range(p):
-            eV = np.moveaxis(np.dot(self.M,np.moveaxis(eV,i,0)),0,i)
+            MeV = self.M@jnp.moveaxis(eV,i,0).reshape((self.d,-1))
+            eV = jnp.moveaxis(MeV.reshape(eV.shape),0,i)
         for i in range(p,p+q):
-            eV = np.moveaxis(np.dot(MinvT,np.moveaxis(eV,i,0)),0,i)
-        return eV.reshape(*V.shape)
+            MinvTeV = MinvT@jnp.moveaxis(eV,i,0).reshape((self.d,-1))
+            eV = jnp.moveaxis(MinvTeV.reshape(eV.shape),0,i)
+        return eV.reshape((V.shape))
     def _adjoint(self):
-        return rho_lazy(self.M.T,self.rank)
+        return tensor_rho_lazy(self.M.T,self.rank)
 
 class tensor_drho_lazy(LinearOperator):
     def __init__(self,M,rank):
         self.d = M.shape[0]
         self.M = M
         self.rank = rank
-        self.c = size(rank,self.d)
+        self.c = self.d**sum(rank)
         self.dtype=np.float32
     @property
     def shape(self):
@@ -362,41 +375,48 @@ class tensor_drho_lazy(LinearOperator):
         c,k = V.shape
         p,q = self.rank
         eV = V.reshape((p+q)*[self.d]+[k])
-        out = np.zeros_like(eV)
+        out = jnp.zeros_like(eV)
         for i in range(p):
-            out += np.moveaxis(np.dot(self.M,np.moveaxis(eV,i,0)),0,i)
+            MeV = self.M@jnp.moveaxis(eV,i,0).reshape((self.d,-1))
+            out += jnp.moveaxis(MeV.reshape(eV.shape),0,i)
         for i in range(p,p+q):
-            out -= np.moveaxis(np.dot(self.M.T,np.moveaxis(eV,i,0)),0,i)
+            MTeV = self.M.T@jnp.moveaxis(eV,i,0).reshape((self.d,-1))
+            out -= jnp.moveaxis(MTeV.reshape(eV.shape),0,i)
         return out.reshape(*V.shape)
     def _adjoint(self):
-        return drho_lazy(self.M.T,self.rank)
+        return tensor_drho_lazy(self.M.T,self.rank)
 
-class tensor_projection_lazy(LinearOperator):
+class tensor_constraints_lazy(LinearOperator):
     def __init__(self,group,rank):
         self.d = group.d
-        self.hi = group.discrete_generators
-        self.Ai = group.lie_algebra
+        #TODO: make more extensible wrg to generators and non tensor reps
+        try: self.hi = group.discrete_generators_lazy
+        except AttributeError: self.hi=group.discrete_generators
+        try: self.Ai = group.lie_algebra_lazy
+        except AttributeError: self.Ai = group.lie_algebra
+        #self.hi = group.discrete_generators
+        #self.Ai = group.lie_algebra
         self.G=group
         self.n_constraints= len(self.hi)+len(self.Ai)
         if not self.n_constraints: raise NotImplementedError
         self.rank = rank
-        self.c = size(rank,self.d)
+        self.c = self.d**sum(rank)
         self.dtype=np.float32
     @property
     def shape(self):
         return (self.c*self.n_constraints,self.c)
     def _matmat(self,V): #(c,k)
         constraints = []
-        constraints.extend([drho_lazy(A,self.rank)@V for A in self.Ai])
-        constraints.extend([rho_lazy(h,self.rank)@V-V for h in self.hi])
-        CV = np.concatenate(constraints,axis=0)
+        constraints.extend([tensor_drho_lazy(A,self.rank)@V for A in self.Ai])
+        constraints.extend([tensor_rho_lazy(h,self.rank)@V-V for h in self.hi])
+        CV = jnp.concatenate(constraints,axis=0)
         return CV
     def _rmatmat(self,V):
         n_constraints = len(self.hi)+len(self.Ai)
-        Vi = np.split(V,self.n_constraints)
+        Vi = jnp.split(V,self.n_constraints)
         out = 0
-        out += sum([drho_lazy(A,self.rank).T@Vi[i] for i,A in enumerate(self.Ai)])
-        out += sum([rho_lazy(h,self.rank).T@Vi[i+len(self.Ai)] for i,h in enumerate(self.hi)])
+        out += sum([tensor_drho_lazy(A,self.rank).T@Vi[i] for i,A in enumerate(self.Ai)])
+        out += sum([tensor_rho_lazy(h,self.rank).T@Vi[i+len(self.Ai)] for i,h in enumerate(self.hi)])
         return out
 
 def orthogonal_complement(proj):
@@ -404,6 +424,50 @@ def orthogonal_complement(proj):
     U,S,VT = jnp.linalg.svd(proj,full_matrices=True) # Changed from full_matrices=True
     rank = (S>1e-5).sum()
     return VT[rank:]
+
+def krylov_constraint_solve(C,tol=3e-3):
+    r = 5
+    if C.shape[0]*r*2>1e9: raise Exception(f"Solns for contraints {C.shape} too large to fit in memory")
+    found_rank=5
+    while found_rank==r:
+        r *= 2
+        if C.shape[0]*r>1e9:
+            logging.error("Hit memory limits, switching to sample from equivariant subspace")
+            break
+        Q = krylov_constraint_solve_upto_r(C,r,tol)
+        found_rank = Q.shape[0]
+    return Q
+
+def krylov_constraint_solve_upto_r(C,r,tol=3e-3,lr=1e-2):
+    W = np.random.randn(C.shape[-1],r)
+    W /= np.sqrt((W**2).sum(0,keepdims=True))
+
+    opt_init,opt_update = optax.sgd(lr,.9)#optax.adam(lr)#optax.sgd(3e-3,.9)#optax.adam(lr)
+    opt_state = opt_init(W)  # init stats
+
+    def loss(W):
+        return ((C@W)**2).sum()/2
+
+    loss_and_grad = jit(jax.value_and_grad(loss))
+
+    #lossvalues = []
+    for i in tqdm(range(1000),desc=f'Krylov Solving for Equivariant Subspace r<={r}'):
+        lossval, grad = loss_and_grad(W)
+        updates, opt_state = opt_update(grad, opt_state, W)
+        W = optax.apply_updates(W, updates)
+        W /= jnp.sqrt((W**2).sum(0,keepdims=True))
+        #lossvalues.append(lossval)
+        if lossval <tol**2: break
+        if lossval>1e2 and i>100: # Solve diverged due to too high learning rate
+            logging.warning(f"Constraint solving diverged, trying lower learning rate {lr/3:.2e}")
+            return krylov_constraint_solve_upto_r(C,r,tol,lr=lr/3)
+    if lossval>1e-1: # Failed to converge means subspace has dimension 0 
+        W*=0
+    # Orthogonalize solution at the end
+    U,S,VT = np.linalg.svd(np.array(W),full_matrices=False)
+    rank = (S>tol).sum()
+    Q = VT[:rank]
+    return device_put(Q)
 
 #@partial(jit,static_argnums=(0,1))
 def bilinear_weights(W_rep,x_rep):
@@ -453,6 +517,7 @@ def tensor_indices_dict(sumrep):
 @cache()
 def rep_permutation(sumrep):
     """Permutation from flattened ordering to block ordering """
+    #print(sumrep.shape)
     arange = np.arange(sumrep.size())
     size_cumsums = [np.cumsum([0] + [rep.size() for rep in reps]) for reps in sumrep.shapes]
     permutation = np.zeros([cumsum[-1] for cumsum in size_cumsums]).astype(np.int)

@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from objax.nn.init import kaiming_normal, xavier_normal
 from objax.module import Module
 import objax
+from emlp_jax.linear_operator_jax import LinearOperator
 import emlp_jax.equivariant_subspaces as equivariant_subspaces
 from jax import jit,vmap
 from functools import partial
@@ -19,6 +20,8 @@ class Group(object,metaclass=Named):
     lie_algebra = NotImplemented
     discrete_generators = NotImplemented
     z_scale=None # For scale noise for sampling elements
+    is_orthogonal=None
+    is_regular = None
     def __init__(self,*args,**kwargs):
         if self.lie_algebra is NotImplemented:
             self.lie_algebra = np.zeros((0,self.d,self.d))
@@ -28,13 +31,23 @@ class Group(object,metaclass=Named):
         self.lie_algebra = jax.device_put(self.lie_algebra)
         self.discrete_generators = jax.device_put(self.discrete_generators)
 
-        # Set orthogonal flag
-        self.is_orthogonal = True
-        if self.lie_algebra.shape[0]!=0:
-            self.is_orthogonal &= rel_err(-self.lie_algebra.transpose((0,2,1)),self.lie_algebra)<1e-6
-        h = self.discrete_generators
-        if h.shape[0]!=0:
-            self.is_orthogonal &= rel_err(h.transpose((0,2,1))@h,jnp.eye(self.d))<1e-6
+        # Set orthogonal flag automatically if not specified
+        if self.is_regular: self.is_orthogonal=True
+        if self.is_orthogonal is None:
+            self.is_orthogonal = True
+            if self.lie_algebra.shape[0]!=0:
+                self.is_orthogonal &= rel_err(-self.lie_algebra.transpose((0,2,1)),self.lie_algebra)<1e-6
+            h = self.discrete_generators
+            if h.shape[0]!=0:
+                self.is_orthogonal &= rel_err(h.transpose((0,2,1))@h,jnp.eye(self.d))<1e-6
+
+        # Set regular flag automatically if not specified
+        if self.is_orthogonal and (self.is_regular is None):
+            self.is_regular=True
+            self.is_regular &= (len(self.lie_algebra)==0) # no infinitesmal generators and all rows have one 1
+            self.is_regular &= ((self.discrete_generators==1).astype(np.int).sum(-1)==1).all()
+        
+
     def exp(self,A):
         return expm(A)
     def num_constraints(self):
@@ -213,13 +226,12 @@ class Symplectic(Group):
 @export
 class Permutation(Group):
     def __init__(self,n):
-        self.discrete_generators = np.zeros((n-1,n,n))
-        self.discrete_generators += np.eye(n)
-        self.discrete_generators[:,0,0]=0
-        for i in range(n-1):
-            self.discrete_generators[i,0,i+1]=1
-            self.discrete_generators[i,i+1,0]=1
-            self.discrete_generators[i,i+1,i+1]=0
+        perms = np.arange(n)[None]+np.zeros((n-1,1)).astype(int)
+        perms[:,0] = np.arange(1,n)
+        perms[np.arange(n-1),np.arange(1,n)[None]]=0
+        I = np.eye(n)
+        self.discrete_generators = np.stack([I[perm] for perm in perms])
+        self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in perms]
         super().__init__(n)
 
 @export
@@ -281,4 +293,64 @@ class SU(Group): # Of dimension n^2-1
         I,J = np.eye(2),np.array([[0,1],[-1,0]])
         self.lie_algebra = np.kron(lie_algebra_real,I)+np.kron(lie_algebra_imag,J)
         super().__init__(n)
+
+def pad(permutation):
+    assert len(permutation)==48
+    padded = np.zeros((6,9)).astype(permutation.dtype)
+    padded[:,:4] = permutation.reshape(6,8)[:,:4]
+    padded[:,5:] = permutation.reshape(6,8)[:,4:]
+    return padded
+
+def unpad(padded_perm):
+    return np.concatenate([padded_perm[:,:4],padded_perm[:,5:]],-1).reshape(-1)
+
+
+
+class PermutationMatrix(LinearOperator):
+    def __init__(self,perm):
+        self.perm=perm
+        self.shape = (len(perm),len(perm))
+
+    def _matmat(self,V): #(c,k) #Still needs to be tested??
+        return V[self.perm]
+    def _matvec(self,V):
+        return V[self.perm]
+    def _adjoint(self):
+        return PermutationMatrix(np.argsort(self.perm))
+    def invT(self):
+        return self
+
+@export
+class RubiksCube(Group):
+    is_regular = True # needs to be specified explicitly because of the lazy matrices
+    def __init__(self):
+        #Faces are ordered U,F,R,B,L,D (the net of the cube) #    B
+        order = np.arange(48)                                #  L U R
+        order_padded = pad(order) #include a center element  #    F
+        # Compute permutation for Up quarter turn            #    D
+        order_padded[0,:] = np.rot90(order_padded[0].reshape(3,3),1).reshape(9) # Rotate top face
+        FRBL = np.array([1,2,3,4])
+        order_padded[FRBL,:3] = order_padded[np.roll(FRBL,1),:3] # F <- L,R <- F,B <- R,L <- B
+        Uperm = unpad(order_padded)
+        # Now form all other generators by using full rotations of the cube by 90 clockwise about a given face
+        RotFront =pad(np.arange(48))# rotate full cube so that Left face becomes Up, Up becomes Right, Right becomes Down, Down becomes Left
+        URDL = np.array([0,2,5,4])
+        RotFront[URDL,:] = RotFront[np.roll(URDL,1),:]
+        RotFront = unpad(RotFront)
+        RotBack = np.argsort(RotFront)
+        RotLeft = pad(np.arange(48))
+        UFDB = np.array([0,1,5,3])
+        RotLeft[UFDB,:] = RotLeft[np.roll(UFDB,1),:]
+        RotLeft = unpad(RotLeft)
+        RotRight = np.argsort(RotLeft)
+
+        Fperm = RotRight[Uperm[RotLeft]] # Fperm = RotLeft<-Uperm<-RotRight
+        Rperm = RotBack[Uperm[RotFront]] # Rperm = RotFront<-Uperm<-RotBack
+        Bperm = RotLeft[Uperm[RotRight]]# Bperm = RotRight<-Uperm<-RotLeft
+        Lperm = RotFront[Uperm[RotBack]] # Lperm = RotBack<-Uperm<-RotFront
+        Dperm = RotRight[RotRight[Uperm[RotLeft[RotLeft]]]] # Dperm = RotLeft<-RotLeft<-Uperm<-RotRight<-RotRight
+        I = np.eye(48)
+        self.discrete_generators = np.stack([I[perm] for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]])
+        self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
+        super().__init__()
 

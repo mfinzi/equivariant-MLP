@@ -49,11 +49,12 @@ class Inertia(Dataset,metaclass=Named):
 class Fr(Dataset,metaclass=Named):
     def __init__(self,N=1024):
         super().__init__()
-        d=3
+        d=5
         self.dim = 2*d
         self.X = torch.randn(N,self.dim)
-        ri = self.X.reshape(-1,2,d)
-        self.Y = (ri[:,0]**2).sum(-1).sqrt().sin()-.5*(ri[:,1]**2).sum(-1).sqrt()**3
+        ri = self.X.reshape(-1,2,5)
+        r1,r2 = ri.transpose(0,1)
+        self.Y = (r1**2).sum(-1).sqrt().sin()-.5*(r2**2).sum(-1).sqrt()**3 + (r1*r2).sum(-1)/((r1**2).sum(-1).sqrt()*(r2**2).sum(-1).sqrt())
         self.rep_in = 2*Vector
         self.rep_out = Scalar
         self.symmetry = O(d)

@@ -61,8 +61,8 @@ class TestRepresentationSubspace(unittest.TestCase):
     def test_equivariant_matrix(self):
         N=5
         testcases = [(SO(3),5*T(0)+5*T(1),3*T(0)+T(2)+2*T(1)),
-        #             (SO13p(),4*T(1,0),10*T(0)+3*T(1,0)+3*T(0,1)+T(0,2)+T(2,0)+T(1,1))]
-        #testcases = [(SO(3),T(0)+T(1),T(0)+2*T(1))]
+                     (SO13p(),4*T(1,0),10*T(0)+3*T(1,0)+3*T(0,1)+T(0,2)+T(2,0)+T(1,1))]
+        #testcases = [(SO(2),T(0)+T(1),T(0)+T(1))]
         for G,repin,repout in testcases:
             repin = repin(G)
             repout = repout(G)
@@ -81,11 +81,14 @@ class TestRepresentationSubspace(unittest.TestCase):
             gWx = (routg@(x@W.T)[...,None])[...,0]
             equiv_err = rel_error(Wgx,gWx)
             self.assertTrue(equiv_err<1e-5,f"Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G}")
+
+            # print(f"R {repW.rho(gs[0])}")
+            # print(f"R1 x R2 {jnp.kron(routg[0],jnp.linalg.inv(ring[0]).T)}")
+
             gvecW = (vmap(repW.rho)(G.samples(N))*W.reshape(-1)).sum(-1)
-            for i in range(N):
+            for i in range(N): # Reshape -1 different from \vec() in text? transposed?
                 gWerr = rel_error(gvecW[i],W.reshape(-1))
                 self.assertTrue(gWerr<1e-6,f"Symmetric gvec(W)=vec(W) fails err {gWerr:.3e} with G={G}")
-                #TODO fix composite representation matrix? will require reordering ranks
 
 
     # def test_bilinear_layer(self):

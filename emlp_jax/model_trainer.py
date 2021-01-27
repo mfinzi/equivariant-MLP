@@ -15,7 +15,7 @@ def rel_err(a,b):
 
 def equivariance_err(model,mb,group=None):
     x,y = mb
-    group = model.model.rep_in.G if group is None else group
+    group = model.model.G if group is None else group
     gs = group.samples(x.shape[0])
     rho_gin = vmap(model.model.rep_in.rho)(gs)
     rho_gout = vmap(model.model.rep_out.rho)(gs)

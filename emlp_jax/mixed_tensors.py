@@ -23,6 +23,8 @@ class ProductGroupTensorRep(Rep): # Eventually will need to handle reordering to
     def __init__(self,rep_dict):
         assert len(rep_dict)>1, "Not product rep?"
         self.reps = rep_dict
+        #for rep in rep_dict.values():
+        #self.ordering = 
     def rho(self,Ms): 
         rhos = [rep.rho(Ms[G]) for (G,rep) in self.reps.items()]
         return functools.reduce(jnp.kron,rhos,1)
@@ -46,39 +48,37 @@ class ProductGroupTensorRep(Rep): # Eventually will need to handle reordering to
 
     def __mul__(self, other): 
         #TODO: worry about ordering of representation differing from dict order when new elems are added
-        out = copy.copy(self) #TODO: check deepcopy not requried
+        out = copy.deepcopy(self) #TODO: check deepcopy not requried
         if isinstance(other,ProductGroupTensorRep):
             for Gb,rep in other.reps.items():
-                if Gb in copy.reps: copy.reps[Gb]=copy.reps[Gb]*rep
-                else: copy.reps[Gb] = rep
-            return copy
+                if Gb in out.reps: out.reps[Gb]=out.reps[Gb]*rep
+                else: out.reps[Gb] = rep
+            return out
         elif isinstance(other,TensorRep):
-            copy.reps[other.G] = copy.reps[other.G]*other
-            return copy
+            out.reps[other.G] = out.reps[other.G]*other
+            return out
         else: return NotImplemented
 
     def __rmul__(self, other):
-        out = copy.copy(self)
+        out = copy.deepcopy(self)
         if isinstance(other,ProductGroupTensorRep):
             for Gb,rep in other.reps.items():
-                if Gb in copy.reps: copy.reps[Gb]=rep*copy.reps[Gb]
-                else: copy.reps[Gb] = rep
-            return copy
+                if Gb in out.reps: out.reps[Gb]=rep*out.reps[Gb]
+                else: out.reps[Gb] = rep
+            return out
         elif isinstance(other,TensorRep):
-            copy.reps[other.G] = copy.reps[other.G]*other
-            return copy
+            out.reps[other.G] = out.reps[other.G]*other
+            return out
         else: return NotImplemented
 
     def __str__(self):
         return "⊗".join([str(rep) for rep in self.reps.values()])
+
     def symmetric_basis(self): 
         raise NotImplementedError
 
     def symmetric_projector(self):
         projectors = [rep.symmetric_projector() for rep in self.reps.values()]
-        #print([p.shape for p in projectors])
-        #P1 = self.rep1.symmetric_projector()
-        #P2 = self.rep2.symmetric_projector()
         return lazy_kron(projectors)
 @jit
 def kronsum(A,B):
@@ -100,11 +100,21 @@ class lazy_kron(LinearOperator):
         return ev.reshape(-1)
     def _adjoint(self):
         return lazy_kron([Mi.T for Mi in self.Ms])
-        # for i in range(p,p+q):
-        #     eV = np.moveaxis(np.dot(MinvT,np.moveaxis(eV,i,0)),0,i)
-        # return eV.reshape(*V.shape)
-        # eV = V.reshape(self.M1.shape[-1],self.M2.shape[-1])
-        # PV = (self.M2@(self.M1@eV).T).T
-        # return PV.reshape(-1)
-    # def _adjoint(self):
-    #     return rho_lazy(self.M1.T,self.M2.T)
+
+# @cache()
+# def rep_permutation(sumrep):
+#     """Permutation from flattened ordering to block ordering """
+#     #print(sumrep.shape)
+#     arange = np.arange(sumrep.size())
+#     size_cumsums = [np.cumsum([0] + [rep.size() for rep in reps]) for reps in sumrep.shapes]
+#     permutation = np.zeros([cumsum[-1] for cumsum in size_cumsums]).astype(np.int)
+#     indices_iter = itertools.product(*[range(len(reps)) for reps in sumrep.shapes])
+#     i = 0
+#     for indices in indices_iter:
+#         slices = tuple([slice(cumsum[idx], cumsum[idx + 1]) for idx, cumsum in zip(indices, size_cumsums)])
+#         slice_lengths = [sl.stop - sl.start for sl in slices]
+#         chunk_size = np.prod(slice_lengths)
+#         permutation[slices] += arange[i:i + chunk_size].reshape(*slice_lengths)
+#         i += chunk_size
+#     return permutation.reshape(-1)
+

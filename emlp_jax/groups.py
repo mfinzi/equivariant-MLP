@@ -301,6 +301,20 @@ class SU(Group): # Of dimension n^2-1
         self.lie_algebra = np.kron(lie_algebra_real,I)+np.kron(lie_algebra_imag,J)
         super().__init__(n)
 
+@export
+class InvertedCube(Group):
+    # A discrete version of SO(3) including all 90 degree rotations in 3d space
+    # Implements a 6 dimensional representation on the faces of a cube
+    def __init__(self):
+        order = np.arange(6) # []
+        Fperm = np.array([4,1,0,3,5,2])
+        Lperm = np.array([3,0,2,5,4,1])
+        I = np.eye(6)
+        self.discrete_generators = np.stack([I[perm] for perm in [Fperm,Lperm]])
+        self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Fperm,Lperm]]
+        super().__init__()
+
+
 def pad(permutation):
     assert len(permutation)==48
     padded = np.zeros((6,9)).astype(permutation.dtype)

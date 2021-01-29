@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from emlp_jax.equivariant_subspaces import Scalar,Vector,Matrix,T
 from torch.utils.data import Dataset
 from oil.utils.utils import export,Named,Expression,FixedNumpySeed
-from emlp_jax.groups import SO,O,Trivial,Lorentz,RubiksCube
+from emlp_jax.groups import SO,O,Trivial,Lorentz,RubiksCube,Cube
 from functools import partial
 import itertools
 from jax import vmap,jit
@@ -127,6 +127,38 @@ class GroupAugmentation(Module):
             return (rhout_inv@self.network((self.rho_in(gs)@x[...,None])[...,0],training)[...,None])[...,0]
         else:
             return self.network(x,False)
+
+@export
+class Cube(Dataset,metaclass=Named):
+    def __init__(self,train=True):
+        pass #TODO: finish implementing this simple dataset
+        solved_state = np.eye(6)
+        parity_perm = np.array([5,3,4,1,2,0])
+        parity_state = solved_state[:,parity_perm]
+
+        labels = np.array([1,0]).astype(int)
+        self.X = np.zeros((2,6*6))
+        self.X[0] = solved_state
+        self.X[1] = parity_state
+        self.Y = labels
+        self.symmetry = Cube()
+        self.rep_in = 6*Vector
+        self.rep_out = 2*Scalar
+        self.stats = (0,1)
+        if train==False: # Scramble the cubes for test time
+            gs = self.symmetry.samples(100)
+            self.X = np.repeat(self.X,50,axis=0).reshape(100,6,48)@gs
+            self.Y = np.repeat(self.Y,50,axis=0)
+            p = np.random.permutation(100)
+            self.X = self.X[p].reshape((100,-1))
+            self.Y = self.Y[p].reshape((100,))
+        self.X = np.array(self.X)
+        self.Y = np.array(self.Y)
+            
+    def __getitem__(self,i):
+        return (self.X[i],self.Y[i])
+    def __len__(self):
+        return self.X.shape[0]
 
 
 #### Ways of constructing invalid Rubik's cubes 

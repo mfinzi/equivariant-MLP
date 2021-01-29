@@ -3,9 +3,9 @@ import jax.numpy as jnp
 import objax.nn as nn
 import objax.functional as F
 import numpy as np
-from emlp_jax.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad
+from emlp_jax.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad,Rep
 from emlp_jax.equivariant_subspaces import rep_permutation,bilinear_weights
-from emlp_jax.batchnorm import TensorBN,gate_indices
+from emlp_jax.batchnorm import TensorBN,gate_indices,gated
 import collections
 from oil.utils.utils import Named,export
 import scipy as sp
@@ -17,6 +17,7 @@ from objax.nn.init import kaiming_normal, xavier_normal
 from objax.module import Module
 import objax
 from objax.nn.init import orthogonal
+from scipy.special import binom
 
 def Sequential(*args):
     return nn.Sequential(args)
@@ -54,16 +55,15 @@ class BiLinear(Module):
     def __call__(self, x,training=True):
         logging.debug(f"bilinear in shape: {x.shape}")
         W = self.weight_proj(self.w.value,x)
-        out= .25*(W@x[...,None])[...,0] #TODO: set back to .05
+        out= .1*(W@x[...,None])[...,0] #TODO: set back to .05
         #import pdb; pdb.set_trace()
         logging.debug(f"bilinear out shape: {out.shape}")
         return out
 
 
-def gated(sumrep):
-    return sumrep+sum([1 for rep in sumrep.reps if rep!=Scalar])*Scalar
 
-class GatedNonlinearity(Module):
+
+class GatedNonlinearity(Module): #TODO: support elementwise swish for regular reps
     def __init__(self,rep):
         super().__init__()
         self.rep=rep
@@ -82,6 +82,7 @@ class EMLPBlock(Module):
     def __call__(self,x,training=True):
         lin = self.linear(x)
         preact = self.bn(self.bilinear(lin)+lin,training=training)
+        #preact = self.bilinear(lin)+lin
         return self.nonlinearity(preact)
 
 class EResBlock(Module):
@@ -120,7 +121,7 @@ def uniform_rep(ch,group):
         max_rank = lambertW(ch,d) # compute the max rank tensor that can fit up to
         Ns[:max_rank+1] += np.array([d**(max_rank-r) for r in range(max_rank+1)],dtype=int)
         ch -= (max_rank+1)*d**max_rank # compute leftover channels
-    return sum(uniform_allocation(nr,r)(group) for r,nr in enumerate(Ns))
+    return sum([binomial_allocation(nr,r)(group) for r,nr in enumerate(Ns)])
 
 def lambertW(ch,d):
     """ Returns solution to x*d^x = ch rounded down."""
@@ -130,9 +131,22 @@ def lambertW(ch,d):
     max_rank -= 1
     return max_rank
 
+def binomial_allocation(N,rank):
+    """ Allocates N of tensors of total rank r=(p+q) into
+        T(k,r-k) for k=0,1,...,r to match the binomial distribution.
+        For orthogonal representations there is no
+        distinction between p and q, so this op is equivalent to N*T(rank)."""
+    if N==0: return 0
+    n_binoms = N//(2**rank)
+    n_leftover = N%(2**rank)
+    even_split = sum([n_binoms*int(binom(rank,k))*T(k,rank-k) for k in range(rank+1)])
+    ps = np.random.binomial(rank,.5,n_leftover)
+    ragged = sum([T(int(p),rank-int(p)) for p in ps])
+    return even_split+ragged
+
 def uniform_allocation(N,rank):
     """ Uniformly allocates N of tensors of total rank r=(p+q) into
-        T(k,r-k) for k=0,1,...,r. For unimodular groups there is no
+        T(k,r-k) for k=0,1,...,r. For orthogonal representations there is no
         distinction between p and q, so this op is equivalent to N*T(rank)."""
     if N==0: return 0
     even_split = sum((N//(rank+1))*T(k,rank-k) for k in range(rank+1))
@@ -147,39 +161,43 @@ class EMLP(Module):
         self.rep_in =rep_in(group)
         self.rep_out = rep_out(group)
         self.G=group
-        repmiddle = uniform_rep(ch,group)
-        reps = [self.rep_in]+num_layers*[repmiddle]
+        # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
+        if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]
+        elif isinstance(ch,Rep): middle_layers = num_layers*[ch(group)]
+        else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
+
+        reps = [self.rep_in]+middle_layers
         logging.debug(reps)
         self.network = Sequential(
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            LieLinear(repmiddle,self.rep_out)
+            LieLinear(reps[-1],self.rep_out)
         )
         #self.network = LieLinear(self.rep_in,self.rep_out)
     def __call__(self,x,training=True):
         y = self.network(x,training=training)
         return y
 
-@export
-class EMLP2(Module):
-    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
-        super().__init__()
-        logging.info("Initing EMLP")
-        self.rep_in =rep_in(group)
-        self.rep_out = rep_out(group)
-        repmiddle = uniform_rep(ch,group)
-        #reps = [self.rep_in]+
-        reps = num_layers*[repmiddle]# + [self.rep_out]
-        logging.debug(reps)
-        self.network = Sequential(
-            LieLinear(self.rep_in,gated(repmiddle)),
-            *[EResBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            TensorBN(gated(repmiddle)),
-            GatedNonlinearity(repmiddle),
-            LieLinear(repmiddle,self.rep_out)
-        )
-    def __call__(self,x,training=True):
-        y = self.network(x,training=training)
-        return y
+# @export
+# class EMLP2(Module):
+#     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
+#         super().__init__()
+#         logging.info("Initing EMLP")
+#         self.rep_in =rep_in(group)
+#         self.rep_out = rep_out(group)
+#         repmiddle = uniform_rep(ch,group)
+#         #reps = [self.rep_in]+
+#         reps = num_layers*[repmiddle]# + [self.rep_out]
+#         logging.debug(reps)
+#         self.network = Sequential(
+#             LieLinear(self.rep_in,gated(repmiddle)),
+#             *[EResBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+#             TensorBN(gated(repmiddle)),
+#             GatedNonlinearity(repmiddle),
+#             LieLinear(repmiddle,self.rep_out)
+#         )
+#     def __call__(self,x,training=True):
+#         y = self.network(x,training=training)
+#         return y
 
 def swish(x):
     return jax.nn.sigmoid(x)*x

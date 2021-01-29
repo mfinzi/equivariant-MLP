@@ -154,7 +154,7 @@ def uniform_allocation(N,rank):
     return even_split+ragged
 
 @export
-class EMLP(Module):
+class EMLP(Module,metaclass=Named):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
         super().__init__()
         logging.info("Initing EMLP")
@@ -162,12 +162,11 @@ class EMLP(Module):
         self.rep_out = rep_out(group)
         self.G=group
         # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
-        if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]
+        if isinstance(ch,int): middle_layers = [uniform_rep(ch,group) for _ in range(num_layers)]
         elif isinstance(ch,Rep): middle_layers = num_layers*[ch(group)]
         else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
-
         reps = [self.rep_in]+middle_layers
-        logging.debug(reps)
+        logging.info(f"Reps: {reps}")
         self.network = Sequential(
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
             LieLinear(reps[-1],self.rep_out)
@@ -202,11 +201,11 @@ class EMLP(Module):
 def swish(x):
     return jax.nn.sigmoid(x)*x
 
-def MLPBlock(cin,cout): # works better without batchnorm?
+def MLPBlock(cin,cout):
     return Sequential(nn.Linear(cin,cout),nn.BatchNorm0D(cout,momentum=.9),swish)#,
 
 @export
-class MLP(Module):
+class MLP(Module,metaclass=Named):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
         super().__init__()
         self.rep_in =rep_in(group)
@@ -214,7 +213,7 @@ class MLP(Module):
         self.G = group
         chs = [self.rep_in.size()] + num_layers*[ch]
         cout = self.rep_out.size()
-        logging.warning("Initing MLP")
+        logging.info("Initing MLP")
         self.net = Sequential(
             *[MLPBlock(cin,cout) for cin,cout in zip(chs,chs[1:])],
             nn.Linear(chs[-1],cout)

@@ -51,7 +51,7 @@ class Inertia(Dataset,metaclass=Named):
         return GroupAugmentation(model,self.rep_in,self.rep_out,self.symmetry)
 
 @export
-class Fr(Dataset,metaclass=Named):
+class O5Synthetic(Dataset,metaclass=Named):
     def __init__(self,N=1024):
         super().__init__()
         d=5

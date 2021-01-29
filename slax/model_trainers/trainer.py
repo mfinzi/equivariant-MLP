@@ -59,7 +59,7 @@ class Trainer(object,metaclass=Named):
         for self.epoch in tqdm(range(start_epoch, start_epoch + num_epochs),desc='train'):
             for i, minibatch in enumerate(self.dataloaders['train']):
                 step = i + self.epoch*steps_per_epoch
-                self.step(self.epoch,minibatch)
+                self.step(self.epoch+i/steps_per_epoch,minibatch)
                 with self.logger as do_log:
                     if do_log: self.logStuff(step, minibatch)
         self.epoch+=1
@@ -95,7 +95,6 @@ class Trainer(object,metaclass=Named):
 
     def evalAverageMetrics(self,loader,metrics):
         num_total, loss_totals = 0, 0
-        #with Eval(self.model):
         for minibatch in loader:
             try: mb_size = loader.batch_size
             except AttributeError: mb_size=1

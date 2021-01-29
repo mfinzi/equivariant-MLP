@@ -1,5 +1,5 @@
 from emlp_jax.mlp import MLP,EMLP#,LinearBNSwish
-from emlp_jax.datasets import Fr,ParticleInteraction
+from emlp_jax.datasets import O5Synthetic,ParticleInteraction
 import jax.numpy as jnp
 import jax
 from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector
@@ -9,7 +9,6 @@ from emlp_jax.model_trainer import RegressorPlus
 import itertools
 import numpy as np
 import torch
-from emlp_jax.datasets import Inertia,Fr,ParticleInteraction
 import torch
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr, islice, export,FixedNumpySeed,FixedPytorchSeed
@@ -25,10 +24,11 @@ import objax
 #repmiddle = 100*T(0)+30*T(1)+10*T(2)+3*T(3)#+1*T(4)
 
 
-def makeTrainer(*,dataset=ParticleInteraction,network=EMLP,num_epochs=200,ndata=1000+1000,seed=2021,aug=False,
-                bs=500,lr=3e-3,device='cuda',split={'train':-1,'test':1000},
+def makeTrainer(*,dataset=ParticleInteraction,network=EMLP,num_epochs=300,ndata=1000+2000,seed=2021,aug=False,
+                bs=500,lr=3e-3,device='cuda',split={'train':-1,'val':1000,'test':1000},
                 net_config={'num_layers':3,'ch':384,'group':SO13p()},log_level='info',
-                trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.25}},save=False):
+                trainer_config={'log_dir':None,'log_args':{'minPeriod':.00,'timeFrac':.75},'early_stop_metric':'val_MSE'},
+                save=False,):
     levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
                         'warn': logging.WARNING,'warning': logging.WARNING,
                         'info': logging.INFO,'debug': logging.DEBUG}
@@ -44,9 +44,10 @@ def makeTrainer(*,dataset=ParticleInteraction,network=EMLP,num_epochs=200,ndata=
     dataloaders['Train'] = dataloaders['train']
     #equivariance_test(model,dataloaders['train'],net_config['group'])
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
+    lr_sched = lambda e: lr#*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
     return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":
     Trial = train_trial(makeTrainer)
-    Trial(argupdated_config(makeTrainer.__kwdefaults__,namespace=(emlp_jax.groups,emlp_jax.datasets,emlp_jax.mlp)))
+    cfg,outcome = Trial(argupdated_config(makeTrainer.__kwdefaults__,namespace=(emlp_jax.groups,emlp_jax.datasets,emlp_jax.mlp)))
+    print(outcome)

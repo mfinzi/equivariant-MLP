@@ -67,8 +67,9 @@ class Group(object,metaclass=Named):
         z = np.random.randn(N,self.lie_algebra.shape[0])
         if self.z_scale is not None:
             z*= self.z_scale
-        k = np.random.randint(-5,5,size=(N,self.discrete_generators.shape[0]))
-        return noise2samples(z,k,self.lie_algebra,self.discrete_generators)
+        k = np.random.randint(-5,5,size=(N,self.discrete_generators.shape[0],3))
+        jax_seed=  np.random.randint(100)
+        return noise2samples(z,k,self.lie_algebra,self.discrete_generators,jax_seed)
 
     def check_valid_group_elems(self,g):
         return True
@@ -101,19 +102,25 @@ def matrix_power_simple(M,n):
     return out
     
 @jit
-def noise2sample(z,ks,lie_algebra,discrete_generators):
-    """ [zs (D,)] [ks (M,)] [lie_algebra (D,d,d)] [discrete_generators (M,d,d)] """
+def noise2sample(z,ks,lie_algebra,discrete_generators,seed=0):
+    """ [zs (D,)] [ks (M,K)] [lie_algebra (D,d,d)] [discrete_generators (M,d,d)] 
+        Here K is the number of repeats for a given discrete generator."""
     g = jnp.eye(lie_algebra.shape[-1])
     if lie_algebra.shape[0]:
         A = (z[:,None,None]*lie_algebra).sum(0)
         g = g@jax.scipy.linalg.expm(A)
-    for i in range(discrete_generators.shape[0]):
-        g = g@matrix_power_simple(discrete_generators[i],ks[i])#jnp.linalg.matrix_power(discrete_generators[i],ks[i])
+    key = jax.random.PRNGKey(seed)
+    M,K = ks.shape
+    if M==0: return g
+    for k in range(K): # multiple rounds of discrete generators
+        key,pkey = jax.random.split(key)
+        for i in jax.random.permutation(pkey,M): # Randomize the order of generators
+            g = g@matrix_power_simple(discrete_generators[i],ks[i,k])#jnp.linalg.matrix_power(discrete_generators[i],ks[i])
     return g
 
 @jit
-def noise2samples(zs,ks,lie_algebra,discrete_generators):
-    return vmap(noise2sample,(0,0,None,None),0)(zs,ks,lie_algebra,discrete_generators)
+def noise2samples(zs,ks,lie_algebra,discrete_generators,seed=0):
+    return vmap(noise2sample,(0,0,None,None,None),0)(zs,ks,lie_algebra,discrete_generators,seed)
 
 
 class CombinedGenerators(Group):

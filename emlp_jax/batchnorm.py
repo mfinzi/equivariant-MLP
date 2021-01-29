@@ -12,13 +12,18 @@ import objax.functional as F
 from functools import partial
 import objax
 
-def gate_indices(sumrep):
+def gated(sumrep):
+    return sumrep+sum([1 for rep in sumrep.reps if rep!=Scalar and not rep.is_regular])*Scalar
+
+def gate_indices(sumrep): #TODO: add regular
+    """ Indices for scalars, and also additional scalar gates
+        added by gated(sumrep)"""
     channels = sumrep.size()
     indices = np.arange(channels)
     num_nonscalars = 0
     i=0
     for rep in sumrep.reps:
-        if rep!=Scalar:
+        if rep!=Scalar and not rep.is_regular:
             indices[i:i+rep.size()] = channels+num_nonscalars
             num_nonscalars+=1
         i+=rep.size()
@@ -29,7 +34,7 @@ def scalar_mask(sumrep):
     mask = np.ones(channels)>0
     i=0
     for rep in sumrep.reps:
-        if rep!=Scalar: mask[i:i+rep.size()] = False
+        if rep!=Scalar and not rep.is_regular: mask[i:i+rep.size()] = False
         i+=rep.size()
     return mask
 
@@ -40,7 +45,7 @@ class TensorBN(nn.BatchNorm0D): #TODO find discrepancies with pytorch version
     def __init__(self,rep):
         super().__init__(rep.size(),momentum=0.9)
         self.rep=rep
-    def __call__(self,x,training):
+    def __call__(self,x,training): #TODO: support elementwise for regular reps
         smask = jax.device_put(scalar_mask(self.rep))
         if training:
             m = x.mean(self.redux, keepdims=True)

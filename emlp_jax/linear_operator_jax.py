@@ -193,7 +193,6 @@ class LinearOperator(object):
         """
 
         M,N = self.shape
-
         if x.shape != (N,) and x.shape != (N,1):
             raise ValueError('dimension mismatch')
 
@@ -519,7 +518,7 @@ def _get_dtype(operators, dtypes=None):
     for obj in operators:
         if obj is not None and hasattr(obj, 'dtype'):
             dtypes.append(obj.dtype)
-    return np.find_common_type(dtypes, [])
+    return dtypes[0]#removed find_common_dtypes because not supported in jax
 
 
 class _SumLinearOperator(LinearOperator):

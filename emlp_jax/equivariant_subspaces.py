@@ -73,13 +73,16 @@ class Rep(object):
     
     def symmetric_projector(self):
         Q = self.symmetric_basis()
-        P = Q.T@Q
+        Q_lazy = Lazy(Q)
+        P = Q_lazy.T@Q_lazy
         return P
 
 class TensorRep(Rep):
     def __init__(self,p,q=0,G=None):
         self.rank = (p+q,0) if G is not None and G.is_orthogonal else (p,q)
         self.G = G
+        if G is not None: self.is_regular = G.is_regular
+    
     def rho(self,M): 
         if isinstance(M,dict): M = M[self.G]
         return tensor_rho(M,self.rank)
@@ -119,6 +122,7 @@ class TensorRep(Rep):
     def __call__(self,G):
         self.G=G
         if G.is_orthogonal: self.rank = (sum(self.rank),0) 
+        self.is_regular = G.is_regular
         return self
     def show_subspace(self):
         dims,projection = self.symmetric_basis()
@@ -307,6 +311,21 @@ Vector = T(1,0)
 Matrix = T(1,1)
 Quad = T(0,2)
 
+
+class Lazy(LinearOperator):
+    def __init__(self,dense_matrix):
+        self.A = dense_matrix
+        self.shape = self.A.shape
+        self.dtype = self.A.dtype
+    def _matmat(self,V):
+        return self.A@V
+    def _rmatmat(self,V):
+        return self.A.T@V
+    def _matvec(self,v):
+        return self.A@v
+    def _rmatvec(self,v):
+        return self.A.T@v
+
 @partial(jit,static_argnums=(1,))
 def tensor_rho(G,rank):
     """ Representation matrix rho(g) for the tensor T(p,q)"""
@@ -466,7 +485,7 @@ def krylov_constraint_solve_upto_r(C,r,tol=3e-3,lr=1e-2):
     # Orthogonalize solution at the end
     U,S,VT = np.linalg.svd(np.array(W),full_matrices=False)
     rank = (S>tol).sum()
-    Q = VT[:rank]
+    Q = U[:,:rank].T
     return device_put(Q)
 
 #@partial(jit,static_argnums=(0,1))

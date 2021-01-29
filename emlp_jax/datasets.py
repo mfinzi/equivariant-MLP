@@ -129,7 +129,7 @@ class GroupAugmentation(Module):
             return self.network(x,False)
 
 @export
-class Cube(Dataset,metaclass=Named):
+class InvertedCube(Dataset,metaclass=Named):
     def __init__(self,train=True):
         pass #TODO: finish implementing this simple dataset
         solved_state = np.eye(6)
@@ -138,8 +138,8 @@ class Cube(Dataset,metaclass=Named):
 
         labels = np.array([1,0]).astype(int)
         self.X = np.zeros((2,6*6))
-        self.X[0] = solved_state
-        self.X[1] = parity_state
+        self.X[0] = solved_state.reshape(-1)
+        self.X[1] = parity_state.reshape(-1)
         self.Y = labels
         self.symmetry = Cube()
         self.rep_in = 6*Vector
@@ -147,7 +147,7 @@ class Cube(Dataset,metaclass=Named):
         self.stats = (0,1)
         if train==False: # Scramble the cubes for test time
             gs = self.symmetry.samples(100)
-            self.X = np.repeat(self.X,50,axis=0).reshape(100,6,48)@gs
+            self.X = np.repeat(self.X,50,axis=0).reshape(100,6,6)@gs
             self.Y = np.repeat(self.Y,50,axis=0)
             p = np.random.permutation(100)
             self.X = self.X[p].reshape((100,-1))

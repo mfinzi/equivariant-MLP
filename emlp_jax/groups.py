@@ -302,7 +302,7 @@ class SU(Group): # Of dimension n^2-1
         super().__init__(n)
 
 @export
-class InvertedCube(Group):
+class Cube(Group):
     # A discrete version of SO(3) including all 90 degree rotations in 3d space
     # Implements a 6 dimensional representation on the faces of a cube
     def __init__(self):

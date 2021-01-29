@@ -29,7 +29,7 @@ def equivariance_err(model,mb,group=None):
     #rho_gout = jnp.stack([model.model.rep_out.rho(g) for g in group.samples(x.shape[0])])
     y1 = model.predict((rho_gin@x[...,None])[...,0])
     y2 = (rho_gout@model.predict(x)[...,None])[...,0]
-    return scale_adjusted_rel_err(y1,y2,gs)
+    return np.asarray(scale_adjusted_rel_err(y1,y2,gs))
 
 @export
 class RegressorPlus(Regressor):

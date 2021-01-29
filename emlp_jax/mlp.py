@@ -162,7 +162,7 @@ class EMLP(Module,metaclass=Named):
         self.rep_out = rep_out(group)
         self.G=group
         # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
-        if isinstance(ch,int): middle_layers = [uniform_rep(ch,group) for _ in range(num_layers)]
+        if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]#[uniform_rep(ch,group) for _ in range(num_layers)]
         elif isinstance(ch,Rep): middle_layers = num_layers*[ch(group)]
         else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
         reps = [self.rep_in]+middle_layers

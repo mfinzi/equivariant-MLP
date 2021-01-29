@@ -20,7 +20,7 @@ import logging
 import emlp_jax
 import objax
 import copy
-#repmiddle = 100*T(0)+30*T(1)+10*T(2)+3*T(3)#+1*T(4)
+
 def makeTrainer(*,dataset=O5Synthetic,network=EMLP,num_epochs=3,ndata=30000+6000,seed=2021,aug=False,
                 bs=500,lr=3e-3,split={'train':100,'val':1000,'test':5000},
                 net_config={'num_layers':3,'ch':384,'group':None},
@@ -40,7 +40,7 @@ def makeTrainer(*,dataset=O5Synthetic,network=EMLP,num_epochs=3,ndata=30000+6000
                 num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr*cosLr(num_epochs)(e)*min(1,e/(num_epochs/10))
+    lr_sched = lambda e: lr*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
     return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__=="__main__":

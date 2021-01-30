@@ -24,7 +24,7 @@ import copy
 def makeTrainer(*,dataset=O5Synthetic,network=EMLP,num_epochs=3,ndata=30000+6000,seed=2021,aug=False,
                 bs=500,lr=3e-3,split={'train':100,'val':1000,'test':5000},
                 net_config={'num_layers':3,'ch':384,'group':None},
-                trainer_config={'log_dir':None,'log_args':{'minPeriod':.00,'timeFrac':.75},
+                trainer_config={'log_dir':None,'log_args':{'minPeriod':.05,'timeFrac':.5},
                 'early_stop_metric':'val_MSE'},save=False,
                 study_name='data_efficiency_all'):
 
@@ -51,7 +51,7 @@ if __name__=="__main__":
     config_spec.update({
         'dataset':[O5Synthetic,Inertia,ParticleInteraction],#[Inertia,Fr],
         'network':MLP,'aug':[False,True],
-        'num_epochs':(lambda cfg: int(10*30000/cfg['split']['train'])),
+        'num_epochs':(lambda cfg: min(int(10*30000/cfg['split']['train']),1000)),
         'split':{'train':[25,50,100,300,1000,3000,10000,30000],'test':5000,'val':1000},
     })
     thestudy.run(num_trials=-3,new_config_spec=config_spec,ordered=True)

@@ -169,6 +169,7 @@ class EMLP(Module,metaclass=Named):
         logging.info(f"Reps: {reps}")
         self.network = Sequential(
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+            #LieLinear(self.rep_in,reps[-1]),
             LieLinear(reps[-1],self.rep_out)
         )
         #self.network = LieLinear(self.rep_in,self.rep_out)

@@ -74,7 +74,7 @@ class Rep(object):
     def symmetric_projector(self):
         Q = self.symmetric_basis()
         Q_lazy = Lazy(Q)
-        P = Q_lazy.T@Q_lazy
+        P = Q_lazy@Q_lazy.T
         return P
 
 class TensorRep(Rep):
@@ -91,7 +91,7 @@ class TensorRep(Rep):
         return tensor_drho(A,self.rank)
     @property
     def T(self):
-        if self.G.is_orthogonal: return self
+        if self.G is not None and self.G.is_orthogonal: return self
         return TensorRep(*self.rank[::-1],G=self.G)
     def __mul__(self,other):
         if isinstance(other,int): return SumRep(other*[self])
@@ -180,12 +180,12 @@ class SumRep(Rep):
             return SumRep([rep1*rep2 for rep1,rep2 in itertools.product(self.reps,other.reps)],self.shapes+other.shapes)
         elif isinstance(other,Rep):
             #print("should not be called")
-            return SumRep([rep*other for rep in self.reps])
+            return SumRep([rep*other for rep in self.reps],self.shapes+([other],))
         else: assert False, f"Unsupported operand Rep.__mul__{type(other)}"
 
     def __rmul__(self, other):
         if isinstance(other, int): return SumRep(other*self.reps)
-        elif isinstance(other,Rep): return SumRep([other*rep for rep in self.reps])
+        elif isinstance(other,Rep): return SumRep([other*rep for rep in self.reps],([other],)+self.shapes)
         else: assert False, f"Unsupported operand Rep.__rmul__{type(other)}"
     def __call__(self,G):
         self.reps = [rep(G) for rep in self.reps]
@@ -221,28 +221,28 @@ class SumRep(Rep):
         rep_multiplicites = self.multiplicities()
         Qs = {rep: rep.symmetric_basis() for rep in rep_multiplicites}
         Qs = {rep: jax.device_put(Q.astype(np.float32)) for rep,Q in Qs.items()}
-        active_dims = sum([rep_multiplicites[rep]*Qs[rep].shape[0] for rep in Qs.keys()])
+        active_dims = sum([rep_multiplicites[rep]*Qs[rep].shape[-1] for rep in Qs.keys()])
         # Get the permutation of the vector when grouped by tensor rank
         inverse_perm = jnp.argsort(self.argsort())
         # Apply the projections for each rank, concatenate, and permute back to orig rank order
         block_perm = rep_permutation(self)
         def lazy_Q(array):
+            array = array.T
             i=0
             Ws = []
             for rep, multiplicity in rep_multiplicites.items():
                 Qr = Qs[rep]
-                i_end = i+multiplicity*Qr.shape[0]
-                elems = array[...,i:i_end].reshape(*array.shape[:-1],multiplicity,Qr.shape[0])@Qr
-                Ws.append(elems.reshape(*array.shape[:-1],multiplicity*rep.size()))
+                i_end = i+multiplicity*Qr.shape[-1]
+                elems = Qr@array[...,i:i_end].reshape(-1,Qr.shape[-1]).T
+                Ws.append(elems.T.reshape(*array.shape[:-1],multiplicity*rep.size()))
                 i = i_end
             Ws = jnp.concatenate(Ws,axis=-1) #concatenate over rep axis
             inp_ordered_Ws = Ws[...,inverse_perm] # reorder to original rep ordering 
             if len(self.shape)>1: 
                 #Also only allows r -> shape (ie a (*shape,r)) matrix
                 inp_ordered_Ws = inp_ordered_Ws[block_perm] #TODO fix shape transpose vec op
-            return  inp_ordered_Ws
-        
-        return LinearOperator(shape=(self.size(),active_dims),matvec = lazy_Q)
+            return  inp_ordered_Ws.T
+        return LinearOperator(shape=(self.size(),active_dims),matvec=lazy_Q,matmat=lazy_Q)
         
 
     def symmetric_projector(self):
@@ -442,7 +442,7 @@ def orthogonal_complement(proj):
     """ Computes the orthogonal complement to a given matrix proj"""
     U,S,VT = jnp.linalg.svd(proj,full_matrices=True) # Changed from full_matrices=True
     rank = (S>1e-5).sum()
-    return VT[rank:]
+    return VT[rank:].T
 
 def krylov_constraint_solve(C,tol=3e-3):
     r = 5
@@ -454,7 +454,7 @@ def krylov_constraint_solve(C,tol=3e-3):
             logging.error("Hit memory limits, switching to sample from equivariant subspace")
             break
         Q = krylov_constraint_solve_upto_r(C,r,tol)
-        found_rank = Q.shape[0]
+        found_rank = Q.shape[-1]
     return Q
 
 def krylov_constraint_solve_upto_r(C,r,tol=3e-3,lr=1e-2):
@@ -485,7 +485,7 @@ def krylov_constraint_solve_upto_r(C,r,tol=3e-3,lr=1e-2):
     # Orthogonalize solution at the end
     U,S,VT = np.linalg.svd(np.array(W),full_matrices=False)
     rank = (S>tol).sum()
-    Q = U[:,:rank].T
+    Q = U[:,:rank]
     return device_put(Q)
 
 #@partial(jit,static_argnums=(0,1))

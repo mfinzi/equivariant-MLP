@@ -27,7 +27,7 @@ import objax
 def makeTrainer(*,dataset=ParticleInteraction,network=EMLP,num_epochs=300,ndata=1000+2000,seed=2021,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':-1,'val':1000,'test':1000},
                 net_config={'num_layers':3,'ch':384,'group':SO13p()},log_level='info',
-                trainer_config={'log_dir':None,'log_args':{'minPeriod':.00,'timeFrac':.75},'early_stop_metric':'val_MSE'},
+                trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},'early_stop_metric':'val_MSE'},
                 save=False,):
     levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
                         'warn': logging.WARNING,'warning': logging.WARNING,

@@ -1,14 +1,14 @@
 from emlp_jax.mlp import MLP,EMLP#,LinearBNSwish
-from emlp_jax.datasets import Fr,ParticleInteraction
+from emlp_jax.datasets import ParticleInteraction
 import jax.numpy as jnp
 import jax
 from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector
 from emlp_jax.groups import SO,O,Trivial,Lorentz,O13,SO13,SO13p
-from emlp_jax.mlp import EMLP,LieLinear,Standardize,EMLP2
+from emlp_jax.mlp import EMLP,LieLinear,Standardize
 import itertools
 import numpy as np
 import torch
-from emlp_jax.datasets import Inertia,Fr,ParticleInteraction
+from emlp_jax.datasets import Inertia,ParticleInteraction
 import objax
 import torch
 from torch.utils.data import DataLoader
@@ -37,7 +37,7 @@ def makeTrainer(*,dataset=Inertia,network=EMLP,num_epochs=500,ndata=1000+1000,se
                 num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr*cosLr(num_epochs)(e)*min(1,.e/(num_epochs/10))
+    lr_sched = lambda e: lr#*min(1,e/(num_epochs/10))
     return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":

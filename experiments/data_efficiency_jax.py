@@ -24,9 +24,9 @@ import copy
 def makeTrainer(*,dataset=O5Synthetic,network=EMLP,num_epochs=3,ndata=30000+6000,seed=2021,aug=False,
                 bs=500,lr=3e-3,split={'train':100,'val':1000,'test':5000},
                 net_config={'num_layers':3,'ch':384,'group':None},
-                trainer_config={'log_dir':None,'log_args':{'minPeriod':.05,'timeFrac':.5},
+                trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':1.},
                 'early_stop_metric':'val_MSE'},save=False,
-                study_name='data_efficiency_all'):
+                study_name='data_efficiency_nobn'):
 
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
@@ -40,34 +40,29 @@ def makeTrainer(*,dataset=O5Synthetic,network=EMLP,num_epochs=3,ndata=30000+6000
                 num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr*cosLr(num_epochs)(e)#*min(1,e/(num_epochs/10))
+    lr_sched = lambda e: lr*min(1,e/(num_epochs/10))
     return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__=="__main__":
     Trial = train_trial(makeTrainer)
     config_spec = copy.deepcopy(makeTrainer.__kwdefaults__)
     name = config_spec.pop('study_name')
-    thestudy = Study(Trial,{},study_name=name,base_log_dir=config_spec['trainer_config'].get('log_dir',None))
     config_spec.update({
-        'dataset':[O5Synthetic,Inertia,ParticleInteraction],#[Inertia,Fr],
+        'dataset':O5Synthetic,#[Inertia,Fr],
         'network':MLP,'aug':[False,True],
-        'num_epochs':(lambda cfg: min(int(10*30000/cfg['split']['train']),1000)),
-        'split':{'train':[25,50,100,300,1000,3000,10000,30000],'test':5000,'val':1000},
+        'num_epochs':(lambda cfg: min(int(30*30000/cfg['split']['train']),1000)),
+        'split':{'train':[30,100,300,1000,3000,10000,30000],'test':5000,'val':1000},
     })
+    config_spec = argupdated_config(config_spec,namespace=(emlp_jax.groups,emlp_jax.datasets,emlp_jax.mlp))
+    name = f"{name}_{config_spec['dataset']}"
+    thestudy = Study(Trial,{},study_name=name,base_log_dir=config_spec['trainer_config'].get('log_dir',None))
+    
+    print(config_spec)
     thestudy.run(num_trials=-3,new_config_spec=config_spec,ordered=True)
     # Now the EMLP runs
     config_spec['network']=EMLP
-    config_spec['aug']=False
-    # O(5) synthetic dataset
-    config_spec['dataset'] = O5Synthetic
-    config_spec['net_config']['group'] = [Trivial(5),SO(5),O(5)]
-    thestudy.run(num_trials=-3,new_config_spec=config_spec,ordered=True)
-    # Inertia dataset
-    config_spec['dataset'] = Inertia
-    config_spec['net_config']['group'] = [Trivial(3),SO(3),O(3)]
-    thestudy.run(num_trials=-3,new_config_spec=config_spec,ordered=True)
-    # Lorentz invariant particle scattering dataset
-    config_spec['dataset'] = ParticleInteraction
-    config_spec['net_config']['group'] = [Trivial(4),SO13p(),SO13(),O13()]
+    config_spec['aug'] = False
+    groups = {O5Synthetic:[SO(5),O(5)],Inertia:[SO(3),O(3)],ParticleInteraction:[SO13p(),SO13(),O13()]}
+    config_spec['net_config']['group'] = groups[config_spec['dataset']]
     thestudy.run(num_trials=-3,new_config_spec=config_spec,ordered=True)
     print(thestudy.results_df())

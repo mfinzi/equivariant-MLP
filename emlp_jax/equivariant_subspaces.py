@@ -17,6 +17,7 @@ import random
 import logging
 import emlp_jax
 from oil.utils.mytqdm import tqdm
+import copy
 
 class OrderedCounter(collections.Counter,collections.OrderedDict): pass
 
@@ -24,11 +25,11 @@ class Rep(object):
     def __eq__(self, other): raise NotImplementedError
     def size(self): raise NotImplementedError # dim(V) dimension of the representation
     def __add__(self, other): # Tensor sum representation R1 + R2
-        if isinstance(other,int): return self+other*Scalar
+        if isinstance(other,int): return self+other*Scalar if other!=0 else self
         elif isinstance(other,Rep): return SumRep([self,other])
         else: return NotImplemented
     def __radd__(self,other):
-        if isinstance(other,int): return other*Scalar+self
+        if isinstance(other,int): return other*Scalar+self if other!=0 else self
         elif isinstance(other,Rep): return SumRep([other,self])
         else: return NotImplemented
     def __mul__(self, other): 
@@ -100,6 +101,8 @@ class TensorRep(Rep):
                 return TensorRep(self.rank[0]+other.rank[0],self.rank[1]+other.rank[1],
                                 G=self.G if self.G is None else other.G)
             else:
+                print(self.G,other.G)
+                print(self,other)
                 return emlp_jax.mixed_tensors.ProductGroupTensorRep({self.G:self,other.G:other}) #Order matters?
         else: return NotImplemented
     def __mod__(self,other): # Wreath product
@@ -108,6 +111,8 @@ class TensorRep(Rep):
         if isinstance(other,int): return SumRep(other*[self])
         else: return NotImplemented
     def size(self):
+        if self.rank ==(0,0): return 1
+        assert self.G is not None, f"Uninitialized rep {self}?"
         return self.G.d**sum(self.rank)
 
     def __repr__(self): return str(self)#f"T{self.rank+(self.G,)}"
@@ -120,10 +125,11 @@ class TensorRep(Rep):
     def __eq__(self,other):
         return isinstance(other,TensorRep) and self.rank==other.rank and (self.rank==(0,0) or self.G==other.G)
     def __call__(self,G):
-        self.G=G
-        if G.is_orthogonal: self.rank = (sum(self.rank),0) 
-        self.is_regular = G.is_regular
-        return self
+        other = copy.deepcopy(self)
+        other.G=G
+        if G.is_orthogonal: other.rank = (sum(other.rank),0) 
+        other.is_regular = G.is_regular
+        return other
     def show_subspace(self):
         dims,projection = self.symmetric_basis()
         vals = projection(jnp.arange(dims)+1)
@@ -160,7 +166,7 @@ class SumRep(Rep):
         return sum(rep.size() for rep in self.reps)
     def __add__(self, other):
         if isinstance(other,int):
-            return self+other*Scalar
+            return self+other*Scalar if other!=0 else self
         elif isinstance(other,SumRep):
             return SumRep(self.reps+other.reps)
         elif isinstance(other,Rep):
@@ -169,7 +175,7 @@ class SumRep(Rep):
             return NotImplemented
     def __radd__(self, other):
         if isinstance(other,int):
-            return other*Scalar+self
+            return other*Scalar+self if other!=0 else self
         elif isinstance(other,Rep):
             return SumRep([other]+self.reps)
         else: assert False, f"Unsupported operand Rep.__radd__{type(other)}"
@@ -188,8 +194,8 @@ class SumRep(Rep):
         elif isinstance(other,Rep): return SumRep([other*rep for rep in self.reps],([other],)+self.shapes)
         else: assert False, f"Unsupported operand Rep.__rmul__{type(other)}"
     def __call__(self,G):
-        self.reps = [rep(G) for rep in self.reps]
-        return self
+        #self.reps = [rep(G) for rep in self.reps]
+        return SumRep([rep(G) for rep in self.reps],self.shapes)
     # def __iter__(self):
     #     return iter(self.ranks)
     @property
@@ -501,12 +507,17 @@ def bilinear_weights(W_rep,x_rep):
     reduced_indices_dict = {rep:jnp.concatenate(random.sample(ids,nelems(len(ids),rep)))\
                                 for rep,ids in rank_indices_dict.items()}
     block_perm = rep_permutation(W_rep)
+    total_perm = inverse_perm[block_perm]
     # Apply the projections for each rank, concatenate, and permute back to orig rank order
     def lazy_projection(params,x): # (*,r), (bs,c) #TODO: find out why backwards of this function is so slow
+        #logging.warning("bilinear projection called")
+        bshape = x.shape[:-1]
+        x = x.reshape(-1,x.shape[-1])
         bs = x.shape[0]
         i=0
         Ws = []
         for rep, W_mult in W_multiplicities.items():
+            print(f"Bilinear {rep}")
             if rep not in x_multiplicities:
                 Ws.append(jnp.zeros((bs,W_mult*rep.size())))
                 continue
@@ -516,12 +527,12 @@ def bilinear_weights(W_rep,x_rep):
             bids =  reduced_indices_dict[rep]
             bilinear_params = params[i:i_end].reshape(W_mult,n)
             i = i_end  # (bs,W_mult,d^r) = (W_mult,n)@(n,d^r,bs)
-            bilinear_elems = bilinear_params@x[:,bids].T.reshape(n,rep.size()*bs)
+            bilinear_elems = bilinear_params@x[...,bids].T.reshape(n,rep.size()*bs)
             bilinear_elems = bilinear_elems.reshape(W_mult*rep.size(),bs).T
             Ws.append(bilinear_elems)
         Ws = jnp.concatenate(Ws,axis=-1) #concatenate over rep axis
-        return Ws[:,inverse_perm][:,block_perm].reshape(-1,*W_rep.shape) # reorder to original rank ordering
-    return active_dims,lazy_projection
+        return Ws[...,total_perm].reshape(*bshape,*W_rep.shape) # reorder to original rank ordering
+    return active_dims,jit(lazy_projection)
 
 #@cache()
 def tensor_indices_dict(sumrep):

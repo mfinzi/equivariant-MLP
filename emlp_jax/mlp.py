@@ -18,6 +18,10 @@ from objax.module import Module
 import objax
 from objax.nn.init import orthogonal
 from scipy.special import binom
+from jax import jit,vmap
+from emlp_jax.hamiltonian_dynamics import hamiltonian_dynamics
+from jax.experimental.ode import odeint
+from functools import partial
 
 def Sequential(*args):
     return nn.Sequential(args)
@@ -53,6 +57,7 @@ class BiLinear(Module):
         logging.info(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
     def __call__(self, x,training=True):
+        logging.warning(f"Bilinear x shape {x.shape}")
         logging.debug(f"bilinear in shape: {x.shape}")
         W = self.weight_proj(self.w.value,x)
         out= .1*(W@x[...,None])[...,0] #TODO: set back to .05
@@ -75,14 +80,15 @@ class GatedNonlinearity(Module): #TODO: support elementwise swish for regular re
 class EMLPBlock(Module):
     def __init__(self,rep_in,rep_out):
         super().__init__()
+        #print(rep_in,rep_out)
         self.linear = LieLinear(rep_in,gated(rep_out))
         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
-        self.bn = TensorBN(gated(rep_out))
+        #self.bn = TensorBN(gated(rep_out))
         self.nonlinearity = GatedNonlinearity(rep_out)
-    def __call__(self,x,training=True):
+    def __call__(self,x):
         lin = self.linear(x)
-        preact = self.bn(self.bilinear(lin)+lin,training=training)
-        #preact = self.bilinear(lin)+lin
+        #preact = self.bn(self.bilinear(lin)+lin,training=training)
+        preact =self.bilinear(lin)+lin
         return self.nonlinearity(preact)
 
 class EResBlock(Module):
@@ -169,12 +175,11 @@ class EMLP(Module,metaclass=Named):
         logging.info(f"Reps: {reps}")
         self.network = Sequential(
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            #LieLinear(self.rep_in,reps[-1]),
             LieLinear(reps[-1],self.rep_out)
         )
         #self.network = LieLinear(self.rep_in,self.rep_out)
     def __call__(self,x,training=True):
-        y = self.network(x,training=training)
+        y = self.network(x)
         return y
 
 # @export
@@ -203,7 +208,7 @@ def swish(x):
     return jax.nn.sigmoid(x)*x
 
 def MLPBlock(cin,cout):
-    return Sequential(nn.Linear(cin,cout),nn.BatchNorm0D(cout,momentum=.9),swish)#,
+    return Sequential(nn.Linear(cin,cout),swish)#,nn.BatchNorm0D(cout,momentum=.9),swish)#,
 
 @export
 class MLP(Module,metaclass=Named):
@@ -220,7 +225,7 @@ class MLP(Module,metaclass=Named):
             nn.Linear(chs[-1],cout)
         )
     def __call__(self,x,training=True):
-        y = self.net(x,training=training)
+        y = self.net(x)
         return y
 
 @export
@@ -237,3 +242,80 @@ class Standardize(Module):
             muin,sin,muout,sout = self.ds_stats
             y = sout*self.model((x-muin)/sin,training=training)+muout
             return y
+
+
+
+# Networks for hamiltonian dynamics (need to sum for batched Hamiltonian grads)
+@export
+class MLPode(Module,metaclass=Named):
+    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
+        super().__init__()
+        self.rep_in =rep_in(group)
+        self.rep_out = rep_out(group)
+        self.G = group
+        chs = [self.rep_in.size()] + num_layers*[ch]
+        cout = self.rep_out.size()
+        logging.info("Initing MLP")
+        self.net = Sequential(
+            *[Sequential(nn.Linear(cin,cout),swish) for cin,cout in zip(chs,chs[1:])],
+            nn.Linear(chs[-1],cout)
+        )
+    def dynamics(self,z,t):
+        return self.net(z)
+    def __call__(self,z0,T):
+        #dynamics = objax.Jit(vmap(partial(hamiltonian_dynamics,self.H),(0,None)),self.net.vars())
+        return odeint(self.dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+@export
+class EMLPode(EMLP):
+    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
+        #super().__init__()
+        logging.info("Initing EMLP")
+        self.rep_in =rep_in(group)
+        self.rep_out = rep_out(group)
+        self.G=group
+        # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
+        if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]#[uniform_rep(ch,group) for _ in range(num_layers)]
+        elif isinstance(ch,Rep): middle_layers = num_layers*[ch(group)]
+        else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
+        #print(middle_layers[0].reps[0].G)
+        #print(self.rep_in.G)
+        reps = [self.rep_in]+middle_layers
+        logging.info(f"Reps: {reps}")
+        self.network = Sequential(
+            *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+            LieLinear(reps[-1],self.rep_out)
+        )
+    def dynamics(self,x,t):
+        return self.network(x)
+    def __call__(self,z0,T):
+        #dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,self.H)),(0,None)))
+        return odeint(self.dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+# Networks for hamiltonian dynamics (need to sum for batched Hamiltonian grads)
+@export
+class MLPH(Module,metaclass=Named):
+    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
+        super().__init__()
+        self.rep_in =rep_in(group)
+        self.rep_out = rep_out(group)
+        self.G = group
+        chs = [self.rep_in.size()] + num_layers*[ch]
+        cout = self.rep_out.size()
+        logging.info("Initing MLP")
+        self.net = Sequential(
+            *[Sequential(nn.Linear(cin,cout),swish) for cin,cout in zip(chs,chs[1:])],
+            nn.Linear(chs[-1],cout)
+        )
+    def H(self,x):#,training=True):
+        y = self.net(x).sum()
+        return y
+    def __call__(self,z0,T):
+        dynamics = jit(vmap(partial(hamiltonian_dynamics,self.H),(0,None)))#,self.net.vars())
+        return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+@export
+class EMLPH(EMLP):
+    def H(self,x):#,training=True):
+        y = self.network(x)
+        return y.sum()
+    def __call__(self,z0,T):
+        dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,self.H)),(0,None)))
+        return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))

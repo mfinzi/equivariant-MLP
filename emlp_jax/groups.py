@@ -384,14 +384,14 @@ class RubiksCube2x2(Group):
         Uperm = np.arange(24).reshape(6,4)                   #  L U R
                                   #include a center element  #    F
         # Compute permutation for Up quarter turn            #    D
-        Uperm[0,:] = np.rot90(Uperm[0].reshape(2,2),1).reshape(4) # Rotate top face
+        Uperm[0,:] = np.rot90(Uperm[0].reshape(2,2),-1).reshape(4) # Rotate top face clockwise
         FRBL = np.array([1,2,3,4])
-        Uperm[FRBL,:3] = Uperm[np.roll(FRBL,1),:3] # F <- L,R <- F,B <- R,L <- B
+        Uperm[FRBL,:2] = Uperm[np.roll(FRBL,-1),:2] # F <- L,R <- F,B <- R,L <- B, but only 1st 2 elems
         Uperm = Uperm.reshape(-1)
         # Now form all other generators by using full rotations of the cube by 90 clockwise about a given face
         RotFront =np.arange(24).reshape(6,4)# rotate full cube so that Left face becomes Up, Up becomes Right, Right becomes Down, Down becomes Left
         URDL = np.array([0,2,5,4])
-        RotFront[URDL,:] = RotFront[np.roll(URDL,1),:]
+        RotFront[URDL,:] = RotFront[np.roll(URDL,1),:] #clockwise about F
         RotFront = RotFront.reshape(-1)
         RotBack = np.argsort(RotFront)
         RotLeft = np.arange(24).reshape(6,4)
@@ -406,6 +406,18 @@ class RubiksCube2x2(Group):
         Lperm = RotFront[Uperm[RotBack]] # Lperm = RotBack<-Uperm<-RotFront
         Dperm = RotRight[RotRight[Uperm[RotLeft[RotLeft]]]] # Dperm = RotLeft<-RotLeft<-Uperm<-RotRight<-RotRight
         I = np.eye(24)
+        self.perms = [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]
         self.discrete_generators = np.stack([I[perm] for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]])
         self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
         super().__init__()
+
+
+@export
+class R3embeddedSO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
+    lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
+
+@export
+class R3embeddedO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
+    lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
+    discrete_generators = np.eye(3)[None] 
+    discrete_generators[0,0,0]=-1 #Reflection about x axis

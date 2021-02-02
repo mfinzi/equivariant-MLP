@@ -14,7 +14,7 @@ import objax
 from functools import lru_cache as cache
 
 def gated(sumrep):
-    return sumrep+sum([1 for rep in sumrep.reps if rep!=Scalar and not rep.is_regular])*Scalar
+    return sumrep+sum([Scalar(rep.G) for rep in sumrep.reps if rep!=Scalar and not rep.is_regular])
 
 @cache
 def gate_indices(sumrep): #TODO: add regular

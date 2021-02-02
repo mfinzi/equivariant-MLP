@@ -1,0 +1,352 @@
+import jax.numpy as jnp
+from jax import grad, jit, vmap, jacfwd, jvp, vjp
+from jax import random
+import numpy as np
+import jax.numpy as jnp
+from jax.experimental.ode import odeint
+from torch.utils.data import Dataset
+from emlp_jax.groups import R3embeddedSO2,R3embeddedO2
+from emlp_jax.equivariant_subspaces import Scalar,Vector
+from oil.utils.utils import Named
+import os
+import torch
+
+def unpack(z):
+    D = jnp.shape(z)[-1]
+    assert D % 2 == 0
+    d = D//2
+    q, p_or_v = z[..., :d], z[..., d:]
+    return q, p_or_v
+
+def pack(q, p_or_v):
+    return jnp.concatenate([q, p_or_v], axis=-1)
+
+def symplectic_form(z):
+    q, p = unpack(z)
+    return pack(p, -q)
+
+def hamiltonian_dynamics(hamiltonian, z,t):
+    grad_h = jit(grad(hamiltonian))
+    gh = grad_h(z)
+    #print(z.shape,gh.shape)
+    return symplectic_form(gh)
+
+def HamiltonianFlow(H,z0,T):
+    dynamics = lambda z,t: hamiltonian_dynamics(H,z,t)
+    return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6)#.transpose((1,0,2))
+
+def BHamiltonianFlow(H,z0,T):
+    dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None)))
+    return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+#BHamiltonianFlow = jit(vmap(HamiltonianFlow,(None,0,None)),static_argnums=(0,))
+
+class HamiltonianDataset(Dataset,metaclass=Named):
+
+    def __init__(self,n_systems=100,chunk_len=5,dt=0.1,integration_time=20,regen=False):
+        super().__init__()
+        root_dir = os.path.expanduser(f"~/datasets/ODEDynamics/{self.__class__}/")
+        filename = os.path.join(root_dir, f"trajectories_{n_systems}_{chunk_len}_{dt}_{integration_time}.pz")
+
+        if os.path.exists(filename) and not regen:
+            Zs = torch.load(filename)
+        else:
+            zs = self.generate_trajectory_data(n_systems, dt, integration_time)
+            Zs = np.asarray(self.chunk_training_data(zs, chunk_len))
+            os.makedirs(root_dir, exist_ok=True)
+            torch.save(Zs, filename)
+        
+        self.Zs = Zs
+        self.T = np.asarray(jnp.arange(0, chunk_len*dt, dt))
+        self.T_long = np.asarray(jnp.arange(0,integration_time,dt))
+
+    def __len__(self):
+        return self.Zs.shape[0]
+
+    def __getitem__(self, i):
+        return (self.Zs[i, 0], self.T), self.Zs[i]
+
+    def integrate(self,z0s,ts):
+        return HamiltonianFlow(self.H,z0s, ts)
+    
+    def generate_trajectory_data(self, n_systems, dt, integration_time, bs=100):
+        """ Returns ts: (n_systems, traj_len) zs: (n_systems, traj_len, z_dim) """
+        n_gen = 0; bs = min(bs, n_systems)
+        t_batches, z_batches = [], []
+        while n_gen < n_systems:
+            z0s = self.sample_initial_conditions(bs)
+            ts = jnp.arange(0, integration_time, dt)
+            new_zs = BHamiltonianFlow(self.H,z0s, ts)
+            z_batches.append(new_zs)
+            n_gen += bs
+        zs = jnp.concatenate(z_batches, axis=0)[:n_systems]
+        return zs
+
+    def chunk_training_data(self, zs, chunk_len):
+        batch_size, traj_len, *z_dim = zs.shape
+        n_chunks = traj_len // chunk_len
+        chunk_idx = np.random.randint(0, n_chunks, (batch_size,))
+        chunked_zs = np.stack(np.split(zs,n_chunks, axis=1))
+        chosen_zs = chunked_zs[chunk_idx, np.arange(batch_size)]
+        return chosen_zs
+
+    def H(self,z):
+        raise NotImplementedError
+    def sample_initial_conditions(self,bs):
+        raise NotImplementedError
+    def animate(self, zt=None):
+        if zt is None:
+            zt = np.asarray(self.integrate(self.sample_initial_conditions(10),self.T_long))
+        # bs, T, 2nd
+        if len(zt.shape) == 3:
+            j = np.random.randint(zt.shape[0])
+            zt = zt[j]
+        xt,pt = unpack(zt)
+        xt = xt.reshape((xt.shape[0],-1,3))
+        anim = self.animator(xt)
+        return anim.animate()
+
+class SHO(HamiltonianDataset):
+    def H(self,z):
+        ke = (z[...,1]**2).sum()/2
+        pe = (z[...,0]**2).sum()/2
+        return ke+pe
+    def sample_initial_conditions(self,bs):
+        return np.random.randn(bs,2)
+    
+class DoubleSpringPendulum(HamiltonianDataset):
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.rep_in = 4*Vector
+        self.rep_out = Scalar
+        self.symmetry = R3embeddedO2()
+        self.stats = (0,1,0,1)
+    def H(self,z):
+        g=1
+        m1,m2,k1,k2,l1,l2 = 1,1,1,1,1,1
+        x,p = unpack(z)
+        p1,p2 = unpack(p)
+        x1,x2 = unpack(x)
+        ke = .5*(p1**2).sum(-1)/m1 + .5*(p2**2).sum(-1)/m2
+        pe = .5*k1*(jnp.sqrt((x1**2).sum(-1))-l1)**2 
+        pe += k2*(jnp.sqrt(((x1-x2)**2).sum(-1))-l2)**2
+        pe += m1*g*x1[...,2]+m2*g*x2[...,2]
+        return (ke + pe).sum()
+    def sample_initial_conditions(self,bs):
+        x1 = np.array([0,0,-1.5]) +.2*np.random.randn(bs,3)
+        x2= np.array([0,0,-3.]) +.2*np.random.randn(bs,3)
+        p = .4*np.random.randn(bs,6)
+        z0 = np.concatenate([x1,x2,p],axis=-1)
+        return z0
+    @property
+    def animator(self):
+        return CoupledPendulumAnimation
+
+
+import torch
+import torch.nn as nn
+from oil.utils.utils import export
+import jax
+from jax import vmap
+import jax.numpy as jnp
+import numpy as np
+import objax
+from slax.model_trainers.classifier import Regressor,Classifier\
+#from emlp_jax.model_trainer import RegressorPlus
+from functools import partial
+from itertools import islice
+from oil.logging.lazyLogger import LazyLogger
+
+class IntegratedDynamicsTrainer(Regressor):
+    # def __init__(self,model,*args,**kwargs):
+    #     super().__init__(model,*args,**kwargs)
+    #     self.loss = objax.Jit(self.loss,model.vars())
+    #     #self.model = objax.Jit(self.model)
+    #     self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))#objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
+    #     #self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
+    def __init__(self, model, dataloaders, optim = objax.optimizer.Adam,lr_sched =lambda e:1,
+                log_dir=None, log_suffix='',log_args={},early_stop_metric=None):
+        # Setup model, optimizer, and dataloaders
+        self.model = model#
+        self.optimizer = optim(self.model.vars())
+        self.lr_sched= lr_sched
+        self.dataloaders = dataloaders # A dictionary of dataloaders
+        self.epoch = 0
+        self.logger = LazyLogger(log_dir, log_suffix, **log_args)
+        self.hypers = {}
+        self.ckpt = None# copy.deepcopy(self.state_dict()) #TODO fix model saving
+        self.early_stop_metric = early_stop_metric
+        self.loss = objax.Jit(self.loss,self.model.vars())
+        self.gradvals = objax.Jit(objax.GradValues(self.loss,self.model.vars()))
+        #self.gradvals = objax.GradValues(self.loss,self.model.vars())
+
+    def loss(self, minibatch):
+        """ Standard cross-entropy loss """
+        (z0, ts), true_zs = minibatch
+        pred_zs = self.model(z0,ts[0])#BHamiltonianFlow(self.model,z0,ts[0])
+        #print(z0.shape,ts.shape)
+        #pred_zs = odeint(self.model.dynamics, z0, ts[0], rtol=1e-6, atol=1e-6).transpose((1,0,2))
+        #print(pred_zs.shape)
+        return jnp.mean((pred_zs - true_zs)**2)
+
+    def metrics(self, loader): 
+        return {}
+        mse = lambda mb: np.asarray(self.loss(self.model,mb))
+        return {"MSE": self.evalAverageMetrics(loader, mse)}
+    
+    # def logStuff(self, step, minibatch=None):
+    #     loader = self.dataloaders['test']
+    #     metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error,loader.dataset,self.model)))}
+    #     self.logger.add_scalars('metrics', metrics, step)
+    #     super().logStuff(step,minibatch)
+
+def rel_err(a,b):
+    return jnp.sqrt(((a-b)**2).mean())/(jnp.sqrt((a**2).mean())+jnp.sqrt((b**2).mean()))#
+
+def log_rollout_error(ds,model,minibatch):
+    (z0, _), _ = minibatch
+    pred_zs = model(z0,ds.T_long)#BHamiltonianFlow(model,z0,ds.T_long)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
+    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
+    log_geo_mean = jnp.log(clamped_errs).mean()
+    return log_geo_mean
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.animation as animation
+import numpy as np
+
+class Animation(object):
+    def __init__(self, qt,lims=None):
+        """ [qt (T,n,d)"""
+        self.qt = qt
+        T,n,d = qt.shape
+        assert d in (2,3), "too many dimensions for animation"
+        self.fig = plt.figure()
+        self.ax = self.fig.add_axes([0, 0, 1, 1],projection='3d') if d==3 else self.fig.add_axes([0, 0, 1, 1])
+        
+        #self.ax.axis('equal')
+        xyzmin = self.qt.min(0).min(0)#.min(dim=0)[0].min(dim=0)[0]
+        xyzmax = self.qt.max(0).max(0)#.max(dim=0)[0].max(dim=0)[0]
+        delta = xyzmax-xyzmin
+        lower = xyzmin-.1*delta; upper = xyzmax+.1*delta
+        if lims is None:
+            lims = (min(lower),max(upper)),(min(lower),max(upper)),(min(lower),max(upper))
+        self.ax.set_xlim(lims[0])
+        self.ax.set_ylim(lims[1])
+        if d==3: self.ax.set_zlim(lims[2])
+        if d!=3: self.ax.set_aspect("equal")
+        #elf.ax.auto_scale_xyz()
+        empty = d*[[]]
+        self.colors = np.random.choice([f"C{i}" for i in range(10)],size=n,replace=False)
+        self.objects = {
+            'pts':sum([self.ax.plot(*empty, "o", ms=6,color=self.colors[i]) for i in range(n)], []),
+            'traj_lines':sum([self.ax.plot(*empty, "-",color=self.colors[i]) for i in range(n)], []),
+        }
+        
+    def init(self):
+        empty = 2*[[]]
+        for obj in self.objects.values():
+            for elem in obj:
+                elem.set_data(*empty)
+                #if self.qt.shape[-1]==3: elem.set_3d_properties([])
+        return sum(self.objects.values(),[])
+
+    def update(self, i=0):
+        T,n,d = self.qt.shape
+        trail_len = 50
+        for j in range(n):
+            # trails
+            xyz = self.qt[max(i - trail_len,0): i + 1,j,:]
+            #chunks = xyz.shape[0]//10
+            #xyz_chunks = torch.chunk(xyz,chunks)
+            #for i,xyz in enumerate(xyz_chunks):
+            self.objects['traj_lines'][j].set_data(*xyz[...,:2].T)
+            if d==3: self.objects['traj_lines'][j].set_3d_properties(xyz[...,2].T)
+            self.objects['pts'][j].set_data(*xyz[-1:,...,:2].T)
+            if d==3: self.objects['pts'][j].set_3d_properties(xyz[-1:,...,2].T)
+        #self.fig.canvas.draw()
+        return sum(self.objects.values(),[])
+
+    def animate(self):
+        return animation.FuncAnimation(self.fig,self.update,frames=self.qt.shape[0],
+                    interval=33,init_func=self.init,blit=True).to_html5_video()
+
+class PendulumAnimation(Animation):
+    def __init__(self, qt):
+        super().__init__(qt)
+        empty = self.qt.shape[-1] * [[]]
+        self.objects["pts"] = sum([self.ax.plot(*empty, "o", ms=10,c=self.colors[i]) for i in range(self.qt.shape[1])], [])
+
+    def update(self, i=0):
+        return super().update(i)
+
+def helix(Ns=1000,radius=.05,turns=25):
+    t = np.linspace(0,1,Ns)
+    xyz = np.zeros((Ns,3))
+    xyz[:,0] = np.cos(2*np.pi*Ns*t*turns)*radius
+    xyz[:,1] = np.sin(2*np.pi*Ns*t*turns)*radius
+    xyz[:,2] = t
+    xyz[:,:2][(t>.9)|(t<.1)]=0
+    return xyz
+
+def align2ref(refs,vecs):
+    """ inputs [refs (n,3), vecs (N,3)]
+        outputs [aligned (n,N,3)]
+    assumes vecs are pointing along z axis"""
+    n,_ = refs.shape
+    N,_ = vecs.shape
+    norm = np.sqrt((refs**2).sum(-1))
+    v = refs/norm[:,None]
+    A = np.zeros((n,3,3))
+    A[:,:,2] += v
+    A[:,2,:] -= v
+    M = (np.eye(3)+A+(A@A)/(1+v[:,2,None,None]))*norm[:,None,None]
+    return (M[:,None]@vecs[None,...,None]).squeeze(-1)
+
+    
+class CoupledPendulumAnimation(PendulumAnimation):
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        empty = self.qt.shape[-1]*[[]]
+        self.objects["springs"] = self.ax.plot(*empty,c='k',lw=.6)#
+        #self.objects["springs"] = sum([self.ax.plot(*empty,c='k',lw=2) for _ in range(self.n-1)],[])
+        self.helix = helix(200,turns=10)
+        
+    def update(self,i=0):
+        qt_padded = np.concatenate([0*self.qt[i,:1],self.qt[i,:]],axis=0)
+        diffs = qt_padded[1:]-qt_padded[:-1]
+        x,y,z = (align2ref(diffs,self.helix)+qt_padded[:-1][:,None]).reshape(-1,3).T
+        self.objects['springs'][0].set_data(x,y)
+        self.objects['springs'][0].set_3d_properties(z)
+        return super().update(i)

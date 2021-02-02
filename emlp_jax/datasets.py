@@ -118,15 +118,14 @@ class GroupAugmentation(Module):
         self.G=group
         self.rho_in = jit(vmap(self.rep_in.rho))
         self.rho_out = jit(vmap(self.rep_out.rho))
-        self.network = network
+        self.model = network
     def __call__(self,x,training=True):
         if training:
-            print(x.shape[0])
             gs = self.G.samples(x.shape[0])
             rhout_inv = jnp.linalg.inv(self.rho_out(gs))
-            return (rhout_inv@self.network((self.rho_in(gs)@x[...,None])[...,0],training)[...,None])[...,0]
+            return (rhout_inv@self.model((self.rho_in(gs)@x[...,None])[...,0],training)[...,None])[...,0]
         else:
-            return self.network(x,False)
+            return self.model(x,False)
 
 @export
 class InvertedCube(Dataset,metaclass=Named):
@@ -204,16 +203,17 @@ class BrokenRubiksCube(Dataset,metaclass=Named):
             solved_state[i,8*i:8*(i+1)] = 1
 
         Id = lambda x: x
-        transforms =  itertools.product([Id,ULBcorner_rot,partial(ULBcorner_rot,i=2)],
+        transforms =  [Id,itertools.product([Id,ULBcorner_rot,partial(ULBcorner_rot,i=2)],
                                         [Id,UBedge_flip],
-                                        [Id,LBface_swap])
-        equivalence_classes = np.vstack([t3(t2(t1(solved_state))) for t1,t2,t3 in transforms])
+                                        [Id,LBface_swap])]
+        #equivalence_classes = np.vstack([t3(t2(t1(solved_state))) for t1,t2,t3 in transforms])
         labels = np.zeros((22,))
         labels[:11]=1 # First configuration is solvable
         labels[11:]=0 # all others are not
         self.X = np.zeros((22,6*48)) # duplicate solvable example 11 times for convencience (balance)
-        self.X[:11] = equivalence_classes.reshape(12,-1)[:1]
-        self.X[11:] = equivalence_classes.reshape(12,-1)[1:]
+        self.X[:11] = solved_state.reshape(-1)#equivalence_classes.reshape(12,-1)[:1]
+        parity_perm = np.array([5,3,4,1,2,0])
+        self.X[11:] = solved_state.reshape(6,6,8)[:,parity_perm].reshape(-1)#equivalence_classes.reshape(12,-1)[1:]
         self.Y = labels
         self.symmetry = RubiksCube()
         self.rep_in = 6*Vector
@@ -260,7 +260,8 @@ class BrokenRubiksCube2x2(Dataset,metaclass=Named):
         labels[1:]=0 # all others are not
         self.X = np.zeros((2,6*24)) # duplicate solvable example 11 times for convencience (balance)
         self.X[0] = solved_state.reshape(-1)
-        self.X[1] = rotated_corner_state.reshape(-1)
+        parity_perm = np.array([5,3,4,1,2,0])
+        self.X[1] = rotated_corner_state.reshape(6,6,4)[:,parity_perm].reshape(-1)
         self.Y = labels
         self.X = np.repeat(self.X,10,axis=0)
         self.Y = np.repeat(self.Y,10,axis=0)

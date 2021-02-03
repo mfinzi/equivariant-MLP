@@ -267,7 +267,7 @@ class MLPode(Module,metaclass=Named):
             *[Sequential(nn.Linear(cin,cout),swish) for cin,cout in zip(chs,chs[1:])],
             nn.Linear(chs[-1],cout)
         )
-    def __call__(self,z):
+    def __call__(self,z,t):
         return self.net(z)
     # def dynamics(self,z,t):
     #     return self.net(z)
@@ -294,8 +294,8 @@ class EMLPode(EMLP):
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
             LieLinear(reps[-1],self.rep_out)
         )
-    def __call__(self,z):
-        return self.net(z)
+    def __call__(self,z,t):
+        return self.network(z)
     # def dynamics(self,x,t):
     #     return self.network(x)
     # def __call__(self,z0,T):

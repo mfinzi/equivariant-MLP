@@ -184,7 +184,7 @@ class IntegratedDynamicsTrainer(Regressor):
         self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
 
-class IntegratedODETrainer(IntegratedDynamicsTrainer):
+class IntegratedODETrainer(Regressor):
     def __init__(self,model,*args,**kwargs):
         super().__init__(model,*args,**kwargs)
         self.loss = objax.Jit(self.loss,model.vars())
@@ -198,6 +198,10 @@ class IntegratedODETrainer(IntegratedDynamicsTrainer):
         pred_zs = BOdeFlow(self.model,z0,ts[0])
         return jnp.mean((pred_zs - true_zs)**2)
 
+    def metrics(self, loader):
+        mse = lambda mb: np.asarray(self.loss(mb))
+        return {"MSE": self.evalAverageMetrics(loader, mse)}
+        
     def logStuff(self, step, minibatch=None):
         loader = self.dataloaders['test']
         metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error_ode,loader.dataset,self.model)))}

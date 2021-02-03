@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr, islice, export,FixedNumpySeed,FixedPytorchSeed,Named
 from slax.utils import LoaderTo
-from oil.tuning.study import train_trial
+from oil.tuning.study import Study
 from oil.datasetup.datasets import split_dataset
 from oil.tuning.args import argupdated_config
 from functools import partial
@@ -29,10 +29,9 @@ from objax.module import Module
 import experiments
 
 
-
 def makeTrainer(*,dataset=DoubleSpringPendulum,network=MLPode,num_epochs=2000,ndata=5000,seed=2021,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
-                net_config={'num_layers':2,'ch':128,'group':O2eR3()},log_level='debug',
+                net_config={'num_layers':3,'ch':128,'group':O2eR3()},log_level='debug',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},},#'early_stop_metric':'val_MSE'},
                 save=False,):
     levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
@@ -56,9 +55,21 @@ def makeTrainer(*,dataset=DoubleSpringPendulum,network=MLPode,num_epochs=2000,nd
     return IntegratedODETrainer(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":
+    if __name__=="__main__":
     Trial = ode_trial(makeTrainer)
-    cfg,outcome = Trial(argupdated_config(makeTrainer.__kwdefaults__,namespace=(emlp_jax.groups,emlp_jax.datasets,emlp_jax.mlp)))
-    print(outcome)
+    config_spec = copy.deepcopy(makeTrainer.__kwdefaults__)
+    name = "ode_expt"#config_spec.pop('study_name')
+    
+    #config_spec = argupdated_config(config_spec,namespace=(emlp_jax.groups,emlp_jax.datasets,emlp_jax.mlp))
+    #name = f"{name}_{config_spec['dataset']}"
+    thestudy = Study(Trial,{},study_name=name,base_log_dir=config_spec['trainer_config'].get('log_dir',None))
+    config_spec['network'] = EMLPode
+    config_spec['net_config']['group'] = [O2eR3(),SO2eR3(),DkeR3(6),DkeR3(2)]
+    thestudy.run(num_trials=-5,new_config_spec=config_spec,ordered=True)
+    config_spec['network'] = MLPode
+    config_spec['net_config']['group'] = None
+    thestudy.run(num_trials=-3,new_config_spec=config_spec,ordered=True)
+    print(thestudy.results_df())
 
 
 

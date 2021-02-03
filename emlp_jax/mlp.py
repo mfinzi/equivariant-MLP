@@ -55,7 +55,8 @@ class BiLinear(Module):
     def __init__(self, repin, repout):
         super().__init__()
         rep_W = repout*repin.T
-        Wdim, self.weight_proj = bilinear_weights(rep_W,repin)
+        Wdim, weight_proj = bilinear_weights(rep_W,repin)
+        self.weight_proj = jit(weight_proj)
         self.w = TrainVar(objax.random.normal((Wdim,)))#xavier_normal((Wdim,))) #TODO: revert to xavier
         logging.info(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
@@ -84,6 +85,7 @@ class EMLPBlock(Module):
     def __init__(self,rep_in,rep_out):
         super().__init__()
         #print(rep_in,rep_out)
+        self.rep_out=rep_out
         self.linear = LieLinear(rep_in,gated(rep_out))
         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
         #self.bn = TensorBN(gated(rep_out))
@@ -94,31 +96,31 @@ class EMLPBlock(Module):
         preact =self.bilinear(lin)+lin
         return self.nonlinearity(preact)
 
-class EResBlock(Module):
-    def __init__(self,rep_in,rep_out):
-        super().__init__()
-        grep_in = gated(rep_in)
-        grep_out = gated(rep_out)
+# class EResBlock(Module):
+#     def __init__(self,rep_in,rep_out):
+#         super().__init__()
+#         grep_in = gated(rep_in)
+#         grep_out = gated(rep_out)
 
-        self.bn1 = TensorBN(grep_in)
-        self.nonlinearity1 = GatedNonlinearity(rep_in)
-        self.linear1 = LieLinear(rep_in,grep_out)
+#         self.bn1 = TensorBN(grep_in)
+#         self.nonlinearity1 = GatedNonlinearity(rep_in)
+#         self.linear1 = LieLinear(rep_in,grep_out)
 
-        self.bn2 = TensorBN(grep_out)
-        self.nonlinearity2 = GatedNonlinearity(rep_out)
-        self.linear2 = LieLinear(rep_out,grep_out)
+#         self.bn2 = TensorBN(grep_out)
+#         self.nonlinearity2 = GatedNonlinearity(rep_out)
+#         self.linear2 = LieLinear(rep_out,grep_out)
         
 
-        self.bilinear1 = BiLinear(grep_in,grep_out)
-        #self.bilinear2 = BiLinear(gated(rep_out),gated(rep_out))
-        self.shortcut = LieLinear(grep_in,grep_out) if rep_in!=rep_out else Sequential()
-    def __call__(self,x,training=True):
+#         self.bilinear1 = BiLinear(grep_in,grep_out)
+#         #self.bilinear2 = BiLinear(gated(rep_out),gated(rep_out))
+#         self.shortcut = LieLinear(grep_in,grep_out) if rep_in!=rep_out else Sequential()
+#     def __call__(self,x,training=True):
 
-        z = self.nonlinearity1(self.bn1(x,training=training))
-        z = self.linear1(z)
-        z = self.nonlinearity2(self.bn2(x,training=training))
-        z = self.linear2(z)
-        return (z+self.shortcut(x)+self.bilinear1(x))/3
+#         z = self.nonlinearity1(self.bn1(x,training=training))
+#         z = self.linear1(z)
+#         z = self.nonlinearity2(self.bn2(x,training=training))
+#         z = self.linear2(z)
+#         return (z+self.shortcut(x)+self.bilinear1(x))/3
 
 def uniform_rep(ch,group):
     """ A heuristic method for allocating a given number of channels (ch)
@@ -265,11 +267,13 @@ class MLPode(Module,metaclass=Named):
             *[Sequential(nn.Linear(cin,cout),swish) for cin,cout in zip(chs,chs[1:])],
             nn.Linear(chs[-1],cout)
         )
-    def dynamics(self,z,t):
+    def __call__(self,z):
         return self.net(z)
-    def __call__(self,z0,T):
-        #dynamics = objax.Jit(vmap(partial(hamiltonian_dynamics,self.H),(0,None)),self.net.vars())
-        return odeint(self.dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+    # def dynamics(self,z,t):
+    #     return self.net(z)
+    # def __call__(self,z0,T):
+    #     #dynamics = objax.Jit(vmap(partial(hamiltonian_dynamics,self.H),(0,None)),self.net.vars())
+    #     return odeint(self.dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
 @export
 class EMLPode(EMLP):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
@@ -290,11 +294,13 @@ class EMLPode(EMLP):
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
             LieLinear(reps[-1],self.rep_out)
         )
-    def dynamics(self,x,t):
-        return self.network(x)
-    def __call__(self,z0,T):
-        #dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,self.H)),(0,None)))
-        return odeint(self.dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+    def __call__(self,z):
+        return self.net(z)
+    # def dynamics(self,x,t):
+    #     return self.network(x)
+    # def __call__(self,z0,T):
+    #     #dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,self.H)),(0,None)))
+    #     return odeint(self.dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
 # Networks for hamiltonian dynamics (need to sum for batched Hamiltonian grads)
 @export
 class MLPH(Module,metaclass=Named):
@@ -313,14 +319,20 @@ class MLPH(Module,metaclass=Named):
     def H(self,x):#,training=True):
         y = self.net(x).sum()
         return y
-    def __call__(self,z0,T):
-        dynamics = jit(vmap(partial(hamiltonian_dynamics,self.H),(0,None)))#,self.net.vars())
-        return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+    def __call__(self,x):
+        return self.H(x)
+    # def __call__(self,z0,T):
+    #     #print(dynamics(z0,T[0]).shape)
+    #     dynamics = jit(vmap(partial(hamiltonian_dynamics,self.H),(0,None)))#,self.net.vars())
+    #     return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
 @export
 class EMLPH(EMLP):
     def H(self,x):#,training=True):
         y = self.network(x)
         return y.sum()
-    def __call__(self,z0,T):
-        dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,self.H)),(0,None)))
-        return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+    def __call__(self,x):
+        return self.H(x)
+    # def __call__(self,z0,T):
+    #     dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,self.H)),(0,None)))
+    #     #print(dynamics(z0,T[0]).shape)
+    #     return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))

@@ -32,7 +32,7 @@ import experiments
 
 def makeTrainer(*,dataset=DoubleSpringPendulum,network=MLPH,num_epochs=1000,ndata=5000,seed=2021,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
-                net_config={'num_layers':3,'ch':384,'group':Trivial(3)},log_level='info',
+                net_config={'num_layers':2,'ch':128,'group':R3embeddedSO2()},log_level='info',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},},#'early_stop_metric':'val_MSE'},
                 save=False,):
     levels = {'critical': logging.CRITICAL,'error': logging.ERROR,

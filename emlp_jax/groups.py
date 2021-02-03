@@ -146,6 +146,7 @@ class Trivial(Group): #""" The trivial group G={I} in N dimensions """
     def __init__(self,N):
         self._d = N
         super().__init__(N)
+
 @export
 class SO(Group): #""" The special orthogonal group SO(N) in N dimensions"""
     def __init__(self,N):
@@ -414,10 +415,15 @@ class RubiksCube2x2(Group):
 
 @export
 class R3embeddedSO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
-    lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
-
+    def __init__(self):
+        self.lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
+        self._d = 3
+        super().__init__()
 @export
 class R3embeddedO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
-    lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
-    discrete_generators = np.eye(3)[None] 
-    discrete_generators[0,0,0]=-1 #Reflection about x axis
+    def __init__(self):
+        lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
+        discrete_generators = np.eye(3)[None] 
+        discrete_generators[0,0,0]=-1 #Reflection about x axis
+        self._d = 3
+        super().__init__()

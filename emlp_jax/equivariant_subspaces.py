@@ -17,6 +17,8 @@ import random
 import logging
 import emlp_jax
 from oil.utils.mytqdm import tqdm
+import math
+from jax.ops import index, index_add, index_update
 
 class OrderedCounter(collections.Counter,collections.OrderedDict): pass
 
@@ -37,6 +39,8 @@ class Rep(object):
     def __rmul__(self,other):
         if isinstance(other,int): return SumRep(other*[self])
         else: return NotImplemented # Tensor product representation R1 x R2
+    def __lt__(self, other):
+        return hash(self) < hash(other) #For sorting purposes only
     @property
     def T(self): raise NotImplementedError # dual representation V*, rho*, drho*
     def __repr__(self): return str(self)#raise NotImplementedError
@@ -116,9 +120,9 @@ class TensorRep(Rep):
         return f"T{(p,q)}" if self.G is None or not self.G.is_orthogonal else f"T({p+q})"
     def __hash__(self):
         if self.rank==(0,0): return hash(self.rank) # Scalars are scalars regardless of the group
-        return hash((self.rank,self.G))
+        return hash(self.rank)#,self.G)) #TODO for  mixed tensors bring back self.G
     def __eq__(self,other):
-        return isinstance(other,TensorRep) and self.rank==other.rank and (self.rank==(0,0) or self.G==other.G)
+        return isinstance(other,TensorRep) and self.rank==other.rank# and (self.rank==(0,0)) or self.G==other.G) #TODO for mixed tensors, add group comparison back in
     def __call__(self,G):
         self.G=G
         if G.is_orthogonal: self.rank = (sum(self.rank),0) 
@@ -137,6 +141,12 @@ class SumRep(Rep):
             and possibly the symmetry generators gen."""
         self.reps = reps
         self.shapes = (self.reps,) if shapes is None else shapes
+        self._multiplicites = {}
+        for rep in self.reps:
+            if rep not in self._multiplicites:
+                self._multiplicites[rep]=1
+            else:
+                self._multiplicites[rep]+=1
         # try:
         #     print(f"sumrep of shape {self.shape}")
         # except AttributeError:
@@ -198,7 +208,8 @@ class SumRep(Rep):
         return SumRep([rep.T for rep in self.reps],self.shapes)
 
     def multiplicities(self):
-        return OrderedCounter(self.reps)
+        return self._multiplicites
+        #return OrderedCounter(self.reps)
 
     def __repr__(self):
         return "+".join(f"{count if count > 1 else ''}{repr(rep)}" for rep, count in self.multiplicities().items())
@@ -500,16 +511,20 @@ def bilinear_weights(W_rep,x_rep):
     rank_indices_dict = tensor_indices_dict(x_rep)
     reduced_indices_dict = {rep:jnp.concatenate(random.sample(ids,nelems(len(ids),rep)))\
                                 for rep,ids in rank_indices_dict.items()}
+    # reduced_indices_dict = {rep:jnp.concatenate(ids[:nelems(len(ids),rep)])\
+    #                             for rep,ids in rank_indices_dict.items()}
     block_perm = rep_permutation(W_rep)
     # Apply the projections for each rank, concatenate, and permute back to orig rank order
-    def lazy_projection(params,x): # (*,r), (bs,c) #TODO: find out why backwards of this function is so slow
-        logging.warning("bilinear projection called")
+    @jit
+    def lazy_projection(params,x): # (r,), (*c) #TODO: find out why backwards of this function is so slow
+        #logging.warning("bilinear projection called")
         bshape = x.shape[:-1]
         x = x.reshape(-1,x.shape[-1])
         bs = x.shape[0]
         i=0
         Ws = []
         for rep, W_mult in W_multiplicities.items():
+            #print(f"Bilinear {rep}")
             if rep not in x_multiplicities:
                 Ws.append(jnp.zeros((bs,W_mult*rep.size())))
                 continue
@@ -523,10 +538,22 @@ def bilinear_weights(W_rep,x_rep):
             bilinear_elems = bilinear_elems.reshape(W_mult*rep.size(),bs).T
             Ws.append(bilinear_elems)
         Ws = jnp.concatenate(Ws,axis=-1) #concatenate over rep axis
-        return Ws[...,inverse_perm][...,block_perm].reshape(*bshape,*W_rep.shape) # reorder to original rank ordering
-    return active_dims,jit(lazy_projection)
+        return Ws[...,inverse_perm[block_perm]].reshape(*bshape,*W_rep.shape) # reorder to original rank ordering
+    return active_dims,lazy_projection
 
-#@cache()
+def lazy_projection(params,x): # (*,r), (bs,c) #TODO: find out why backwards of this function is so slow
+        #logging.warning("bilinear projection called")
+        bshape = x.shape[:-1]
+        x = x.reshape(-1,x.shape[-1])
+        bs = x.shape[0]
+        
+
+@jit
+def mul_part(bparams,x,bids):
+    b = math.prod(x.shape[:-1])
+    return (bparams@x[...,bids].T.reshape(bparams.shape[-1],-1)).reshape(-1,b).T
+
+@cache()
 def tensor_indices_dict(sumrep):
     index_dict = collections.defaultdict(list)
     i=0
@@ -536,7 +563,7 @@ def tensor_indices_dict(sumrep):
         i = i_end
     return index_dict#{rank:np.concatenate(ids) for rank,ids in index_dict.items()}
 
-@cache()
+@cache() #revert to caching?
 def rep_permutation(sumrep):
     """Permutation from flattened ordering to block ordering """
     #print(sumrep.shape)

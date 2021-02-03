@@ -5,7 +5,7 @@ import numpy as np
 import jax.numpy as jnp
 from jax.experimental.ode import odeint
 from torch.utils.data import Dataset
-from emlp_jax.groups import R3embeddedSO2,R3embeddedO2
+from emlp_jax.groups import SO2eR3,O2eR3,DkeR3,Trivial
 from emlp_jax.equivariant_subspaces import Scalar,Vector
 from oil.utils.utils import Named
 from oil.tuning.configGenerator import flatten_dict
@@ -119,7 +119,7 @@ class DoubleSpringPendulum(HamiltonianDataset):
         super().__init__(*args,**kwargs)
         self.rep_in = 4*Vector
         self.rep_out = Scalar
-        self.symmetry = R3embeddedO2()
+        self.symmetry = O2eR3()
         self.stats = (0,1,0,1)
     def H(self,z):
         g=1

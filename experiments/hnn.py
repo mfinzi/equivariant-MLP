@@ -3,7 +3,7 @@ from emlp_jax.datasets import O5Synthetic,ParticleInteraction
 import jax.numpy as jnp
 import jax
 from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector
-from emlp_jax.groups import R3embeddedSO2,R3embeddedO2,Trivial
+from emlp_jax.groups import SO2eR3,O2eR3,DkeR3,Trivial
 from emlp_jax.mlp import EMLP,LieLinear,Standardize
 from emlp_jax.model_trainer import RegressorPlus
 from emlp_jax.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,hnn_trial
@@ -14,7 +14,6 @@ import torch
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr, islice, export,FixedNumpySeed,FixedPytorchSeed,Named
 from slax.utils import LoaderTo
-from oil.tuning.study import train_trial
 from oil.datasetup.datasets import split_dataset
 from oil.tuning.args import argupdated_config
 from functools import partial
@@ -32,7 +31,7 @@ import experiments
 
 def makeTrainer(*,dataset=DoubleSpringPendulum,network=MLPH,num_epochs=1000,ndata=5000,seed=2021,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
-                net_config={'num_layers':2,'ch':128,'group':R3embeddedSO2()},log_level='info',
+                net_config={'num_layers':2,'ch':128,'group':O2eR3()},log_level='info',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},},#'early_stop_metric':'val_MSE'},
                 save=False,):
     levels = {'critical': logging.CRITICAL,'error': logging.ERROR,

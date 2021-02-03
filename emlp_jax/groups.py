@@ -413,17 +413,42 @@ class RubiksCube2x2(Group):
         super().__init__()
 
 
-@export
-class R3embeddedSO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
-    def __init__(self):
-        self.lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
-        self._d = 3
+class Embed(Group):
+    def __init__(self,G,d,slice):
+        self.lie_algebra = np.zeros((G.lie_algebra.shape[0],d,d))
+        self.discrete_generators = np.zeros((G.discrete_generators.shape[0],d,d))
+        self.discrete_generators += np.eye(d)
+        self.lie_algebra[:,slice,slice] = G.lie_algebra
+        self.discrete_generators[:,slice,slice]  =G.discrete_generators
+        self.name = f"{G}_R{d}"
         super().__init__()
+        
+    def __repr__(self):
+        return self.name
+
 @export
-class R3embeddedO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
-    def __init__(self):
-        lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
-        discrete_generators = np.eye(3)[None] 
-        discrete_generators[0,0,0]=-1 #Reflection about x axis
-        self._d = 3
-        super().__init__()
+def SO2eR3():
+    return Embed(SO(2),3,slice(2))
+
+@export
+def O2eR3():
+    return Embed(O(2),3,slice(2))
+
+@export
+def DkeR3(k):
+    return Embed(D(k),3,slice(2))
+
+# @export
+# class R3embeddedSO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
+#     def __init__(self):
+#         self.lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
+#         self._d = 3
+#         super().__init__()
+# @export
+# class R3embeddedO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
+#     def __init__(self):
+#         lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
+#         discrete_generators = np.eye(3)[None] 
+#         discrete_generators[0,0,0]=-1 #Reflection about x axis
+#         self._d = 3
+#         super().__init__()

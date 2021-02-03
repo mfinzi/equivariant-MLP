@@ -27,7 +27,7 @@ import objax.nn as nn
 import objax.functional as F
 from objax.module import Module
 import experiments
-
+import copy
 
 def makeTrainer(*,dataset=DoubleSpringPendulum,network=MLPode,num_epochs=2000,ndata=5000,seed=2021,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':500,'val':.1,'test':.1},

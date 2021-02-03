@@ -55,7 +55,6 @@ def makeTrainer(*,dataset=DoubleSpringPendulum,network=MLPode,num_epochs=2000,nd
     return IntegratedODETrainer(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":
-    if __name__=="__main__":
     Trial = ode_trial(makeTrainer)
     config_spec = copy.deepcopy(makeTrainer.__kwdefaults__)
     name = "ode_expt"#config_spec.pop('study_name')

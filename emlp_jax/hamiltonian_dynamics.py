@@ -26,7 +26,7 @@ def symplectic_form(z):
     return pack(p, -q)
 
 def hamiltonian_dynamics(hamiltonian, z,t):
-    grad_h = jit(grad(hamiltonian))
+    grad_h = grad(hamiltonian)
     gh = grad_h(z)
     #print(z.shape,gh.shape)
     return symplectic_form(gh)
@@ -154,57 +154,37 @@ from slax.model_trainers.classifier import Regressor,Classifier\
 #from emlp_jax.model_trainer import RegressorPlus
 from functools import partial
 from itertools import islice
-from oil.logging.lazyLogger import LazyLogger
 
 class IntegratedDynamicsTrainer(Regressor):
-    # def __init__(self,model,*args,**kwargs):
-    #     super().__init__(model,*args,**kwargs)
-    #     self.loss = objax.Jit(self.loss,model.vars())
-    #     #self.model = objax.Jit(self.model)
-    #     self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))#objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
-    #     #self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
-    def __init__(self, model, dataloaders, optim = objax.optimizer.Adam,lr_sched =lambda e:1,
-                log_dir=None, log_suffix='',log_args={},early_stop_metric=None):
-        # Setup model, optimizer, and dataloaders
-        self.model = model#
-        self.optimizer = optim(self.model.vars())
-        self.lr_sched= lr_sched
-        self.dataloaders = dataloaders # A dictionary of dataloaders
-        self.epoch = 0
-        self.logger = LazyLogger(log_dir, log_suffix, **log_args)
-        self.hypers = {}
-        self.ckpt = None# copy.deepcopy(self.state_dict()) #TODO fix model saving
-        self.early_stop_metric = early_stop_metric
-        self.loss = objax.Jit(self.loss,self.model.vars())
-        self.gradvals = objax.Jit(objax.GradValues(self.loss,self.model.vars()))
-        #self.gradvals = objax.GradValues(self.loss,self.model.vars())
+    def __init__(self,model,*args,**kwargs):
+        super().__init__(model,*args,**kwargs)
+        self.loss = objax.Jit(self.loss,model.vars())
+        #self.model = objax.Jit(self.model)
+        self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))#objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
+        #self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
 
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
         (z0, ts), true_zs = minibatch
-        pred_zs = self.model(z0,ts[0])#BHamiltonianFlow(self.model,z0,ts[0])
-        #print(z0.shape,ts.shape)
-        #pred_zs = odeint(self.model.dynamics, z0, ts[0], rtol=1e-6, atol=1e-6).transpose((1,0,2))
-        #print(pred_zs.shape)
+        pred_zs = BHamiltonianFlow(self.model,z0,ts[0])
         return jnp.mean((pred_zs - true_zs)**2)
 
-    def metrics(self, loader): 
-        return {}
-        mse = lambda mb: np.asarray(self.loss(self.model,mb))
+    def metrics(self, loader):
+        mse = lambda mb: np.asarray(self.loss(mb))
         return {"MSE": self.evalAverageMetrics(loader, mse)}
     
-    # def logStuff(self, step, minibatch=None):
-    #     loader = self.dataloaders['test']
-    #     metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error,loader.dataset,self.model)))}
-    #     self.logger.add_scalars('metrics', metrics, step)
-    #     super().logStuff(step,minibatch)
+    def logStuff(self, step, minibatch=None):
+        loader = self.dataloaders['test']
+        metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error,loader.dataset,self.model)))}
+        self.logger.add_scalars('metrics', metrics, step)
+        super().logStuff(step,minibatch)
 
 def rel_err(a,b):
     return jnp.sqrt(((a-b)**2).mean())/(jnp.sqrt((a**2).mean())+jnp.sqrt((b**2).mean()))#
 
 def log_rollout_error(ds,model,minibatch):
     (z0, _), _ = minibatch
-    pred_zs = model(z0,ds.T_long)#BHamiltonianFlow(model,z0,ds.T_long)
+    pred_zs = BHamiltonianFlow(model,z0,ds.T_long)
     gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
     errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
     clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)

@@ -8,6 +8,7 @@ from torch.utils.data import Dataset
 from emlp_jax.groups import R3embeddedSO2,R3embeddedO2
 from emlp_jax.equivariant_subspaces import Scalar,Vector
 from oil.utils.utils import Named
+from oil.tuning.configGenerator import flatten_dict
 import os
 import torch
 
@@ -33,16 +34,16 @@ def hamiltonian_dynamics(hamiltonian, z,t):
 
 def HamiltonianFlow(H,z0,T):
     dynamics = lambda z,t: hamiltonian_dynamics(H,z,t)
-    return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6)#.transpose((1,0,2))
+    return odeint(dynamics, z0, T, rtol=1e-4, atol=1e-4)#.transpose((1,0,2))
 
 def BHamiltonianFlow(H,z0,T):
     dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None)))
-    return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+    return odeint(dynamics, z0, T, rtol=1e-4, atol=1e-4).transpose((1,0,2))
 #BHamiltonianFlow = jit(vmap(HamiltonianFlow,(None,0,None)),static_argnums=(0,))
 
 class HamiltonianDataset(Dataset,metaclass=Named):
 
-    def __init__(self,n_systems=100,chunk_len=5,dt=0.1,integration_time=20,regen=False):
+    def __init__(self,n_systems=100,chunk_len=5,dt=0.2,integration_time=30,regen=False):
         super().__init__()
         root_dir = os.path.expanduser(f"~/datasets/ODEDynamics/{self.__class__}/")
         filename = os.path.join(root_dir, f"trajectories_{n_systems}_{chunk_len}_{dt}_{integration_time}.pz")
@@ -191,6 +192,11 @@ def log_rollout_error(ds,model,minibatch):
     log_geo_mean = jnp.log(clamped_errs).mean()
     return log_geo_mean
 
+def pred_and_gt(ds,model,minibatch):
+    (z0, _), _ = minibatch
+    pred_zs = BHamiltonianFlow(model,z0,ds.T_long)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    return np.stack([pred_zs,gt_zs],axis=-1)
 
 
 
@@ -330,3 +336,40 @@ class CoupledPendulumAnimation(PendulumAnimation):
         self.objects['springs'][0].set_data(x,y)
         self.objects['springs'][0].set_3d_properties(z)
         return super().update(i)
+
+from collections.abc import Iterable
+
+@export
+class hnn_trial(object):
+    """ Assumes trainer is an object of type Trainer, trains for num_epochs which may be an
+        integer or an iterable containing intermediate points at which to save.
+        Pulls out special (resume, save, early_stop_metric, local_rank) args from the cfg """
+    def __init__(self,make_trainer,strict=True):
+        self.make_trainer = make_trainer
+        self.strict=strict
+    def __call__(self,cfg,i=None):
+        try:
+            cfg.pop('local_rank',None) #TODO: properly handle distributed
+            resume = cfg.pop('resume',False)
+            save = cfg.pop('save',False)
+            if i is not None:
+                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
+                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
+            trainer = self.make_trainer(**cfg)
+            trainer.logger.add_scalars('config',flatten_dict(cfg))
+            epochs = cfg['num_epochs'] if isinstance(cfg['num_epochs'],Iterable) else [cfg['num_epochs']]
+            if resume: trainer.load_checkpoint(None if resume==True else resume)
+            epochs = [e for e in epochs if e>trainer.epoch]
+            for epoch in epochs:
+                trainer.train_to(epoch)
+                if save: cfg['saved_at']=trainer.save_checkpoint()
+            outcome = trainer.ckpt['outcome']
+            trajectories = []
+            for mb in trainer.dataloaders['test']:
+                trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
+            torch.save(np.concatenate(trajectories),f"./{cfg['network']}_{cfg['net_config']['group']}_{i}.t")
+        except Exception as e:
+            if self.strict: raise
+            outcome = e
+        del trainer
+        return cfg, outcome

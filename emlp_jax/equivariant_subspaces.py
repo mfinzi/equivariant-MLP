@@ -67,6 +67,7 @@ class Rep(object):
             this function computes the orthogonal complement to the projection
             matrix formed by stacking the rows of drho(Mi) together.
             Output [Q (r,) + (p+q)*(d,)] """
+        print(f"Solving basis for {self}, for G={self.G}")
         if self==Scalar: return jnp.ones((1,1))
         #if isinstance(group,Trivial): return np.eye(size(rank,group.d))
         if (self.size()**2)*self.G.num_constraints()>3e7 and isinstance(self,TensorRep): #Too large to use SVD
@@ -120,9 +121,9 @@ class TensorRep(Rep):
         return f"T{(p,q)}" if self.G is None or not self.G.is_orthogonal else f"T({p+q})"
     def __hash__(self):
         if self.rank==(0,0): return hash(self.rank) # Scalars are scalars regardless of the group
-        return hash(self.rank)#,self.G)) #TODO for  mixed tensors bring back self.G
+        return hash((self.rank,self.G)) #TODO for  mixed tensors bring back self.G
     def __eq__(self,other):
-        return isinstance(other,TensorRep) and self.rank==other.rank# and (self.rank==(0,0)) or self.G==other.G) #TODO for mixed tensors, add group comparison back in
+        return isinstance(other,TensorRep) and self.rank==other.rank and (self.rank==(0,0) or self.G==other.G) #TODO for mixed tensors, add group comparison back in
     def __call__(self,G):
         self.G=G
         if G.is_orthogonal: self.rank = (sum(self.rank),0) 

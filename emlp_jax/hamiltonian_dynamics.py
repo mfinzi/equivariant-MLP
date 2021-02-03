@@ -39,6 +39,10 @@ def HamiltonianFlow(H,z0,T):
 def BHamiltonianFlow(H,z0,T):
     dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None)))
     return odeint(dynamics, z0, T, rtol=1e-4, atol=1e-4).transpose((1,0,2))
+
+def BOdeFlow(dynamics,z0,T):
+    dynamics = jit(vmap(jit(dynamics),(0,None)))
+    return odeint(dynamics, z0, T, rtol=1e-4, atol=1e-4).transpose((1,0,2))
 #BHamiltonianFlow = jit(vmap(HamiltonianFlow,(None,0,None)),static_argnums=(0,))
 
 class HamiltonianDataset(Dataset,metaclass=Named):
@@ -180,6 +184,26 @@ class IntegratedDynamicsTrainer(Regressor):
         self.logger.add_scalars('metrics', metrics, step)
         super().logStuff(step,minibatch)
 
+class IntegratedODETrainer(IntegratedDynamicsTrainer):
+    def __init__(self,model,*args,**kwargs):
+        super().__init__(model,*args,**kwargs)
+        self.loss = objax.Jit(self.loss,model.vars())
+        #self.model = objax.Jit(self.model)
+        self.gradvals = objax.Jit(objax.GradValues(self.loss,model.vars()))#objax.Jit(objax.GradValues(fastloss,model.vars()),model.vars())
+        #self.model.predict = objax.Jit(objax.ForceArgs(model.__call__,training=False),model.vars())
+
+    def loss(self, minibatch):
+        """ Standard cross-entropy loss """
+        (z0, ts), true_zs = minibatch
+        pred_zs = BOdeFlow(self.model,z0,ts[0])
+        return jnp.mean((pred_zs - true_zs)**2)
+
+    def logStuff(self, step, minibatch=None):
+        loader = self.dataloaders['test']
+        metrics = {'test_Rollout': np.exp(self.evalAverageMetrics(loader,partial(log_rollout_error_ode,loader.dataset,self.model)))}
+        self.logger.add_scalars('metrics', metrics, step)
+        super().logStuff(step,minibatch)
+
 def rel_err(a,b):
     return jnp.sqrt(((a-b)**2).mean())/(jnp.sqrt((a**2).mean())+jnp.sqrt((b**2).mean()))#
 
@@ -198,6 +222,21 @@ def pred_and_gt(ds,model,minibatch):
     gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
+
+def log_rollout_error_ode(ds,model,minibatch):
+    (z0, _), _ = minibatch
+    pred_zs = BOdeFlow(model,z0,ds.T_long)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    errs = vmap(vmap(rel_err))(pred_zs,gt_zs) # (bs,T,)
+    clamped_errs = jax.lax.clamp(1e-7,errs,np.inf)
+    log_geo_mean = jnp.log(clamped_errs).mean()
+    return log_geo_mean
+
+def pred_and_gt_ode(ds,model,minibatch):
+    (z0, _), _ = minibatch
+    pred_zs = BOdeFlow(model,z0,ds.T_long)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    return np.stack([pred_zs,gt_zs],axis=-1)
 
 
 
@@ -367,6 +406,42 @@ class hnn_trial(object):
             trajectories = []
             for mb in trainer.dataloaders['test']:
                 trajectories.append(pred_and_gt(trainer.dataloaders['test'].dataset,trainer.model,mb))
+            torch.save(np.concatenate(trajectories),f"./{cfg['network']}_{cfg['net_config']['group']}_{i}.t")
+        except Exception as e:
+            if self.strict: raise
+            outcome = e
+        del trainer
+        return cfg, outcome
+
+
+@export
+class ode_trial(object):
+    """ Assumes trainer is an object of type Trainer, trains for num_epochs which may be an
+        integer or an iterable containing intermediate points at which to save.
+        Pulls out special (resume, save, early_stop_metric, local_rank) args from the cfg """
+    def __init__(self,make_trainer,strict=True):
+        self.make_trainer = make_trainer
+        self.strict=strict
+    def __call__(self,cfg,i=None):
+        try:
+            cfg.pop('local_rank',None) #TODO: properly handle distributed
+            resume = cfg.pop('resume',False)
+            save = cfg.pop('save',False)
+            if i is not None:
+                orig_suffix = cfg.setdefault('trainer_config',{}).get('log_suffix','')
+                cfg['trainer_config']['log_suffix'] = os.path.join(orig_suffix,f'trial{i}/')
+            trainer = self.make_trainer(**cfg)
+            trainer.logger.add_scalars('config',flatten_dict(cfg))
+            epochs = cfg['num_epochs'] if isinstance(cfg['num_epochs'],Iterable) else [cfg['num_epochs']]
+            if resume: trainer.load_checkpoint(None if resume==True else resume)
+            epochs = [e for e in epochs if e>trainer.epoch]
+            for epoch in epochs:
+                trainer.train_to(epoch)
+                if save: cfg['saved_at']=trainer.save_checkpoint()
+            outcome = trainer.ckpt['outcome']
+            trajectories = []
+            for mb in trainer.dataloaders['test']:
+                trajectories.append(pred_and_gt_ode(trainer.dataloaders['test'].dataset,trainer.model,mb))
             torch.save(np.concatenate(trajectories),f"./{cfg['network']}_{cfg['net_config']['group']}_{i}.t")
         except Exception as e:
             if self.strict: raise

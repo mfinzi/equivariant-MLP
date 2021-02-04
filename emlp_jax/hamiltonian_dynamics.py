@@ -36,13 +36,13 @@ def HamiltonianFlow(H,z0,T):
     dynamics = lambda z,t: hamiltonian_dynamics(H,z,t)
     return odeint(dynamics, z0, T, rtol=1e-4, atol=1e-4)#.transpose((1,0,2))
 
-def BHamiltonianFlow(H,z0,T):
+def BHamiltonianFlow(H,z0,T,tol=1e-4):
     dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,H)),(0,None)))
-    return odeint(dynamics, z0, T, rtol=1e-4, atol=1e-4).transpose((1,0,2))
+    return odeint(dynamics, z0, T, rtol=tol).transpose((1,0,2))
 
-def BOdeFlow(dynamics,z0,T):
+def BOdeFlow(dynamics,z0,T,tol=1e-4):
     dynamics = jit(vmap(jit(dynamics),(0,None)))
-    return odeint(dynamics, z0, T, rtol=1e-4, atol=1e-4).transpose((1,0,2))
+    return odeint(dynamics, z0, T, rtol=tol).transpose((1,0,2))
 #BHamiltonianFlow = jit(vmap(HamiltonianFlow,(None,0,None)),static_argnums=(0,))
 
 class HamiltonianDataset(Dataset,metaclass=Named):
@@ -222,8 +222,8 @@ def log_rollout_error(ds,model,minibatch):
 
 def pred_and_gt(ds,model,minibatch):
     (z0, _), _ = minibatch
-    pred_zs = BHamiltonianFlow(model,z0,ds.T_long)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    pred_zs = BHamiltonianFlow(model,z0,ds.T_long,tol=2e-6)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
 
@@ -238,8 +238,8 @@ def log_rollout_error_ode(ds,model,minibatch):
 
 def pred_and_gt_ode(ds,model,minibatch):
     (z0, _), _ = minibatch
-    pred_zs = BOdeFlow(model,z0,ds.T_long)
-    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long)
+    pred_zs = BOdeFlow(model,z0,ds.T_long,tol=2e-6)
+    gt_zs  = BHamiltonianFlow(ds.H,z0,ds.T_long,tol=2e-6)
     return np.stack([pred_zs,gt_zs],axis=-1)
 
 

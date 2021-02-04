@@ -61,7 +61,7 @@ class BiLinear(Module):
         logging.info(f"BiW components:{rep_W.size()} dim:{Wdim} shape:{rep_W.shape} rep:{rep_W}")
 
     def __call__(self, x,training=True):
-        logging.warning(f"Bilinear x shape {x.shape}")
+        logging.debug(f"Bilinear x shape {x.shape}")
         logging.debug(f"bilinear in shape: {x.shape}")
         W = self.weight_proj(self.w.value,x)
         out= .1*(W@x[...,None])[...,0] #TODO: set back to .05

@@ -67,7 +67,7 @@ class Rep(object):
             this function computes the orthogonal complement to the projection
             matrix formed by stacking the rows of drho(Mi) together.
             Output [Q (r,) + (p+q)*(d,)] """
-        print(f"Solving basis for {self}, for G={self.G}")
+        logging.info(f"Solving basis for {self}, for G={self.G}")
         if self==Scalar: return jnp.ones((1,1))
         #if isinstance(group,Trivial): return np.eye(size(rank,group.d))
         if (self.size()**2)*self.G.num_constraints()>3e7 and isinstance(self,TensorRep): #Too large to use SVD

@@ -80,7 +80,7 @@ class Rep(object):
     def symmetric_projector(self):
         Q = self.symmetric_basis()
         Q_lazy = Lazy(Q)
-        P = Q_lazy@Q_lazy.T
+        P = Q_lazy@Q_lazy.H
         return P
 
     def visualize(self):
@@ -464,9 +464,9 @@ class tensor_constraints_lazy(LinearOperator):
 
 def orthogonal_complement(proj):
     """ Computes the orthogonal complement to a given matrix proj"""
-    U,S,VT = jnp.linalg.svd(proj,full_matrices=True) # Changed from full_matrices=True
+    U,S,VH = jnp.linalg.svd(proj,full_matrices=True) # Changed from full_matrices=True
     rank = (S>1e-5).sum()
-    return VT[rank:].T
+    return VH[rank:].conj().T
 
 def krylov_constraint_solve(C,tol=3e-3):
     r = 5
@@ -483,13 +483,13 @@ def krylov_constraint_solve(C,tol=3e-3):
 
 def krylov_constraint_solve_upto_r(C,r,tol=3e-3,lr=1e-2):
     W = np.random.randn(C.shape[-1],r)
-    W /= np.sqrt((W**2).sum(0,keepdims=True))
+    W /= jnp.sqrt(jnp.absolute(W**2).sum(0,keepdims=True))
 
-    opt_init,opt_update = optax.sgd(lr,.9)#optax.adam(lr)#optax.sgd(3e-3,.9)#optax.adam(lr)
+    opt_init,opt_update = optax.sgd(lr,.9)
     opt_state = opt_init(W)  # init stats
 
     def loss(W):
-        return ((C@W)**2).sum()/2
+        return (jnp.absolute(C@W)**2).sum()/2 # added absolute for complex support
 
     loss_and_grad = jit(jax.value_and_grad(loss))
 
@@ -498,7 +498,7 @@ def krylov_constraint_solve_upto_r(C,r,tol=3e-3,lr=1e-2):
         lossval, grad = loss_and_grad(W)
         updates, opt_state = opt_update(grad, opt_state, W)
         W = optax.apply_updates(W, updates)
-        W /= jnp.sqrt((W**2).sum(0,keepdims=True))
+        W /= jnp.sqrt(jnp.absolute(W**2).sum(0,keepdims=True))
         #lossvalues.append(lossval)
         if lossval <tol**2: break
         if lossval>1e2 and i>100: # Solve diverged due to too high learning rate

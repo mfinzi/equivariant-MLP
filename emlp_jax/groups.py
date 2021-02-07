@@ -317,8 +317,9 @@ class SU(Group): # Of dimension n^2-1
                 if i==j: continue
                 lie_algebra_imag[k,j,j] = -1/(n-1)
             k+=1
-        I,J = np.eye(2),np.array([[0,1],[-1,0]])
-        self.lie_algebra = np.kron(lie_algebra_real,I)+np.kron(lie_algebra_imag,J)
+        #I,J = np.eye(2),np.array([[0,1],[-1,0]])
+        #self.lie_algebra = np.kron(lie_algebra_real,I)+np.kron(lie_algebra_imag,J)
+        self.lie_algebra = lie_algebra_real + lie_algebra_imag*1j
         super().__init__(n)
 
 @export

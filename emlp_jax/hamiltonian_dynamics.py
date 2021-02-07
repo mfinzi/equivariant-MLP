@@ -275,12 +275,12 @@ import matplotlib.animation as animation
 import numpy as np
 
 class Animation(object):
-    def __init__(self, qt,lims=None):
+    def __init__(self, qt,lims=None,traj_lw=1,figkwargs={}):
         """ [qt (T,n,d)"""
         self.qt = qt
         T,n,d = qt.shape
         assert d in (2,3), "too many dimensions for animation"
-        self.fig = plt.figure()
+        self.fig = plt.figure(**figkwargs)
         self.ax = self.fig.add_axes([0, 0, 1, 1],projection='3d') if d==3 else self.fig.add_axes([0, 0, 1, 1])
         
         #self.ax.axis('equal')
@@ -299,7 +299,7 @@ class Animation(object):
         self.colors = np.random.choice([f"C{i}" for i in range(10)],size=n,replace=False)
         self.objects = {
             'pts':sum([self.ax.plot(*empty, "o", ms=6,color=self.colors[i]) for i in range(n)], []),
-            'traj_lines':sum([self.ax.plot(*empty, "-",color=self.colors[i]) for i in range(n)], []),
+            'traj_lines':sum([self.ax.plot(*empty, "-",color=self.colors[i],lw=traj_lw) for i in range(n)], []),
         }
         
     def init(self):
@@ -312,7 +312,7 @@ class Animation(object):
 
     def update(self, i=0):
         T,n,d = self.qt.shape
-        trail_len = 50
+        trail_len = 150
         for j in range(n):
             # trails
             xyz = self.qt[max(i - trail_len,0): i + 1,j,:]
@@ -331,8 +331,8 @@ class Animation(object):
                     interval=33,init_func=self.init,blit=True).to_html5_video()
 
 class PendulumAnimation(Animation):
-    def __init__(self, qt):
-        super().__init__(qt)
+    def __init__(self, qt,*args,**kwargs):
+        super().__init__(qt,*args,**kwargs)
         empty = self.qt.shape[-1] * [[]]
         self.objects["pts"] = sum([self.ax.plot(*empty, "o", ms=10,c=self.colors[i]) for i in range(self.qt.shape[1])], [])
 
@@ -359,18 +359,20 @@ def align2ref(refs,vecs):
     A = np.zeros((n,3,3))
     A[:,:,2] += v
     A[:,2,:] -= v
-    M = (np.eye(3)+A+(A@A)/(1+v[:,2,None,None]))*norm[:,None,None]
-    return (M[:,None]@vecs[None,...,None]).squeeze(-1)
+    M = (np.eye(3)+A+(A@A)/(1+v[:,2,None,None]))
+    scaled_vecs = vecs[None]+0*norm[:,None,None] #broadcast to right shape
+    scaled_vecs[:,:,2] *= norm[:,None]#[:,None,None]
+    return (M[:,None]@scaled_vecs[...,None]).squeeze(-1)
 
     
 class CoupledPendulumAnimation(PendulumAnimation):
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, spring_lw=.6,spring_r=.2,**kwargs):
         super().__init__(*args, **kwargs)
         empty = self.qt.shape[-1]*[[]]
-        self.objects["springs"] = self.ax.plot(*empty,c='k',lw=.6)#
+        self.objects["springs"] = self.ax.plot(*empty,c='k',lw=spring_lw)#
         #self.objects["springs"] = sum([self.ax.plot(*empty,c='k',lw=2) for _ in range(self.n-1)],[])
-        self.helix = helix(200,turns=10)
+        self.helix = helix(200,radius=spring_r,turns=10)
         
     def update(self,i=0):
         qt_padded = np.concatenate([0*self.qt[i,:1],self.qt[i,:]],axis=0)

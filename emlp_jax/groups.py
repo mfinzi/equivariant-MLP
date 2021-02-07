@@ -12,6 +12,7 @@ import emlp_jax.equivariant_subspaces as equivariant_subspaces
 from jax import jit,vmap
 from functools import partial
 import logging
+from emlp_jax.mixed_tensors import lazy_kron
 
 def rel_err(A,B):
     return jnp.mean(jnp.abs(A-B))/(jnp.mean(jnp.abs(A)) + jnp.mean(jnp.abs(B))+1e-6)
@@ -245,11 +246,29 @@ class Permutation(Group):
 @export
 class S(Permutation): pass #Alias permutation group with Sn.
 
+class LazyShift(LinearOperator):
+    def __init__(self,n,k=1):
+        self.k=k
+        self.shape = (n,n)
+
+    def _matmat(self,V): #(c,k) #Still needs to be tested??
+        return jnp.roll(V,self.k,axis=0)
+    def _matvec(self,V):
+        return jnp.roll(V,self.k,axis=0)
+    def _adjoint(self):
+        return LazyShift(self.shape[0],-self.k)
+    def invT(self):
+        return self
+
 @export
 class DiscreteTranslation(Group):
     def __init__(self,n):
         self.discrete_generators = np.roll(np.eye(n),1,axis=1)[None]
+        self.discrete_generators_lazy = [LazyShift(n)]
         super().__init__(n)
+
+@export
+class Z(DiscreteTranslation): pass # Alias cyclic translations with Z
 
 @export
 class U(Group): # Of dimension n^2
@@ -412,6 +431,60 @@ class RubiksCube2x2(Group):
         self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
         super().__init__()
 
+class I(LinearOperator):
+    def __init__(self,d):
+        self.shape = (d,d)
+    def _matmat(self,V): #(c,k)
+        return V
+    def _matvec(self,V):
+        return V
+    def _adjoint(self):
+        return self
+    def invT(self):
+        return self
+
+class Rot90(LinearOperator):
+    def __init__(self,n,k):
+        self.shape = (n*n,n*n)
+        self.n=n
+        self.k = k
+    def _matmat(self,V): #(c,k)
+        return jnp.rot90(V.reshape((self.n,self.n,-1)),self.k).reshape(V.shape)
+    def _matvec(self,V):
+        return jnp.rot90(V.reshape((self.n,self.n,-1)),self.k).reshape(V.shape)
+    def invT(self):
+        return self
+
+
+@export
+class ZnxZn(Group):
+    #is_regular=True
+    def __init__(self,n):
+        Zn = Z(n)
+        nshift = Zn.discrete_generators_lazy[0]
+        In = I(n)
+        Idense = np.eye(n*n)
+        #self._d = k*n*n
+        self.discrete_generators_lazy = [lazy_kron([nshift,In]),lazy_kron([In,nshift])]
+        self.discrete_generators = np.stack([h@Idense for h in self.discrete_generators_lazy])
+        super().__init__(n)
+
+@export
+class ZksZnxZn(Group):
+    #is_regular=True
+    def __init__(self,k,n):
+        Zn = Z(n)
+        Zk = Z(k)
+        nshift = Zn.discrete_generators_lazy[0]
+        kshift = Zk.discrete_generators_lazy[0]
+        In = I(n)
+        Ik = I(k)
+        Idense = np.eye(k*n*n)
+        assert k in [2,4]
+        #self._d = k*n*n
+        self.discrete_generators_lazy = [lazy_kron([Ik,nshift,In]),lazy_kron([Ik,In,nshift]),lazy_kron([kshift,Rot90(n,4//k)])]
+        self.discrete_generators = np.stack([h@Idense for h in self.discrete_generators_lazy])
+        super().__init__(k,n)
 
 class Embed(Group):
     def __init__(self,G,d,slice):

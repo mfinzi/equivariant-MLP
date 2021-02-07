@@ -98,9 +98,18 @@ class lazy_kron(LinearOperator):
             Mev_front = (M@ev_front.reshape((M.shape[-1],-1))).reshape(ev_front.shape)
             ev = jnp.moveaxis(Mev_front,0,i)
         return ev.reshape(-1)
+    def _matmat(self,v):
+        #print(v.shape)
+        ev = v.reshape(tuple(Mi.shape[-1] for Mi in self.Ms)+(-1,))
+        for i,M in enumerate(self.Ms):
+            ev_front = jnp.moveaxis(ev,i,0)
+            Mev_front = (M@ev_front.reshape((M.shape[-1],-1))).reshape(ev_front.shape)
+            ev = jnp.moveaxis(Mev_front,0,i)
+        return ev.reshape(v.shape)
     def _adjoint(self):
         return lazy_kron([Mi.T for Mi in self.Ms])
-
+    def invT(self):
+        return lazy_kron([M.invT() for M in self.Ms])
 # @cache()
 # def rep_permutation(sumrep):
 #     """Permutation from flattened ordering to block ordering """

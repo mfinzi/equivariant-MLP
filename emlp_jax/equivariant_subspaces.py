@@ -19,6 +19,7 @@ import emlp_jax
 from oil.utils.mytqdm import tqdm
 import math
 from jax.ops import index, index_add, index_update
+import matplotlib.pyplot as plt
 
 class OrderedCounter(collections.Counter,collections.OrderedDict): pass
 
@@ -81,6 +82,13 @@ class Rep(object):
         Q_lazy = Lazy(Q)
         P = Q_lazy@Q_lazy.T
         return P
+
+    def visualize(self):
+        Q = self.symmetric_basis()
+        A = sparsify_basis(Q)
+        k = int(np.sqrt(A.shape[0]))
+        plt.imshow(A.reshape((k,k)))
+        plt.axis('off')
 
 class TensorRep(Rep):
     def __init__(self,p,q=0,G=None):
@@ -422,9 +430,13 @@ class tensor_constraints_lazy(LinearOperator):
         self.d = group.d
         #TODO: make more extensible wrg to generators and non tensor reps
         try: self.hi = group.discrete_generators_lazy
-        except AttributeError: self.hi=group.discrete_generators
+        except AttributeError: 
+            self.hi=group.discrete_generators
+            logging.info(f"no discrete lazy found for {group}, {rank}")
         try: self.Ai = group.lie_algebra_lazy
-        except AttributeError: self.Ai = group.lie_algebra
+        except AttributeError: 
+            self.Ai = group.lie_algebra
+            logging.info(f"no Lie Algebra lazy found for {group}, {rank}")
         #self.hi = group.discrete_generators
         #self.Ai = group.lie_algebra
         self.G=group
@@ -458,11 +470,11 @@ def orthogonal_complement(proj):
 
 def krylov_constraint_solve(C,tol=3e-3):
     r = 5
-    if C.shape[0]*r*2>1e9: raise Exception(f"Solns for contraints {C.shape} too large to fit in memory")
+    if C.shape[0]*r*2>7e8: raise Exception(f"Solns for contraints {C.shape} too large to fit in memory")
     found_rank=5
     while found_rank==r:
         r *= 2
-        if C.shape[0]*r>1e9:
+        if C.shape[0]*r>7e8:
             logging.error("Hit memory limits, switching to sample from equivariant subspace")
             break
         Q = krylov_constraint_solve_upto_r(C,r,tol)
@@ -499,6 +511,36 @@ def krylov_constraint_solve_upto_r(C,r,tol=3e-3,lr=1e-2):
     rank = (S>tol).sum()
     Q = U[:,:rank]
     return device_put(Q)
+
+class ConvergenceError(Exception): pass
+
+def sparsify_basis(Q,lr=3e-2): #(n,r)
+    W = np.random.randn(Q.shape[-1],Q.shape[-1])
+    W,_ = np.linalg.qr(W)
+    opt_init,opt_update = optax.adam(lr)#optax.sgd(1e2,.9)#optax.adam(lr)#optax.sgd(3e-3,.9)#optax.adam(lr)
+    opt_update = jit(opt_update)
+    opt_state = opt_init(W)  # init stats
+
+    def loss(W):
+        return jnp.abs(W@Q.T).mean() + .1*(jnp.abs(W.T@W-jnp.eye(W.shape[0]))).mean()+.01*jax.numpy.linalg.slogdet(W)[1]**2
+
+    loss_and_grad = jit(jax.value_and_grad(loss))
+
+    for i in tqdm(range(1000),desc=f'sparsifying basis'):
+        lossval, grad = loss_and_grad(W)
+        updates, opt_state = opt_update(grad, opt_state, W)
+        W = optax.apply_updates(W, updates)
+        if lossval>1e2 and i>100: # Solve diverged due to too high learning rate
+            logging.warning(f"Constraint solving diverged, trying lower learning rate {lr/3:.2e}")
+            return sparsify_basis(Q,lr=lr/3)
+    Q = np.copy(Q@W.T)
+    Q[np.abs(Q)<1e-2]=0
+    Q[np.abs(Q)>1e-2]=1
+    A = Q@(1+np.arange(Q.shape[-1]))
+    if len(np.unique(A))!=Q.shape[-1]+1 and len(np.unique(A))!=Q.shape[-1]:
+        logging.error(f"Basis elems did not separate: found only {len(np.unique(A))}/{Q.shape[-1]}")
+        #raise ConvergenceError(f"Basis elems did not separate: found only {len(np.unique(A))}/{Q.shape[-1]}")
+    return A
 
 #@partial(jit,static_argnums=(0,1))
 def bilinear_weights(W_rep,x_rep):

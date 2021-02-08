@@ -67,7 +67,7 @@ class Rep(object):
         """ Given an array of generators [M1,M2,...] and tensor rank (p,q)
             this function computes the orthogonal complement to the projection
             matrix formed by stacking the rows of drho(Mi) together.
-            Output [Q (r,) + (p+q)*(d,)] """
+            Output [Q (r,d^(p+q))] """
         logging.info(f"Solving basis for {self}, for G={self.G}")
         if self==Scalar: return jnp.ones((1,1))
         #if isinstance(group,Trivial): return np.eye(size(rank,group.d))
@@ -522,7 +522,7 @@ def sparsify_basis(Q,lr=3e-2): #(n,r)
     opt_state = opt_init(W)  # init stats
 
     def loss(W):
-        return jnp.abs(W@Q.T).mean() + .1*(jnp.abs(W.T@W-jnp.eye(W.shape[0]))).mean()+.01*jax.numpy.linalg.slogdet(W)[1]**2
+        return jnp.abs(Q@W.T).mean() + .1*(jnp.abs(W.T@W-jnp.eye(W.shape[0]))).mean()+.01*jax.numpy.linalg.slogdet(W)[1]**2
 
     loss_and_grad = jit(jax.value_and_grad(loss))
 

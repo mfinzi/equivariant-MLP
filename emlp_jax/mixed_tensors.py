@@ -75,7 +75,7 @@ class ProductGroupTensorRep(Rep): # Eventually will need to handle reordering to
         return "⊗".join([str(rep) for rep in self.reps.values()])
 
     def symmetric_basis(self): 
-        raise NotImplementedError
+        return lazy_kron([rep.symmetric_basis() for rep in self.reps.values()])
 
     def symmetric_projector(self):
         projectors = [rep.symmetric_projector() for rep in self.reps.values()]
@@ -89,13 +89,14 @@ class lazy_kron(LinearOperator):
         self.Ms = Ms
         self.shape = math.prod([Mi.shape[0] for Mi in Ms]), math.prod([Mi.shape[1] for Mi in Ms])
         #self.dtype=Ms[0].dtype
+        self.dtype=None
 
     def _matvec(self,v):
         #print(v.shape)
         ev = v.reshape(tuple(Mi.shape[-1] for Mi in self.Ms))
         for i,M in enumerate(self.Ms):
             ev_front = jnp.moveaxis(ev,i,0)
-            Mev_front = (M@ev_front.reshape((M.shape[-1],-1))).reshape(ev_front.shape)
+            Mev_front = (M@ev_front.reshape((M.shape[-1],-1))).reshape((M.shape[0],)+ev_front.shape[1:])
             ev = jnp.moveaxis(Mev_front,0,i)
         return ev.reshape(-1)
     def _matmat(self,v):
@@ -103,9 +104,9 @@ class lazy_kron(LinearOperator):
         ev = v.reshape(tuple(Mi.shape[-1] for Mi in self.Ms)+(-1,))
         for i,M in enumerate(self.Ms):
             ev_front = jnp.moveaxis(ev,i,0)
-            Mev_front = (M@ev_front.reshape((M.shape[-1],-1))).reshape(ev_front.shape)
+            Mev_front = (M@ev_front.reshape((M.shape[-1],-1))).reshape((M.shape[0],)+ev_front.shape[1:])
             ev = jnp.moveaxis(Mev_front,0,i)
-        return ev.reshape(v.shape)
+        return ev.reshape((self.shape[0],v.shape[-1]))
     def _adjoint(self):
         return lazy_kron([Mi.T for Mi in self.Ms])
     def invT(self):

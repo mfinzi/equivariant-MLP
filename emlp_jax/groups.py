@@ -19,15 +19,27 @@ def rel_err(A,B):
 
 class Group(object,metaclass=Named):
     lie_algebra = NotImplemented
+    lie_algebra_lazy = NotImplemented
     discrete_generators = NotImplemented
+    discrete_generators_lazy = NotImplemented
     z_scale=None # For scale noise for sampling elements
     is_orthogonal=None
     is_regular = None
     def __init__(self,*args,**kwargs):
+        # Set dense lie_algebra using lie_algebra_lazy if applicable
+        if self.lie_algebra is NotImplemented and self.lie_algebra_lazy is not NotImplemented:
+            Idense = np.eye(self.lie_algebra_lazy[0].shape[0])
+            self.lie_algebra = np.stack([h@Idense for h in self.lie_algebra_lazy])
+        # Set dense discrete_generators using discrete_generators_lazy if applicable
+        if self.discrete_generators is NotImplemented and self.discrete_generators_lazy is not NotImplemented:
+            Idense = np.eye(self.discrete_generators_lazy[0].shape[0])
+            self.discrete_generators = np.stack([h@Idense for h in self.discrete_generators_lazy])
+
         if self.lie_algebra is NotImplemented:
             self.lie_algebra = np.zeros((0,self.d,self.d))
         if self.discrete_generators is NotImplemented:
             self.discrete_generators = np.zeros((0,self.d,self.d))
+    
         self.args = args
         self.lie_algebra = jax.device_put(self.lie_algebra)
         self.discrete_generators = jax.device_put(self.discrete_generators)
@@ -124,10 +136,25 @@ def noise2samples(zs,ks,lie_algebra,discrete_generators,seed=0):
     return vmap(noise2sample,(0,0,None,None,None),0)(zs,ks,lie_algebra,discrete_generators,seed)
 
 
-class CombinedGenerators(Group):
+class I(LinearOperator):
+    def __init__(self,d):
+        self.shape = (d,d)
+    def _matmat(self,V): #(c,k)
+        return V
+    def _matvec(self,V):
+        return V
+    def _adjoint(self):
+        return self
+    def invT(self):
+        return self
+
+def lazy_kronsum(Ms):
+    return sum(lazy_kron(i*[I]+[Mi]+(n-i-1)*[I]) for i,Mi in enumerate(Ms))
+
+class DirectProduct(Group):
     def __init__(self,G1,G2):
-        self.lie_algebra = np.concatenate((G1.lie_algebra,G2.lie_algebra))
-        self.discrete_generators = np.concatenate((G1.discrete_generators,G2.discrete_generators))
+        self.lie_algebra_lazy = [lazy_kronsum([A1,A2]) for A1 in G1.lie_algebra_lazy for A2 in G2.lie_algebra_lazy]
+        self.discrete_generators_lazy = [lazy_kron([M1,M2]) for M1 in G1.discrete_generators_lazy for M2 in G2.discrete_generators_lazy]
         self.names = (repr(G1),repr(G2))
         super().__init__()
         
@@ -238,8 +265,6 @@ class Permutation(Group):
         perms = np.arange(n)[None]+np.zeros((n-1,1)).astype(int)
         perms[:,0] = np.arange(1,n)
         perms[np.arange(n-1),np.arange(1,n)[None]]=0
-        I = np.eye(n)
-        self.discrete_generators = np.stack([I[perm] for perm in perms])
         self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in perms]
         super().__init__(n)
 
@@ -263,7 +288,6 @@ class LazyShift(LinearOperator):
 @export
 class DiscreteTranslation(Group):
     def __init__(self,n):
-        self.discrete_generators = np.roll(np.eye(n),1,axis=1)[None]
         self.discrete_generators_lazy = [LazyShift(n)]
         super().__init__(n)
 
@@ -290,8 +314,7 @@ class U(Group): # Of dimension n^2
             # diagonal imaginary generators
             lie_algebra_imag[k,i,i] = 1
             k+=1
-        I,J = np.eye(2),np.array([[0,1],[-1,0]])
-        self.lie_algebra = np.kron(lie_algebra_real,I)+np.kron(lie_algebra_imag,J)
+        self.lie_algebra = lie_algebra_real + lie_algebra_imag*1j
         super().__init__(n)
 @export
 class SU(Group): # Of dimension n^2-1
@@ -317,8 +340,6 @@ class SU(Group): # Of dimension n^2-1
                 if i==j: continue
                 lie_algebra_imag[k,j,j] = -1/(n-1)
             k+=1
-        #I,J = np.eye(2),np.array([[0,1],[-1,0]])
-        #self.lie_algebra = np.kron(lie_algebra_real,I)+np.kron(lie_algebra_imag,J)
         self.lie_algebra = lie_algebra_real + lie_algebra_imag*1j
         super().__init__(n)
 
@@ -330,8 +351,6 @@ class Cube(Group):
         order = np.arange(6) # []
         Fperm = np.array([4,1,0,3,5,2])
         Lperm = np.array([3,0,2,5,4,1])
-        I = np.eye(6)
-        self.discrete_generators = np.stack([I[perm] for perm in [Fperm,Lperm]])
         self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Fperm,Lperm]]
         super().__init__()
 
@@ -364,7 +383,6 @@ class PermutationMatrix(LinearOperator):
 
 @export
 class RubiksCube(Group): #3x3 rubiks cube
-    is_regular = True # needs to be specified explicitly because of the lazy matrices
     def __init__(self):
         #Faces are ordered U,F,R,B,L,D (the net of the cube) #    B
         order = np.arange(48)                                #  L U R
@@ -391,15 +409,12 @@ class RubiksCube(Group): #3x3 rubiks cube
         Bperm = RotLeft[Uperm[RotRight]]# Bperm = RotRight<-Uperm<-RotLeft
         Lperm = RotFront[Uperm[RotBack]] # Lperm = RotBack<-Uperm<-RotFront
         Dperm = RotRight[RotRight[Uperm[RotLeft[RotLeft]]]] # Dperm = RotLeft<-RotLeft<-Uperm<-RotRight<-RotRight
-        I = np.eye(48)
-        self.discrete_generators = np.stack([I[perm] for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]])
         self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
         super().__init__()
 
 
 @export
 class RubiksCube2x2(Group):
-    is_regular = True # needs to be specified explicitly because of the lazy matrices
     def __init__(self):
         #Faces are ordered U,F,R,B,L,D (the net of the cube) #    B
         Uperm = np.arange(24).reshape(6,4)                   #  L U R
@@ -428,21 +443,10 @@ class RubiksCube2x2(Group):
         Dperm = RotRight[RotRight[Uperm[RotLeft[RotLeft]]]] # Dperm = RotLeft<-RotLeft<-Uperm<-RotRight<-RotRight
         I = np.eye(24)
         self.perms = [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]
-        self.discrete_generators = np.stack([I[perm] for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]])
         self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
         super().__init__()
 
-class I(LinearOperator):
-    def __init__(self,d):
-        self.shape = (d,d)
-    def _matmat(self,V): #(c,k)
-        return V
-    def _matvec(self,V):
-        return V
-    def _adjoint(self):
-        return self
-    def invT(self):
-        return self
+
 
 class Rot90(LinearOperator):
     def __init__(self,n,k):
@@ -459,20 +463,16 @@ class Rot90(LinearOperator):
 
 @export
 class ZnxZn(Group):
-    #is_regular=True
     def __init__(self,n):
         Zn = Z(n)
         nshift = Zn.discrete_generators_lazy[0]
         In = I(n)
         Idense = np.eye(n*n)
-        #self._d = k*n*n
         self.discrete_generators_lazy = [lazy_kron([nshift,In]),lazy_kron([In,nshift])]
-        self.discrete_generators = np.stack([h@Idense for h in self.discrete_generators_lazy])
         super().__init__(n)
 
 @export
 class ZksZnxZn(Group):
-    #is_regular=True
     def __init__(self,k,n):
         Zn = Z(n)
         Zk = Z(k)
@@ -482,9 +482,7 @@ class ZksZnxZn(Group):
         Ik = I(k)
         Idense = np.eye(k*n*n)
         assert k in [2,4]
-        #self._d = k*n*n
         self.discrete_generators_lazy = [lazy_kron([Ik,nshift,In]),lazy_kron([Ik,In,nshift]),lazy_kron([kshift,Rot90(n,4//k)])]
-        self.discrete_generators = np.stack([h@Idense for h in self.discrete_generators_lazy])
         super().__init__(k,n)
 
 class Embed(Group):
@@ -511,18 +509,3 @@ def O2eR3():
 @export
 def DkeR3(k):
     return Embed(D(k),3,slice(2))
-
-# @export
-# class R3embeddedSO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
-#     def __init__(self):
-#         self.lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
-#         self._d = 3
-#         super().__init__()
-# @export
-# class R3embeddedO2(Group): #""" The special orthogonal group SO(N) in N dimensions"""
-#     def __init__(self):
-#         lie_algebra = np.array([[0,1.,0],[-1,0,0],[0,0,0]])[None]
-#         discrete_generators = np.eye(3)[None] 
-#         discrete_generators[0,0,0]=-1 #Reflection about x axis
-#         self._d = 3
-#         super().__init__()

@@ -19,6 +19,7 @@ import copy
 import math
 
 class ProductGroupTensorRep(Rep): # Eventually will need to handle reordering to canonical G1,G2, etc (from hash?)
+    atomic=False
     # TO be used like (T(0) + T(1))(SO(3))*T(1)(S(5)) -> T(2)(SO(3))
     def __init__(self,rep_dict):
         assert len(rep_dict)>1, "Not product rep?"

@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 class OrderedCounter(collections.Counter,collections.OrderedDict): pass
 
 class Rep(object):
+    atomic=True
     def __eq__(self, other): raise NotImplementedError
     def size(self): raise NotImplementedError # dim(V) dimension of the representation
     def __add__(self, other): # Tensor sum representation R1 + R2
@@ -34,14 +35,23 @@ class Rep(object):
         if isinstance(other,int): return other*Scalar+self
         elif isinstance(other,Rep): return SumRep([other,self])
         else: return NotImplemented
-    def __mul__(self, other): 
-        if isinstance(other,int): return SumRep(other*[self])
+    def __mul__(self, other):
+        if isinstance(other,Rep) and other.atomic:
+            assert self.G==other.G or ((self.G is not None) and (other.G is not None)), f"Cannot mul \
+                rep1 with uninitialized G1={self.G} and rep2 with initialized G2={other.G} or vice versa"
+        if isinstance(other,Rep) and other.atomic and self.G!=other.G:
+            return emlp_jax.mixed_tensors.ProductGroupTensorRep({self.G:self,other.G:other})
+        elif isinstance(other,Rep) and other.atomic:
+            raise NotImplementedError("TODO implement generic tensor prod rep for same group")
+        elif isinstance(other,int): return SumRep(other*[self])
         else: return NotImplemented # Tensor product representation R1 x R2
     def __rmul__(self,other):
         if isinstance(other,int): return SumRep(other*[self])
         else: return NotImplemented # Tensor product representation R1 x R2
     def __lt__(self, other):
         return hash(self) < hash(other) #For sorting purposes only
+    def __mod__(self,other): # Wreath product
+        raise NotImplementedError
     @property
     def T(self): raise NotImplementedError # dual representation V*, rho*, drho*
     def __repr__(self): return str(self)#raise NotImplementedError
@@ -84,6 +94,7 @@ class Rep(object):
         return P
 
     def visualize(self):
+        #TODO: add support for non square
         Q = self.symmetric_basis()
         A = sparsify_basis(Q)
         k = int(np.sqrt(A.shape[0]))
@@ -107,19 +118,11 @@ class TensorRep(Rep):
         if self.G is not None and self.G.is_orthogonal: return self
         return TensorRep(*self.rank[::-1],G=self.G)
     def __mul__(self,other):
-        if isinstance(other,int): return SumRep(other*[self])
-        elif isinstance(other,TensorRep):
-            if self.G==other.G: 
-                return TensorRep(self.rank[0]+other.rank[0],self.rank[1]+other.rank[1],
+        if isinstance(other,TensorRep) and self.G==other.G:
+            return TensorRep(self.rank[0]+other.rank[0],self.rank[1]+other.rank[1],
                                 G=self.G if self.G is None else other.G)
-            else:
-                return emlp_jax.mixed_tensors.ProductGroupTensorRep({self.G:self,other.G:other}) #Order matters?
-        else: return NotImplemented
-    def __mod__(self,other): # Wreath product
-        raise NotImplementedError
-    def __rmul__(self,other): 
-        if isinstance(other,int): return SumRep(other*[self])
-        else: return NotImplemented
+        else: return super().__mul__(other)
+
     def size(self):
         return self.G.d**sum(self.rank)
 
@@ -137,14 +140,11 @@ class TensorRep(Rep):
         if G.is_orthogonal: self.rank = (sum(self.rank),0) 
         self.is_regular = G.is_regular
         return self
-    def show_subspace(self):
-        dims,projection = self.symmetric_basis()
-        vals = projection(jnp.arange(dims)+1)
-        return jnp.where(jnp.abs(vals)>1e-7,vals,jnp.zeros_like(vals)).reshape(*[self.G.d for _ in range(sum(self.rank))])
 
 class T(TensorRep): pass # A short alias for TensorRep
 
 class SumRep(Rep):
+    atomic=False
     def __init__(self,reps,shapes=None):
         """ Constructs a tensor type based on a list of tensor ranks
             and possibly the symmetry generators gen."""
@@ -429,12 +429,14 @@ class tensor_constraints_lazy(LinearOperator):
     def __init__(self,group,rank):
         self.d = group.d
         #TODO: make more extensible wrg to generators and non tensor reps
-        try: self.hi = group.discrete_generators_lazy
-        except AttributeError: 
+        if group.discrete_generators_lazy is not NotImplemented:
+            self.hi = group.discrete_generators_lazy
+        else: 
             self.hi=group.discrete_generators
             logging.info(f"no discrete lazy found for {group}, {rank}")
-        try: self.Ai = group.lie_algebra_lazy
-        except AttributeError: 
+        if group.lie_algebra_lazy is not NotImplemented:
+            self.Ai = group.lie_algebra_lazy
+        else:
             self.Ai = group.lie_algebra
             logging.info(f"no Lie Algebra lazy found for {group}, {rank}")
         #self.hi = group.discrete_generators
@@ -470,11 +472,11 @@ def orthogonal_complement(proj):
 
 def krylov_constraint_solve(C,tol=3e-3):
     r = 5
-    if C.shape[0]*r*2>7e8: raise Exception(f"Solns for contraints {C.shape} too large to fit in memory")
+    if C.shape[0]*r*2>2e9: raise Exception(f"Solns for contraints {C.shape} too large to fit in memory")
     found_rank=5
     while found_rank==r:
         r *= 2
-        if C.shape[0]*r>7e8:
+        if C.shape[0]*r>2e9:
             logging.error("Hit memory limits, switching to sample from equivariant subspace")
             break
         Q = krylov_constraint_solve_upto_r(C,r,tol)

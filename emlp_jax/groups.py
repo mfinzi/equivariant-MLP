@@ -259,17 +259,6 @@ class Symplectic(Group):
                 self.lie_algebra[k,j,m+i] = 1
                 k+=1
         super().__init__(m)
-@export
-class Permutation(Group):
-    def __init__(self,n):
-        perms = np.arange(n)[None]+np.zeros((n-1,1)).astype(int)
-        perms[:,0] = np.arange(1,n)
-        perms[np.arange(n-1),np.arange(1,n)[None]]=0
-        self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in perms]
-        super().__init__(n)
-
-@export
-class S(Permutation): pass #Alias permutation group with Sn.
 
 class LazyShift(LinearOperator):
     def __init__(self,n,k=1):
@@ -293,6 +282,32 @@ class DiscreteTranslation(Group):
 
 @export
 class Z(DiscreteTranslation): pass # Alias cyclic translations with Z
+
+@export
+class Permutation(Group):
+    def __init__(self,n):
+        #K=n//5
+        # perms = np.arange(n)[None]+np.zeros((K,1)).astype(int)
+        # for i in range(1,K):
+        #     perms[i,[0,(i*n)//K]] = perms[i,[(i*n)//K,0]]
+        # print(perms)
+        # self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in perms]+[LazyShift(n)]
+        perms = np.arange(n)[None]+np.zeros((n-1,1)).astype(int)
+        perms[:,0] = np.arange(1,n)
+        perms[np.arange(n-1),np.arange(1,n)[None]]=0
+        self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in perms]
+        #self.discrete_generators_lazy = [SwapMatrix((0,i),n) for i in range(1,n)]
+        # Adding superflous extra generators can actually *decrease* the runtime of the iterative
+        # krylov solver by improving the conditioning of the constraint matrix
+        # swap_perm = np.arange(n).astype(int)
+        # swap_perm[[0,1]] = swap_perm[[1,0]]
+        # swap_perm2 = np.arange(n).astype(int)
+        # swap_perm2[[0,n//2]] = swap_perm2[[n//2,0]]
+        # self.discrete_generators_lazy = [PermutationMatrix(swap_perm)]+[LazyShift(n,2**i) for i in range(int(np.log2(n)))]
+        super().__init__(n)
+
+@export
+class S(Permutation): pass #Alias permutation group with Sn.
 
 @export
 class U(Group): # Of dimension n^2
@@ -378,6 +393,20 @@ class PermutationMatrix(LinearOperator):
         return V[self.perm]
     def _adjoint(self):
         return PermutationMatrix(np.argsort(self.perm))
+    def invT(self):
+        return self
+
+class SwapMatrix(LinearOperator):
+    def __init__(self,swaprows,n):
+        self.swaprows=swaprows
+        self.shape = (n,n)
+    def _matmat(self,V): #(c,k)
+        V = jax.ops.index_update(V, jax.ops.index[self.swaprows], V[self.swaprows[::-1]])
+        return V
+    def _matvec(self,V):
+        return self._matmat(V)
+    def _adjoint(self):
+        return self
     def invT(self):
         return self
 

@@ -8,7 +8,7 @@ from jax import device_put
 import optax
 import collections,itertools
 from functools import lru_cache as cache
-from emlp_jax.utils import disk_cache
+from emlp_jax.utils import disk_cache,ltqdm
 from emlp_jax.linear_operator_jax import LinearOperator
 import scipy as sp
 import scipy.linalg
@@ -16,7 +16,6 @@ import functools
 import random
 import logging
 import emlp_jax
-from oil.utils.mytqdm import tqdm
 import math
 from jax.ops import index, index_add, index_update
 import matplotlib.pyplot as plt
@@ -433,12 +432,12 @@ class tensor_constraints_lazy(LinearOperator):
             self.hi = group.discrete_generators_lazy
         else: 
             self.hi=group.discrete_generators
-            logging.info(f"no discrete lazy found for {group}, {rank}")
+            logging.debug(f"no discrete lazy found for {group}, {rank}")
         if group.lie_algebra_lazy is not NotImplemented:
             self.Ai = group.lie_algebra_lazy
         else:
             self.Ai = group.lie_algebra
-            logging.info(f"no Lie Algebra lazy found for {group}, {rank}")
+            logging.debug(f"no Lie Algebra lazy found for {group}, {rank}")
         #self.hi = group.discrete_generators
         #self.Ai = group.lie_algebra
         self.G=group
@@ -496,7 +495,7 @@ def krylov_constraint_solve_upto_r(C,r,tol=3e-3,lr=1e-2):
     loss_and_grad = jit(jax.value_and_grad(loss))
 
     #lossvalues = []
-    for i in tqdm(range(1000),desc=f'Krylov Solving for Equivariant Subspace r<={r}'):
+    for i in ltqdm(range(1000),desc=f'Krylov Solving for Equivariant Subspace r<={r}',level='info'):
         lossval, grad = loss_and_grad(W)
         updates, opt_state = opt_update(grad, opt_state, W)
         W = optax.apply_updates(W, updates)
@@ -528,12 +527,12 @@ def sparsify_basis(Q,lr=3e-2): #(n,r)
 
     loss_and_grad = jit(jax.value_and_grad(loss))
 
-    for i in tqdm(range(1000),desc=f'sparsifying basis'):
+    for i in ltqdm(range(1000),desc=f'sparsifying basis',level='info'):
         lossval, grad = loss_and_grad(W)
         updates, opt_state = opt_update(grad, opt_state, W)
         W = optax.apply_updates(W, updates)
         if lossval>1e2 and i>100: # Solve diverged due to too high learning rate
-            logging.warning(f"Constraint solving diverged, trying lower learning rate {lr/3:.2e}")
+            logging.warning(f"basis sparsification diverged, trying lower learning rate {lr/3:.2e}")
             return sparsify_basis(Q,lr=lr/3)
     Q = np.copy(Q@W.T)
     Q[np.abs(Q)<1e-2]=0
@@ -550,7 +549,7 @@ def bilinear_weights(W_rep,x_rep):
     x_multiplicities = x_rep.multiplicities()
     x_multiplicities = {rep:n for rep,n in x_multiplicities.items() if rep!=Scalar}
     nelems = lambda nx,rep: min(nx,rep.size())
-    active_dims = sum([W_multiplicities[rep]*nelems(n,rep) for rep,n in x_multiplicities.items()])
+    active_dims = sum([W_multiplicities.get(rep,0)*nelems(n,rep) for rep,n in x_multiplicities.items()])
     # Get the permutation of the vector when grouped by tensor rank
     inverse_perm = jnp.argsort(W_rep.argsort())
     rank_indices_dict = tensor_indices_dict(x_rep)

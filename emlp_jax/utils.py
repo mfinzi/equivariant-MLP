@@ -1,5 +1,40 @@
 import pickle, atexit
 import logging
+
+import time
+import io
+
+from tqdm.auto import tqdm
+tqdm.get_lock().locks = []
+
+# class TqdmToLogger(io.StringIO):
+#     """
+#         Output stream for TQDM which will output to logger module instead of
+#         the StdOut.
+#     """
+#     logger = None
+#     level = None
+#     buf = ''
+#     def __init__(self,logger,level=None):
+#         super(TqdmToLogger, self).__init__()
+#         self.logger = logger
+#         self.level = level or logging.INFO
+#     def write(self,buf):
+#         self.buf = buf.strip('\r\n\t ')
+#     def flush(self):
+#         self.logger.log(self.level, self.buf)
+#)
+
+log_levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
+                        'warn': logging.WARNING,'warning': logging.WARNING,
+                        'info': logging.INFO,'debug': logging.DEBUG}
+
+def ltqdm(*args,level='info',**kwargs):
+    if logging.root.level<=log_levels[level.lower()]:
+        return tqdm(*args,**kwargs)
+    else:
+        return args[0]
+
 class NoCache(object):
     def __enter__(self):
         self.settings = CacheSettings.disk_caching

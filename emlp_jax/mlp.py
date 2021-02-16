@@ -24,6 +24,7 @@ from jax.experimental.ode import odeint
 from functools import partial
 
 def Sequential(*args):
+    """ Wrapped to mimic pytorch syntax"""
     return nn.Sequential(args)
 
 class LieLinear(nn.Linear):  #

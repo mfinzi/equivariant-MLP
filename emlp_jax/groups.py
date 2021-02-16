@@ -92,7 +92,10 @@ class Group(object,metaclass=Named):
     def __str__(self):
         return repr(self)
     def __repr__(self):
-        return f"{self.__class__}{list(self.args) if self.args else ''}"
+        outstr = f"{self.__class__}"
+        if self.args:
+            outstr += '('+''.join(repr(arg) for arg in self.args)+')'
+        return outstr
     def __eq__(self,G2): #TODO: check that spans are equal?
         return repr(self)==repr(G2)
         # if self.lie_algebra.shape!=G2.lie_algebra.shape or \
@@ -241,7 +244,7 @@ class O13(SO13p):
 class Lorentz(O13): pass
 
 @export
-class Symplectic(Group):
+class Sp(Group):
     def __init__(self,m):
         self.lie_algebra = np.zeros((m*(2*m+1),2*m,2*m))
         k=0
@@ -260,6 +263,9 @@ class Symplectic(Group):
                 k+=1
         super().__init__(m)
 
+@export
+class Symplectic(Sp): pass
+
 class LazyShift(LinearOperator):
     def __init__(self,n,k=1):
         self.k=k
@@ -275,16 +281,16 @@ class LazyShift(LinearOperator):
         return self
 
 @export
-class DiscreteTranslation(Group):
+class Z(Group):
     def __init__(self,n):
         self.discrete_generators_lazy = [LazyShift(n)]
         super().__init__(n)
 
 @export
-class Z(DiscreteTranslation): pass # Alias cyclic translations with Z
+class DiscreteTranslation(Z): pass # Alias cyclic translations with Z
 
 @export
-class Permutation(Group):
+class S(Group): #The permutation group
     def __init__(self,n):
         #K=n//5
         # perms = np.arange(n)[None]+np.zeros((K,1)).astype(int)
@@ -307,7 +313,7 @@ class Permutation(Group):
         super().__init__(n)
 
 @export
-class S(Permutation): pass #Alias permutation group with Sn.
+class Permutation(S): pass #Alias permutation group with Sn.
 
 @export
 class U(Group): # Of dimension n^2

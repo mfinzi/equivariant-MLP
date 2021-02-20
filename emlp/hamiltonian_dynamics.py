@@ -5,8 +5,8 @@ import numpy as np
 import jax.numpy as jnp
 from jax.experimental.ode import odeint
 from torch.utils.data import Dataset
-from emlp_jax.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from emlp_jax.equivariant_subspaces import Scalar,Vector
+from core.groups import SO2eR3,O2eR3,DkeR3,Trivial
+from core.representation import T
 from oil.utils.utils import Named
 from oil.tuning.configGenerator import flatten_dict
 import os
@@ -121,8 +121,8 @@ class SHO(HamiltonianDataset):
 class DoubleSpringPendulum(HamiltonianDataset):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
-        self.rep_in = 4*Vector
-        self.rep_out = Scalar
+        self.rep_in = 4*T(1)#Vector
+        self.rep_out = T(0)#Scalar
         self.symmetry = O2eR3()
         self.stats = (0,1,0,1)
     def H(self,z):

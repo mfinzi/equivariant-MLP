@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from emlp_jax.equivariant_subspaces import Scalar,Vector,Matrix,T
+from core.representation import Scalar,Vector,Matrix,T
 from torch.utils.data import Dataset
 from oil.utils.utils import export,Named,Expression,FixedNumpySeed
-from emlp.groups import SO,O,Trivial,Lorentz
+from core.groups import SO,O,Trivial,Lorentz
 import pandas as pd
 import os
 import numpy as np

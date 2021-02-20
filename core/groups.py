@@ -7,12 +7,11 @@ import jax.numpy as jnp
 from objax.nn.init import kaiming_normal, xavier_normal
 from objax.module import Module
 import objax
-from emlp_jax.linear_operator_jax import LinearOperator
-import emlp_jax.equivariant_subspaces as equivariant_subspaces
+from core.linear_operator_jax import LinearOperator
 from jax import jit,vmap
 from functools import partial
 import logging
-from emlp_jax.mixed_tensors import lazy_kron
+from core.product_sum_reps import lazy_kron,lazy_kronsum,LazyPerm,I
 
 def rel_err(A,B):
     return jnp.mean(jnp.abs(A-B))/(jnp.mean(jnp.abs(A)) + jnp.mean(jnp.abs(B))+1e-6)
@@ -139,20 +138,7 @@ def noise2samples(zs,ks,lie_algebra,discrete_generators,seed=0):
     return vmap(noise2sample,(0,0,None,None,None),0)(zs,ks,lie_algebra,discrete_generators,seed)
 
 
-class I(LinearOperator):
-    def __init__(self,d):
-        self.shape = (d,d)
-    def _matmat(self,V): #(c,k)
-        return V
-    def _matvec(self,V):
-        return V
-    def _adjoint(self):
-        return self
-    def invT(self):
-        return self
 
-def lazy_kronsum(Ms):
-    return sum(lazy_kron(i*[I]+[Mi]+(n-i-1)*[I]) for i,Mi in enumerate(Ms))
 
 class DirectProduct(Group):
     def __init__(self,G1,G2):
@@ -297,11 +283,11 @@ class S(Group): #The permutation group
         # for i in range(1,K):
         #     perms[i,[0,(i*n)//K]] = perms[i,[(i*n)//K,0]]
         # print(perms)
-        # self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in perms]+[LazyShift(n)]
+        # self.discrete_generators_lazy = [LazyPerm(perm) for perm in perms]+[LazyShift(n)]
         perms = np.arange(n)[None]+np.zeros((n-1,1)).astype(int)
         perms[:,0] = np.arange(1,n)
         perms[np.arange(n-1),np.arange(1,n)[None]]=0
-        self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in perms]
+        self.discrete_generators_lazy = [LazyPerm(perm) for perm in perms]
         #self.discrete_generators_lazy = [SwapMatrix((0,i),n) for i in range(1,n)]
         # Adding superflous extra generators can actually *decrease* the runtime of the iterative
         # krylov solver by improving the conditioning of the constraint matrix
@@ -309,7 +295,7 @@ class S(Group): #The permutation group
         # swap_perm[[0,1]] = swap_perm[[1,0]]
         # swap_perm2 = np.arange(n).astype(int)
         # swap_perm2[[0,n//2]] = swap_perm2[[n//2,0]]
-        # self.discrete_generators_lazy = [PermutationMatrix(swap_perm)]+[LazyShift(n,2**i) for i in range(int(np.log2(n)))]
+        # self.discrete_generators_lazy = [LazyPerm(swap_perm)]+[LazyShift(n,2**i) for i in range(int(np.log2(n)))]
         super().__init__(n)
 
 @export
@@ -372,7 +358,7 @@ class Cube(Group):
         order = np.arange(6) # []
         Fperm = np.array([4,1,0,3,5,2])
         Lperm = np.array([3,0,2,5,4,1])
-        self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Fperm,Lperm]]
+        self.discrete_generators_lazy = [LazyPerm(perm) for perm in [Fperm,Lperm]]
         super().__init__()
 
 
@@ -388,19 +374,6 @@ def unpad(padded_perm):
 
 
 
-class PermutationMatrix(LinearOperator):
-    def __init__(self,perm):
-        self.perm=perm
-        self.shape = (len(perm),len(perm))
-
-    def _matmat(self,V): #(c,k) #Still needs to be tested??
-        return V[self.perm]
-    def _matvec(self,V):
-        return V[self.perm]
-    def _adjoint(self):
-        return PermutationMatrix(np.argsort(self.perm))
-    def invT(self):
-        return self
 
 class SwapMatrix(LinearOperator):
     def __init__(self,swaprows,n):
@@ -444,7 +417,7 @@ class RubiksCube(Group): #3x3 rubiks cube
         Bperm = RotLeft[Uperm[RotRight]]# Bperm = RotRight<-Uperm<-RotLeft
         Lperm = RotFront[Uperm[RotBack]] # Lperm = RotBack<-Uperm<-RotFront
         Dperm = RotRight[RotRight[Uperm[RotLeft[RotLeft]]]] # Dperm = RotLeft<-RotLeft<-Uperm<-RotRight<-RotRight
-        self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
+        self.discrete_generators_lazy = [LazyPerm(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
         super().__init__()
 
 
@@ -478,7 +451,7 @@ class RubiksCube2x2(Group):
         Dperm = RotRight[RotRight[Uperm[RotLeft[RotLeft]]]] # Dperm = RotLeft<-RotLeft<-Uperm<-RotRight<-RotRight
         I = np.eye(24)
         self.perms = [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]
-        self.discrete_generators_lazy = [PermutationMatrix(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
+        self.discrete_generators_lazy = [LazyPerm(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
         super().__init__()
 
 

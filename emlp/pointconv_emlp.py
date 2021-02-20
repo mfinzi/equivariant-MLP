@@ -20,43 +20,33 @@ import objax
 from objax.nn.init import orthogonal
 from emlp_jax.mlp import Sequential
 
-class ApplyOnComponent(Module):
-    def __init__(self,module,dim):#@
+class MaskedEMLPBlock(Module):
+    def __init__(self,rep_in,rep_out):
         super().__init__()
-        self.module = module
-        self.dim=dim
-        #self.network = LieLinear(self.rep_in,self.rep_out)
-    def __call__(self,*x,training=True):
-        #print(f"apply on component started up with {len(x)} sized tuple")
-        xs = list(x)
-        xs[self.dim] = self.module(xs[self.dim])
-        #print(f"apply on component ended up with {len(x)} sized tuple")
-        return tuple(xs)
+        self.linear = LieLinear(rep_in,gated(rep_out))
+        self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
+        self.bn = TensorMaskBN(gated(rep_out))
+        self.nonlinearity = GatedNonlinearity(rep_out)
+    def __call__(self,x,mask,training=True):
+        lin = self.linear(x)
+        preact,mask = self.bn(self.bilinear(lin)+lin,mask,training=training)
+        return (self.nonlinearity(preact),mask)
 
-def swish(x):
-    return jax.nn.sigmoid(x)*x
 
-def LinearBNact(chin,chout):
-    """assumes that the inputs to the net are shape (bs,n,n,c)"""
+def EWeightNet(rep_in,rep_out,k=32):
+    rep_mid = uniform_rep(k,rep_in.G)
     return Sequential(
-        ApplyOnComponent(nn.Linear(chin,chout),dim=0),
-        MaskBN(chout),
-        ApplyOnComponent(swish,dim=0))
+        EMLPBlock(in_dim, rep_mid),
+        EMLPBlock(rep_mid, rep_mid),
+        EMLPBlock(rep_mid, out_dim))
 
-
-def WeightNet(in_dim,out_dim,k=32):
-    return Sequential(
-        *LinearBNact(in_dim, k),
-        *LinearBNact(k, k),
-        *LinearBNact(k, out_dim))
-
-class PointConv(Module):
-    def __init__(self,chin,chout,mean=True):
+class EMLPNetBlock(Module):
+    def __init__(self,repin,repout,mean=True):
         super().__init__()
         self.chin = chin # input channels
         self.cmco_ci = 16 # a hyperparameter controlling size and bottleneck compute cost of weightnet
-        self.weightnet = WeightNet(min(chin,5)*2, self.cmco_ci) # MLP - final layer to compute kernel vals (see A1)
-        self.linear = nn.Linear(self.cmco_ci * chin, chout)        # final linear layer to compute kernel vals (see A1)
+        self.weightnet = EWeightNet(T(1,0), uniform_rep(32,repin.G)) # MLP - final layer to compute kernel vals (see A1)
+        self.linear = LieLinear(self.cmco_ci * repin, repout) #TODO: make sure rep is fitting into the right shape
         self.mean=mean  # Whether or not to divide by the number of mc_samples
 
     def point_convolve(self,mlp_feats,vals,mask,training):

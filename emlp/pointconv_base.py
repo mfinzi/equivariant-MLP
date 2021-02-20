@@ -3,10 +3,10 @@ import jax.numpy as jnp
 import objax.nn as nn
 import objax.functional as F
 import numpy as np
-from emlp_jax.equivariant_subspaces import T,Scalar,Vector,Matrix,Quad,size
-from emlp_jax.equivariant_subspaces import capped_tensor_ids,rep_permutation,bilinear_weights
-from emlp_jax.groups import LearnedGroup
-from emlp_jax.batchnorm import TensorMaskBN,gate_indices,MaskBN
+from core.representation import T,Scalar,Vector,Matrix,Quad,size
+from core.representation import capped_tensor_ids,rep_permutation,bilinear_weights
+from core.groups import LearnedGroup
+from emlp.batchnorm import TensorMaskBN,gate_indices,MaskBN
 import collections
 from oil.utils.utils import Named,export
 import scipy as sp
@@ -18,7 +18,7 @@ from objax.nn.init import kaiming_normal, xavier_normal
 from objax.module import Module
 import objax
 from objax.nn.init import orthogonal
-from emlp_jax.mlp import Sequential
+from emlp.mlp import Sequential
 
 class ApplyOnComponent(Module):
     def __init__(self,module,dim):#@
@@ -143,7 +143,6 @@ class ResNet(Module):
         self.net = Sequential(
             MaskBN(chin),
             ApplyOnComponent(nn.Linear(chin,k[0]),dim=0), #embedding layer
-            #BottleBlock(k[0],k[0]),
             *[BottleBlock(k[i],k[i+1]) for i in range(num_layers)],
             MaskBN(k[-1]),
             ApplyOnComponent(swish,dim=0),

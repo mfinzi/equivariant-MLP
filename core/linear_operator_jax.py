@@ -548,6 +548,9 @@ class _SumLinearOperator(LinearOperator):
         A, B = self.args
         return A.H + B.H
 
+    def invT(self):
+        A,B = self.args
+        return A.invT() + B.invT()
 
 class _ProductLinearOperator(LinearOperator):
     def __init__(self, A, B):
@@ -576,6 +579,10 @@ class _ProductLinearOperator(LinearOperator):
     def _adjoint(self):
         A, B = self.args
         return B.H * A.H
+    
+    def invT(self):
+        A,B = self.args
+        return A.invT()*B.invT()
 
 
 class _ScaledLinearOperator(LinearOperator):

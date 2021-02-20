@@ -1,11 +1,6 @@
-from emlp_jax.mlp import MLP,EMLP#,LinearBNSwish
-from emlp_jax.datasets import O5Synthetic,ParticleInteraction,Inertia
 import jax.numpy as jnp
 import jax
-from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector
-from emlp_jax.groups import SO,O,Trivial,Lorentz,O13,SO13,SO13p
-from emlp_jax.mlp import EMLP,LieLinear,Standardize
-from emlp_jax.model_trainer import RegressorPlus
+from core.groups import SO,O,Trivial,Lorentz,O13,SO13,SO13p
 import itertools
 import numpy as np
 import torch
@@ -17,19 +12,18 @@ from oil.datasetup.datasets import split_dataset
 from oil.tuning.args import argupdated_config
 from functools import partial
 import logging
-import emlp_jax
+import core
 import objax
 import copy
 
-from emlp_jax.mlp import MLP,EMLP,MLPH,EMLPH#,LinearBNSwish
-from emlp_jax.datasets import O5Synthetic,ParticleInteraction
+from emlp.mlp import MLP,EMLP,MLPH,EMLPH#,LinearBNSwish
+from emlp.datasets import O5Synthetic,ParticleInteraction,Inertia
 import jax.numpy as jnp
 import jax
-from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector
-from emlp_jax.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from emlp_jax.mlp import EMLP,LieLinear,Standardize
-from emlp_jax.model_trainer import RegressorPlus
-from emlp_jax.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,hnn_trial
+from core.groups import SO2eR3,O2eR3,DkeR3,Trivial
+from emlp.mlp import EMLP,LieLinear,Standardize
+from emlp.model_trainer import RegressorPlus
+from emlp.hamiltonian_dynamics import IntegratedDynamicsTrainer,DoubleSpringPendulum,hnn_trial
 import itertools
 import numpy as np
 import torch
@@ -42,9 +36,9 @@ from oil.tuning.args import argupdated_config
 from functools import partial
 import torch.nn as nn
 import logging
-import emlp_jax
+import core
 import objax
-from emlp_jax.mlp import MLPBlock,Sequential,swish
+from emlp.mlp import MLPBlock,Sequential,swish
 import objax.nn as nn
 import objax.functional as F
 from objax.module import Module

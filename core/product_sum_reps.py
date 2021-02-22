@@ -106,7 +106,7 @@ class SumRep(Rep):
         Inputs: [generators seq(tensor(d,d))] [ranks seq(tuple(p,q))]
         Outputs: [r int] [projection (tensor(r)->tensor(rep_dim))]"""
         Qs = {rep: rep.symmetric_basis() for rep in self.reps}
-        Qs = {rep: jax.device_put(Q.astype(np.float32)) for rep,Q in Qs.items()}
+        Qs = {rep: (jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for rep,Q in Qs.items()}
         active_dims = sum([self.reps[rep]*Qs[rep].shape[-1] for rep in Qs.keys()])
         def lazy_Q(array):
             array = array.T
@@ -208,6 +208,7 @@ def distribute_product(reps,extra_perm=None):
         rs,cs = zip(*prod)
         #import pdb; pdb.set_trace()
         prod_rep,canonicalizing_perm = (math.prod(cs)*reduce(lambda a,b: a*b,rs)).canonicalize()
+        #print(f"{rs}:{cs} in distribute yield prod_rep {prod_rep}")
         ordered_reps.append(prod_rep)
         shape = []
         for r,c in prod:
@@ -251,44 +252,44 @@ class ProductRep(Rep):
         else: # other with list
             # Get reps and permutations
             reps,perms = zip(*[rep.canonicalize() for rep in reps])
-            rep_counters = [rep.reps if isinstance(rep,ProductRep) else {rep:1} for rep in reps]
+            rep_counters = [rep.reps if type(rep)==ProductRep else {rep:1} for rep in reps]
             # Combine reps and permutations: Pi_a + Pi_b = Pi_{a x b}
             self.reps,perm = self.compute_canonical(rep_counters,perms)
             self.perm = extra_perm[perm] if extra_perm is not None else perm
             
         self.invperm = np.argsort(self.perm)
         self.canonical=(self.perm==self.invperm).all()
-        self.Gs = set(rep.G for rep in self.reps.keys())
-        if len(self.Gs)==1: self.G= list(self.Gs)[0]
+        Gs = tuple(set(rep.G for rep in self.reps.keys()))
+        assert len(Gs)==1, f"Multiple different groups {Gs} in product rep {self}"
+        self.G= Gs[0]
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
-    def __new__(cls,*reps,extra_perm=None,counter=None):
-        if any(isinstance(rep,SumRep) for rep in reps):
-            return distribute_product(reps)
-        if counter is not None: reps = counter.keys()
-        unique_groups = set(rep.G for rep in reps if hasattr(rep,'G'))
-        if len(unique_groups)>1 and len(unique_groups)!=len(reps):
-            assert counter is None
-            # write as ProductRep of separate ProductReps each with only one Group
-            reps,perms = zip(*[rep.canonicalize() for rep in reps])
-            rep_counters = [rep.reps if isinstance(rep,ProductRep) else {rep:1} for rep in reps]
-            reps,perm = cls.compute_canonical(rep_counters,perms) # so that reps is sorted by group
-            perm = extra_perm[perm] if extra_perm is not None else perm
-            group_dict = defaultdict(dict)
-            for rep,c in reps.items():
-                group_dict[rep.G][rep]=c
-            sub_products = {ProductRep(counter=repdict):1 for G,repdict in group_dict.items()}
-            print(f"calling with {sub_products}")
-            return ProductRep(counter=sub_products,extra_perm=perm) 
-            #init is being called twice because ProductRepFromCollection is a subclass
-        else:
-            return super().__new__(cls)
+    # def __new__(cls,*reps,extra_perm=None,counter=None):
+        
+    #     if counter is not None: reps = counter.keys()
+    #     unique_groups = set(rep.G for rep in reps if hasattr(rep,'G'))
+    #     if len(unique_groups)>1 and len(unique_groups)!=len(reps):
+    #         assert counter is None
+    #         # write as ProductRep of separate ProductReps each with only one Group
+    #         reps,perms = zip(*[rep.canonicalize() for rep in reps])
+    #         rep_counters = [rep.reps if isinstance(rep,ProductRep) else {rep:1} for rep in reps]
+    #         reps,perm = cls.compute_canonical(rep_counters,perms) # so that reps is sorted by group
+    #         perm = extra_perm[perm] if extra_perm is not None else perm
+    #         group_dict = defaultdict(dict)
+    #         for rep,c in reps.items():
+    #             group_dict[rep.G][rep]=c
+    #         sub_products = {ProductRep(counter=repdict):1 for G,repdict in group_dict.items()}
+    #         print(f"calling with {sub_products}")
+    #         return ProductRep(counter=sub_products,extra_perm=perm) 
+    #         #init is being called twice because ProductRepFromCollection is a subclass
+    #     else:
+    #         return super().__new__(cls)
 
     def canonicalize(self):
         """Returns a canonically ordered rep with order np.arange(self.size()) and the
             permutation which achieves that ordering"""
-        return ProductRep(counter=self.reps),self.perm
+        return self.__class__(counter=self.reps),self.perm
 
     # def rho(self,Ms): 
     #     rhos = [rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)]
@@ -298,26 +299,14 @@ class ProductRep(Rep):
     #     return functools.reduce(kronsum,drhos)[self.invperm,:][:,self.invperm]
     
     def rho(self,Ms):
-        if self.G is not None and isinstance(Ms,dict): Ms=Ms[self.G]
+        #if hasattr(self,'G') and isinstance(Ms,dict): Ms=Ms[self.G]
         canonical_lazy = lazy_kron([rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)])
         return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
 
     def drho(self,As):
-        if self.G is not None and isinstance(As,dict): As=As[self.G]
+        #if hasattr(self,'G') and isinstance(As,dict): As=As[self.G]
         canonical_lazy = lazy_kronsum([rep.drho(As) for rep,c in self.reps.items() for _ in range(c)])
         return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
-
-    def symmetric_basis(self):
-        if len(self.Gs)>1: # that means each rep corresponds to a different group. Solns can be decomposed.
-            assert all(count==1 for count in self.reps.values())
-            return lazy_kron([rep.symmetric_basis() for rep,c in self.reps.items()])
-        return super().symmetric_basis()
-
-    def symmetric_projector(self):
-        if len(self.Gs)>1: # that means each rep corresponds to a different group. Solns can be decomposed.
-            assert all(count==1 for count in self.reps.values())
-            return lazy_kron([rep.symmetric_projector() for rep,c in self.reps.items()])
-        return super().symmetric_projector()
 
     def __hash__(self):
         assert self.canonical, f"Not canonical {repr(self)}? perm {self.perm}"
@@ -329,7 +318,7 @@ class ProductRep(Rep):
     @property
     def T(self): #TODO: reavaluate if this needs to change the order ( I think it does)
         """ only swaps to adjoint representation, does not reorder elems"""
-        return ProductRep(counter={rep.T:c for rep,c in self.reps.items()},extra_perm=self.perm)
+        return self.__class__(counter={rep.T:c for rep,c in self.reps.items()},extra_perm=self.perm)
     def __str__(self):
         superscript = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
         return "⊗".join([str(rep)+(f"{c}".translate(superscript) if c>1 else "") for rep,c in self.reps.items()])
@@ -373,6 +362,77 @@ class ProductRep(Rep):
         return dict(merged_cnt),final_order.reshape(-1)
 
 
+class DirectProduct(ProductRep):
+    def __init__(self, *reps,counter=None,extra_perm=None):
+        #Two variants of the constructor:
+        if counter is not None: #one with counter specified directly
+            self.reps=counter
+            self.reps,perm = self.compute_canonical([counter],[np.arange(self.size())])
+            self.perm = extra_perm[perm] if extra_perm is not None else perm
+        else: # other with list
+            reps,perms = zip(*[rep.canonicalize() for rep in reps])
+            #print([type(rep) for rep in reps],type(rep1),type(rep2))
+            rep_counters = [rep.reps if type(rep)==DirectProduct else {rep:1} for rep in reps]
+            # Combine reps and permutations: Pi_a + Pi_b = Pi_{a x b}
+            reps,perm = self.compute_canonical(rep_counters,perms)
+            #print("dprod init",self.reps)
+            group_dict = defaultdict(lambda: 1)
+            for rep,c in reps.items():
+                group_dict[rep.G]=group_dict[rep.G]*rep**c
+            sub_products = {rep:1 for G,rep in group_dict.items()}
+            self.reps = counter = sub_products
+            self.reps,perm2 = self.compute_canonical([counter],[np.arange(self.size())])
+            self.perm = extra_perm[perm[perm2]] if extra_perm is not None else perm[perm2]
+        self.invperm = np.argsort(self.perm)
+        self.canonical=(self.perm==self.invperm).all()
+        # self.G = tuple(set(rep.G for rep in self.reps.keys()))
+        # if len(self.G)==1: self.G= self.G[0]
+        self.is_regular = all(rep.is_regular for rep in self.reps.keys())
+        assert all(count==1 for count in self.reps.values())
+    def __str__(self):
+        superscript = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+        return "⊗".join([str(rep)+f"_{rep.G}" for rep,c in self.reps.items()])
+
+    def symmetric_basis(self):
+        return lazy_kron([rep.symmetric_basis() for rep,c in self.reps.items()])
+
+    def symmetric_projector(self):
+        return lazy_kron([rep.symmetric_projector() for rep,c in self.reps.items()])
+
+    def rho(self,Ms):
+        canonical_lazy = lazy_kron([rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)])
+        return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
+
+    def drho(self,As):
+        canonical_lazy = lazy_kronsum([rep.drho(As) for rep,c in self.reps.items() for _ in range(c)])
+        return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
+    # def canonicalize(self):
+    #     """Returns a canonically ordered rep with order np.arange(self.size()) and the
+    #         permutation which achieves that ordering"""
+    #     return DirectProduct(counter=self.reps),self.perm
+
+
+    # def __new__(cls,*reps,extra_perm=None,counter=None):
+        
+    #     if counter is not None: reps = counter.keys()
+    #     unique_groups = set(rep.G for rep in reps if hasattr(rep,'G'))
+    #     if len(unique_groups)>1 and len(unique_groups)!=len(reps):
+    #         assert counter is None
+    #         # write as ProductRep of separate ProductReps each with only one Group
+    #         reps,perms = zip(*[rep.canonicalize() for rep in reps])
+    #         rep_counters = [rep.reps if isinstance(rep,ProductRep) else {rep:1} for rep in reps]
+    #         reps,perm = cls.compute_canonical(rep_counters,perms) # so that reps is sorted by group
+    #         perm = extra_perm[perm] if extra_perm is not None else perm
+    #         group_dict = defaultdict(dict)
+    #         for rep,c in reps.items():
+    #             group_dict[rep.G][rep]=c
+    #         sub_products = {ProductRep(counter=repdict):1 for G,repdict in group_dict.items()}
+    #         print(f"calling with {sub_products}")
+    #         return ProductRep(counter=sub_products,extra_perm=perm) 
+    #         #init is being called twice because ProductRepFromCollection is a subclass
+    #     else:
+    #         return super().__new__(cls)
+
 # class ProductRepFromCollection(ProductRep): # a different constructor for SumRep
 #     def __init__(self,counter=None,extra_perm=None):
 #         print(f"counter is {counter}")
@@ -400,12 +460,8 @@ class DeferredSumRep(Rep):
        
     def __call__(self,G):
         if G is None: return self
-        return SumRep(*[rep(G) for rep in self.to_sum])
-    def __new__(cls,*reps):
-        if all(rep.concrete if hasattr(rep,'concrete') else True for rep in reps):
-            return SumRep(*reps)
-        else: 
-            return super(DeferredSumRep,cls).__new__(cls)
+        return sum([rep(G) for rep in self.to_sum])
+        #return SumRep(*[rep(G) for rep in self.to_sum])
     def __repr__(self):
         return '('+"+".join(f"{rep}" for rep in self.to_sum)+')'
     def __str__(self):
@@ -423,12 +479,8 @@ class DeferredProductRep(Rep):
             self.to_prod.extend(rep.to_prod if isinstance(rep,DeferredProductRep) else [rep])
     def __call__(self,G):
         if G is None: return self
-        return ProductRep(*[rep(G) for rep in self.to_prod])
-    def __new__(cls,*reps):
-        if all(rep.concrete if hasattr(rep,'concrete') else True for rep in reps):
-            return ProductRep(*reps)
-        else:
-            return super(DeferredProductRep,cls).__new__(cls)
+        return reduce(lambda a,b:a*b,[rep(G) for rep in self.to_prod])
+        #return ProductRep(*[rep(G) for rep in self.to_prod])
     def __repr__(self):
         return "⊗".join(f"{rep}" for rep in self.to_prod)
     def __str__(self):

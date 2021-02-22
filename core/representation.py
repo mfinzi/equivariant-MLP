@@ -105,23 +105,36 @@ class Rep(object):
     def __add__(self, other): # Tensor sum representation R1 + R2
         if isinstance(other,int):
             if other==0: return self
-        return core.product_sum_reps.DeferredSumRep(self,other)
+        elif all(rep.concrete for rep in (self,other) if hasattr(rep,'concrete')):
+            return core.product_sum_reps.SumRep(self,other)
+        else:
+            return core.product_sum_reps.DeferredSumRep(self,other)
     def __radd__(self,other):
         if isinstance(other,int): 
             if other==0: return self
-        return core.product_sum_reps.DeferredSumRep(other,self)
+        else: return NotImplemented
+        
     def __mul__(self,other):
         if isinstance(other,(int,ScalarRep)):
             if other==1 or other==Scalar: return self
             if other==0: return 0
-            return core.product_sum_reps.DeferredSumRep(*(other*[self]))
-        return core.product_sum_reps.DeferredProductRep(self,other)
+            return sum(other*[self])
+        elif all(rep.concrete for rep in (self,other) if hasattr(rep,'concrete')):
+            if any(isinstance(rep,core.product_sum_reps.SumRep) for rep in [self,other]):
+                return core.product_sum_reps.distribute_product([self,other])
+            elif (hasattr(self,'G') and hasattr(other,'G') and self.G!=other.G) or not (hasattr(self,'G') and hasattr(other,'G')):
+                return core.product_sum_reps.DirectProduct(self,other)
+            else: 
+                return core.product_sum_reps.ProductRep(self,other)
+        else:
+            return core.product_sum_reps.DeferredProductRep(self,other)
     def __rmul__(self,other):
         if isinstance(other,(int,ScalarRep)): 
             if other==1 or other==Scalar: return self
             if other==0: return 0
-            return core.product_sum_reps.DeferredSumRep(*(other*[self]))
-        return core.product_sum_reps.DeferredProductRep(other,self)
+            return sum(other*[self])
+        else: return NotImplemented
+
     def __pow__(self,other):
         assert isinstance(other,int), f"Power only supported for integers, not {type(other)}"
         assert other>=0, f"Negative powers {other} not supported"
@@ -132,9 +145,10 @@ class Rep(object):
         return self*other.T
     def __lt__(self, other):
         #Canonical ordering is determined 1st by Group, then by size, then by hash
-        if hasattr(self,'G') and hasattr(other,'G'): 
+        try: 
             if self.G<other.G: return True
             if self.G>other.G: return False
+        except (AttributeError,TypeError): pass
         if self.size()<other.size(): return True
         if self.size()>other.size(): return False
         return hash(self) < hash(other) #For sorting purposes only
@@ -189,7 +203,7 @@ class Base(Rep):
         return self.G.d
     def __repr__(self): return str(self)#f"T{self.rank+(self.G,)}"
     def __str__(self):
-        return "V"
+        return "V"# +(f"_{self.G}" if self.G is not None else "")
     @property
     def T(self):
         return Dual(self.G)
@@ -211,7 +225,7 @@ class Dual(Base):
     def drho(self,A):
         return -A.T
     def __str__(self):
-        return "V*"
+        return "V*"#+(f"_{self.G}" if self.G is not None else "")
     @property
     def T(self):
         return Base(self.G)

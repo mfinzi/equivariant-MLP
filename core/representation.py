@@ -35,7 +35,9 @@ class Rep(object):
     def T(self): raise NotImplementedError # dual representation V*, rho*, drho*
     def __repr__(self): return str(self)#raise NotImplementedError
     def __str__(self): raise NotImplementedError 
-    def __call__(self,G): raise NotImplementedError # set the symmetry group
+    def __call__(self,G): 
+        print(type(self),self)
+        raise NotImplementedError # set the symmetry group
     def canonicalize(self): return self, np.arange(self.size()) # return canonicalized rep
     def size(self):
         print(self,type(self))
@@ -228,92 +230,7 @@ V=Vector= Base()
 Scalar = ScalarRep()#V**0
 def T(p,q=0,G=None):
     return (V**p*V.T**q)(G)
-
-# Vector = T(1,0)
-# Matrix = T(1,1)
-# Quad = T(0,2)
-
-# def V(G=None):
-#     return Base(G)
-# @partial(jit,static_argnums=(1,))
-# def tensor_rho(G,rank):
-#     """ Representation matrix rho(g) for the tensor T(p,q)"""
-#     if rank ==(0,0): return jnp.ones((1,1))
-#     p,q = rank
-#     Gp = functools.reduce(jnp.kron,p*[G],1)
-#     GpGinvTq = functools.reduce(jnp.kron,q*[jnp.linalg.inv(G).T],Gp) # shouldn't this be backwards?
-#     return GpGinvTq
-
-# @partial(jit,static_argnums=(1,))
-# def tensor_drho(M,rank):
-#     """ Returns the Lie Algebra representation drho(M) of a matrix M
-#         acting on a rank (p,q) tensor.
-#         Inputs: [M (d,d)] [rank tuple(p,q)]
-#         Outputs: [drho(M) (d**(p+q),d**(p+q))]"""
-#     if rank ==(0,0): return jnp.zeros((1,1))
-#     p,q = rank
-#     d=M.shape[0]
-#     rep_M = 0
-#     Ikron_powers = [1]
-#     for _ in range(p+q-1):
-#         Ikron_powers.append(jnp.kron(Ikron_powers[-1],jnp.eye(d)))
-#     for r in range(1,p+1):
-#         rep_M += jnp.kron(jnp.kron(Ikron_powers[r-1],M),Ikron_powers[p-r+q])
-#     for s in range(1,q+1):
-#        rep_M -= jnp.kron(jnp.kron(Ikron_powers[p+s-1],M.T),Ikron_powers[q-s])
-#     return rep_M
-
-# class tensor_rho_lazy(LinearOperator):
-#     def __init__(self,M,rank):
-#         self.d = M.shape[0]
-#         self.M = M
-#         self.rank = rank
-#         self.c = self.d**sum(rank)
-#         self.dtype=np.float32
-#     @property
-#     def shape(self):
-#         return (self.c,self.c)
-#     def _matmat(self,V):
-#         c,k = V.shape
-#         p,q = self.rank
-#         if q: 
-#             MinvT = self.M.invT() if hasattr(self.M,"invT") else jnp.linalg.inv(self.M.T)
-#         eV = V.reshape((p+q)*[self.d]+[k])
-#         for i in range(p):
-#             MeV = self.M@jnp.moveaxis(eV,i,0).reshape((self.d,-1))
-#             eV = jnp.moveaxis(MeV.reshape(eV.shape),0,i)
-#         for i in range(p,p+q):
-#             MinvTeV = MinvT@jnp.moveaxis(eV,i,0).reshape((self.d,-1))
-#             eV = jnp.moveaxis(MinvTeV.reshape(eV.shape),0,i)
-#         return eV.reshape((V.shape))
-#     def _transpose(self):
-#         return tensor_rho_lazy(self.M.T,self.rank)
-
-# class tensor_drho_lazy(LinearOperator):
-#     def __init__(self,M,rank):
-#         self.d = M.shape[0]
-#         self.M = M
-#         self.rank = rank
-#         self.c = self.d**sum(rank)
-#         self.dtype=np.float32
-#     @property
-#     def shape(self):
-#         return (self.c,self.c)
-#     def _matmat(self,V): #(c,k)
-#         c,k = V.shape
-#         p,q = self.rank
-#         eV = V.reshape((p+q)*[self.d]+[k])
-#         out = jnp.zeros_like(eV)
-#         for i in range(p):
-#             MeV = self.M@jnp.moveaxis(eV,i,0).reshape((self.d,-1))
-#             out += jnp.moveaxis(MeV.reshape(eV.shape),0,i)
-#         for i in range(p,p+q):
-#             MTeV = self.M.T@jnp.moveaxis(eV,i,0).reshape((self.d,-1))
-#             out -= jnp.moveaxis(MTeV.reshape(eV.shape),0,i)
-#         return out.reshape(*V.shape)
-#     def _transpose(self):
-#         return tensor_drho_lazy(self.M.T,self.rank)
-
+    
 class ConstraintMatrixLazy(LinearOperator):
     def __init__(self,group,rho_lazy,drho_lazy,size):
         self.d = group.d
@@ -403,13 +320,8 @@ def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
     assert final_L <tol, f"Normalized basis has too high error {final_L:.2e} for tol {tol:.2e}"
     scutoff = (S[rank] if r>rank else 0)
     assert scutoff < S[rank-1]/100, f"Singular value gap too small: {S[rank-1]:.2e} above cutoff {scutoff:.2e} below cutoff."
-    
     #logging.debug(f"found Rank {r}, above cutoff {S[rank-1]:.3e} after {S[rank] if r>rank else np.inf:.3e}. Loss {final_L:.1e}")
     return device_put(Q)
-
-# if final_L >10*tol: 
-#     logging.info(f"rerun because of high normalized loss {final_L:.2e}")
-#     return krylov_constraint_solve_upto_r(C,r,tol,lr,U)
 
 class ConvergenceError(Exception): pass
 
@@ -442,31 +354,27 @@ def sparsify_basis(Q,lr=3e-2): #(n,r)
     return A
 
 #@partial(jit,static_argnums=(0,1))
-def bilinear_weights(W_rep,x_rep):
-    W_multiplicities = W_rep.multiplicities()
-    x_multiplicities = x_rep.multiplicities()
+def bilinear_weights(out_rep,in_rep):
+    W_rep,W_perm = (in_rep>>out_rep).canonicalize()
+    inv_perm = np.argsort(W_perm)
+    mat_shape = out_rep.size(),in_rep.size()
+    x_rep=in_rep
+    W_multiplicities = W_rep.reps
+    x_multiplicities = x_rep.reps
     x_multiplicities = {rep:n for rep,n in x_multiplicities.items() if rep!=Scalar}
     nelems = lambda nx,rep: min(nx,rep.size())
     active_dims = sum([W_multiplicities.get(rep,0)*nelems(n,rep) for rep,n in x_multiplicities.items()])
-    # Get the permutation of the vector when grouped by tensor rank
-    inverse_perm = jnp.argsort(W_rep.argsort())
-    rank_indices_dict = tensor_indices_dict(x_rep)
-    reduced_indices_dict = {rep:jnp.concatenate(random.sample(ids,nelems(len(ids),rep)))\
-                                for rep,ids in rank_indices_dict.items()}
-    # reduced_indices_dict = {rep:jnp.concatenate(ids[:nelems(len(ids),rep)])\
-    #                             for rep,ids in rank_indices_dict.items()}
-    block_perm = rep_permutation(W_rep)
+    reduced_indices_dict = {rep:ids[np.random.choice(len(ids),nelems(len(ids),rep))].reshape(-1)\
+                                for rep,ids in x_rep.as_dict(np.arange(x_rep.size())).items()}
     # Apply the projections for each rank, concatenate, and permute back to orig rank order
     @jit
     def lazy_projection(params,x): # (r,), (*c) #TODO: find out why backwards of this function is so slow
-        #logging.warning("bilinear projection called")
         bshape = x.shape[:-1]
         x = x.reshape(-1,x.shape[-1])
         bs = x.shape[0]
         i=0
         Ws = []
         for rep, W_mult in W_multiplicities.items():
-            #print(f"Bilinear {rep}")
             if rep not in x_multiplicities:
                 Ws.append(jnp.zeros((bs,W_mult*rep.size())))
                 continue
@@ -474,42 +382,16 @@ def bilinear_weights(W_rep,x_rep):
             n = nelems(x_mult,rep)
             i_end = i+W_mult*n
             bids =  reduced_indices_dict[rep]
-            bilinear_params = params[i:i_end].reshape(W_mult,n)
+            bilinear_params = params[i:i_end].reshape(W_mult,n) # bs,nK-> (nK,bs)
             i = i_end  # (bs,W_mult,d^r) = (W_mult,n)@(n,d^r,bs)
             bilinear_elems = bilinear_params@x[...,bids].T.reshape(n,rep.size()*bs)
             bilinear_elems = bilinear_elems.reshape(W_mult*rep.size(),bs).T
             Ws.append(bilinear_elems)
         Ws = jnp.concatenate(Ws,axis=-1) #concatenate over rep axis
-        return Ws[...,inverse_perm[block_perm]].reshape(*bshape,*W_rep.shape) # reorder to original rank ordering
+        return Ws[...,inv_perm].reshape(*bshape,*mat_shape) # reorder to original rank ordering
     return active_dims,lazy_projection
         
 @jit
 def mul_part(bparams,x,bids):
     b = math.prod(x.shape[:-1])
     return (bparams@x[...,bids].T.reshape(bparams.shape[-1],-1)).reshape(-1,b).T
-
-@cache()
-def tensor_indices_dict(sumrep):
-    index_dict = collections.defaultdict(list)
-    i=0
-    for rep in sumrep.reps:
-        i_end = i+rep.size()
-        index_dict[rep].append(jnp.arange(i,i_end))
-        i = i_end
-    return index_dict#{rank:np.concatenate(ids) for rank,ids in index_dict.items()}
-
-@cache() #revert to caching?
-def rep_permutation(sumrep):
-    """Permutation from flattened ordering to block ordering """
-    arange = np.arange(sumrep.size())
-    size_cumsums = [np.cumsum([0] + [rep.size() for rep in reps]) for reps in sumrep.shapes]
-    permutation = np.zeros([cumsum[-1] for cumsum in size_cumsums]).astype(np.int)
-    indices_iter = itertools.product(*[range(len(reps)) for reps in sumrep.shapes])
-    i = 0
-    for indices in indices_iter:
-        slices = tuple([slice(cumsum[idx], cumsum[idx + 1]) for idx, cumsum in zip(indices, size_cumsums)])
-        slice_lengths = [sl.stop - sl.start for sl in slices]
-        chunk_size = np.prod(slice_lengths)
-        permutation[slices] += arange[i:i + chunk_size].reshape(*slice_lengths)
-        i += chunk_size
-    return permutation.reshape(-1)

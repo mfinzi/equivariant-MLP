@@ -70,27 +70,6 @@ class SumRep(Rep):
         assert self.canonical
         return hash(tuple(self.reps.items()))
 
-    # def __mul__(self, other): #TODO
-    #     elif isinstance(other,Rep):
-    #         perm = np.arange(self.size()*other.size()).reshape(self.size(),other.size())
-    #         perm = perm[self.perm,:][:,other.perm]
-    #         mults = Counter({rep*other:c for rep,c in self.reps.items()}) #TODO:
-    #         return SumRep(mults,perm)
-    #     else: assert False, f"Unsupported operand Rep.__mul__{type(other)}"
-
-    # def __rmul__(self, other):
-    #     if isinstance(other, int): self*other
-    #     elif isinstance(other,Rep):
-    #         mults = Counter({other*rep:c for rep,c in self.reps.items()})
-    #         return SumRep(mults,NotImplemented)
-    #     else: assert False, f"Unsupported operand Rep.__rmul__{type(other)}"
-    # def __call__(self,G):
-    #     self.reps = Counter({r(G):c for r,c in self.reps.items()})
-    #     print(self.reps)
-    #     return SumRepFromCollection(Counter({rep.T:c for rep,c in self.reps.items()}),self.perm)
-
-
-
     @staticmethod
     def compute_canonical(rep_cnters,rep_perms):
         """ given that rep1_perm and rep2_perm are the canonical orderings for
@@ -174,6 +153,19 @@ class SumRep(Rep):
         drhos = [rep.drho(A) for rep,c in self.reps.items() for _ in range(c)]
         drhoA_blocks = jax.scipy.linalg.block_diag(*rhos)
         return drhoA_blocks[self.invperm,:][:,self.invperm]
+
+
+    def as_dict(self,v):
+        out_dict = {}
+        i =0
+        for rep,c in self.reps.items():
+            chunk = c*rep.size()
+            out_dict[rep] = v[...,self.perm[i:i+chunk]].reshape(v.shape[:-1]+(c,rep.size()))
+            i+= chunk
+        return out_dict
+
+    def __call__(self,G):
+        return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},perm=self.perm)
 
 class SumRepFromCollection(SumRep): # a different constructor for SumRep
     def __init__(self,counter,perm=None):

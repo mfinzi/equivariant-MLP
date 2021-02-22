@@ -4,7 +4,7 @@ import objax.nn as nn
 import objax.functional as F
 import numpy as np
 from core.representation import T,Rep
-from core.representation import rep_permutation,bilinear_weights
+from core.representation import bilinear_weights
 from emlp.batchnorm import TensorBN,gate_indices,gated
 import collections
 from oil.utils.utils import Named,export
@@ -34,8 +34,6 @@ class LieLinear(nn.Linear):  #
         self.b = TrainVar(objax.random.uniform((nout,))/jnp.sqrt(nout))
         self.w = TrainVar(orthogonal((nout, nin)))
         #print("Linear sizes:",repin.size(),repout.size())
-        #assert all((not rep.G is None) for rep in repin.T.reps)
-        #assert all((not rep.G is None) for rep in repout.reps)
         self.rep_W = rep_W = repout*repin.T
         
         rep_bias = repout
@@ -45,8 +43,6 @@ class LieLinear(nn.Linear):  #
     def __call__(self, x): # (cin) -> (cout)
         logging.debug(f"linear in shape: {x.shape}")
         W = (self.Pw@self.w.value.reshape(-1)).reshape(*self.w.value.shape)
-        #logging.error(f"W shape {self.w.value.shape}, repW shape {self.rep_W.shape}")
-        #assert False
         b = self.Pb@self.b.value
         out = x@W.T+b
         logging.debug(f"linear out shape:{out.shape}")
@@ -55,22 +51,15 @@ class LieLinear(nn.Linear):  #
 class BiLinear(Module):
     def __init__(self, repin, repout):
         super().__init__()
-        rep_W = repout*repin.T
-        Wdim, weight_proj = bilinear_weights(rep_W,repin)
+        Wdim, weight_proj = bilinear_weights(repout,repin)
         self.weight_proj = jit(weight_proj)
         self.w = TrainVar(objax.random.normal((Wdim,)))#xavier_normal((Wdim,))) #TODO: revert to xavier
-        logging.info(f"BiW components:{rep_W.size()} dim:{Wdim} rep:{rep_W}")
+        logging.info(f"BiW components: dim:{Wdim}")
 
     def __call__(self, x,training=True):
-        logging.debug(f"Bilinear x shape {x.shape}")
-        logging.debug(f"bilinear in shape: {x.shape}")
         W = self.weight_proj(self.w.value,x)
-        out= .1*(W@x[...,None])[...,0] #TODO: set back to .05
-        #import pdb; pdb.set_trace()
-        logging.debug(f"bilinear out shape: {out.shape}")
+        out= .1*(W@x[...,None])[...,0]
         return out
-
-
 
 
 class GatedNonlinearity(Module): #TODO: support elementwise swish for regular reps
@@ -85,7 +74,6 @@ class GatedNonlinearity(Module): #TODO: support elementwise swish for regular re
 class EMLPBlock(Module):
     def __init__(self,rep_in,rep_out):
         super().__init__()
-        #print(rep_in,rep_out)
         self.rep_out=rep_out
         self.linear = LieLinear(rep_in,gated(rep_out))
         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))

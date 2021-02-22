@@ -44,22 +44,22 @@ class Rep(object):
         raise NotImplementedError # The dimension of the representation
     def rho(self,M): raise NotImplementedError # Group representation of matrix M (n,n)
     def drho(self,A): raise NotImplementedError # Lie Algebra representation of matrix A (n,n)
-    def rho_lazy(self,M): raise NotImplementedError # Lazy version of rho
-    def drho_lazy(self,M): raise NotImplementedError # Lazy version of drho
-    def constraint_matrix(self):
-        """ Given a sequence of exponential generators [A1,A2,...]
-        and a tensor rank (p,q), the function concatenates the representations
-        [drho(A1), drho(A2), ...] into a single large projection matrix.
-        Input: [generators seq(tensor(d,d))], [rank tuple(p,q)], [d int] """
-        constraints = []
-        constraints.extend([self.drho(device_put(A)) for A in self.G.lie_algebra])
-        constraints.extend([self.rho(device_put(h))-jnp.eye(self.size()) for h in self.G.discrete_generators])
-        P = jnp.concatenate(constraints,axis=0) if constraints else jnp.zeros((1,self.size()))
-        return P
+    # def rho_lazy(self,M): raise NotImplementedError # Lazy version of rho
+    # def drho_lazy(self,M): raise NotImplementedError # Lazy version of drho
+    # def constraint_matrix(self):
+    #     """ Given a sequence of exponential generators [A1,A2,...]
+    #     and a tensor rank (p,q), the function concatenates the representations
+    #     [drho(A1), drho(A2), ...] into a single large projection matrix.
+    #     Input: [generators seq(tensor(d,d))], [rank tuple(p,q)], [d int] """
+    #     constraints = [] # Multiply by identity to convert lazy to dense matrices
+    #     constraints.extend([self.drho(A)@jnp.eye(self.size()) for A in self.G.lie_algebra])
+    #     constraints.extend([self.rho(h)@jnp.eye(self.size())-jnp.eye(self.size()) for h in self.G.discrete_generators])
+    #     P = jnp.concatenate(constraints,axis=0) if constraints else jnp.zeros((1,self.size()))
+    #     return P
     
-    def constraint_matrix_lazy(self):
+    def constraint_matrix(self):
         """ A lazy version of constraint_matrix"""
-        return ConstraintMatrixLazy(self.G,self.rho_lazy,self.drho_lazy,self.size())
+        return ConstraintMatrixLazy(self.G,self.rho,self.drho,self.size())
 
     #@disk_cache('./_subspace_cache_jax.dat')
     solcache = {}
@@ -68,19 +68,19 @@ class Rep(object):
             this function computes the orthogonal complement to the projection
             matrix formed by stacking the rows of drho(Mi) together.
             Output [Q (d^(p+q),r)] """
+        if self==Scalar: return jnp.ones((1,1))
         canon_rep,perm = self.canonicalize()
         invperm = np.argsort(perm)
         if canon_rep not in self.solcache:
             logging.info(f"{canon_rep} cache miss")
             logging.info(f"Solving basis for {self}"+(f", for G={self.G}" if hasattr(self,"G") else ""))
-            if self==Scalar: return jnp.ones((1,1))
             #if isinstance(group,Trivial): return np.eye(size(rank,group.d))
-
-            C_lazy = self.constraint_matrix_lazy()
+            C_lazy = self.constraint_matrix()
             if math.prod(C_lazy.shape)>3e7: #Too large to use SVD
                 result = krylov_constraint_solve(C_lazy)
             else:
-                result = orthogonal_complement(self.constraint_matrix())
+                C_dense = C_lazy@jnp.eye(C_lazy.shape[-1])
+                result = orthogonal_complement(C_dense)
             self.solcache[canon_rep]=result
         #print(perm,self.solcache[canon_rep].shape)
         return self.solcache[canon_rep][invperm]
@@ -91,12 +91,15 @@ class Rep(object):
         P = Q_lazy@Q_lazy.H
         return P
 
-    def visualize(self):
+    def visualize(self,*shape):
         #TODO: add support for non square
-        Q = self.symmetric_basis()
-        A = sparsify_basis(Q)
-        k = int(np.sqrt(A.shape[0]))
-        plt.imshow(A.reshape((k,k)))
+        rep,perm = self.canonicalize()
+        Q = rep.symmetric_basis()
+        A = sparsify_basis(Q)[np.argsort(perm)]
+        # Q= self.symmetric_basis() #THIS:
+        # A = sparsify_basis(Q)
+        if hasattr(self,"viz_shape_hint") and not shape:  shape = self.viz_shape_hint
+        plt.imshow(A.reshape(shape))
         plt.axis('off')
 
     def __add__(self, other): # Tensor sum representation R1 + R2
@@ -128,6 +131,10 @@ class Rep(object):
     def __lshift__(self,other):
         return self*other.T
     def __lt__(self, other):
+        #Canonical ordering is determined 1st by Group, then by size, then by hash
+        if hasattr(self,'G') and hasattr(other,'G'): 
+            if self.G<other.G: return True
+            if self.G>other.G: return False
         if self.size()<other.size(): return True
         if self.size()>other.size(): return False
         return hash(self) < hash(other) #For sorting purposes only
@@ -230,24 +237,24 @@ V=Vector= Base()
 Scalar = ScalarRep()#V**0
 def T(p,q=0,G=None):
     return (V**p*V.T**q)(G)
-    
+
 class ConstraintMatrixLazy(LinearOperator):
     def __init__(self,group,rho_lazy,drho_lazy,size):
         self.d = group.d
         self.rho_lazy=rho_lazy
         self.drho_lazy=drho_lazy
-        if group.discrete_generators_lazy is not NotImplemented:
-            self.hi = group.discrete_generators_lazy
-        else: 
-            self.hi=group.discrete_generators
-            logging.debug(f"no discrete lazy found for {group}")
-        if group.lie_algebra_lazy is not NotImplemented:
-            self.Ai = group.lie_algebra_lazy
-        else:
-            self.Ai = group.lie_algebra
-            logging.debug(f"no Lie Algebra lazy found for {group}")
-        #self.hi = group.discrete_generators
-        #self.Ai = group.lie_algebra
+        # if group.discrete_generators_lazy is not NotImplemented:
+        #     self.hi = group.discrete_generators_lazy
+        # else: 
+        #     self.hi=group.discrete_generators
+        #     logging.debug(f"no discrete lazy found for {group}")
+        # if group.lie_algebra_lazy is not NotImplemented:
+        #     self.Ai = group.lie_algebra_lazy
+        # else:
+        #     self.Ai = group.lie_algebra
+        #     logging.debug(f"no Lie Algebra lazy found for {group}")
+        self.hi = group.discrete_generators
+        self.Ai = group.lie_algebra
         self.G=group
         self.n_constraints= len(self.hi)+len(self.Ai)
         if not self.n_constraints: raise NotImplementedError
@@ -319,13 +326,14 @@ def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
     final_L = loss_and_grad(Q)[0]
     assert final_L <tol, f"Normalized basis has too high error {final_L:.2e} for tol {tol:.2e}"
     scutoff = (S[rank] if r>rank else 0)
-    assert scutoff < S[rank-1]/100, f"Singular value gap too small: {S[rank-1]:.2e} above cutoff {scutoff:.2e} below cutoff."
+    assert rank==0 or scutoff < S[rank-1]/100, f"Singular value gap too small: {S[rank-1]:.2e} \
+        above cutoff {scutoff:.2e} below cutoff. Final L {final_L:.2e}, earlier {S[rank-5:rank]}"
     #logging.debug(f"found Rank {r}, above cutoff {S[rank-1]:.3e} after {S[rank] if r>rank else np.inf:.3e}. Loss {final_L:.1e}")
     return device_put(Q)
 
 class ConvergenceError(Exception): pass
 
-def sparsify_basis(Q,lr=3e-2): #(n,r)
+def sparsify_basis(Q,lr=1e-2): #(n,r)
     W = np.random.randn(Q.shape[-1],Q.shape[-1])
     W,_ = np.linalg.qr(W)
     opt_init,opt_update = optax.adam(lr)#optax.sgd(1e2,.9)#optax.adam(lr)#optax.sgd(3e-3,.9)#optax.adam(lr)
@@ -337,10 +345,11 @@ def sparsify_basis(Q,lr=3e-2): #(n,r)
 
     loss_and_grad = jit(jax.value_and_grad(loss))
 
-    for i in ltqdm(range(1000),desc=f'sparsifying basis',level='info'):
+    for i in ltqdm(range(3000),desc=f'sparsifying basis',level='info'):
         lossval, grad = loss_and_grad(W)
         updates, opt_state = opt_update(grad, opt_state, W)
         W = optax.apply_updates(W, updates)
+        #W,_ = np.linalg.qr(W)
         if lossval>1e2 and i>100: # Solve diverged due to too high learning rate
             logging.warning(f"basis sparsification diverged, trying lower learning rate {lr/3:.2e}")
             return sparsify_basis(Q,lr=lr/3)

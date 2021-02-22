@@ -145,15 +145,15 @@ class LinearOperator(object):
         if not isshape(shape):
             raise ValueError("invalid shape %r (must be 2-d)" % (shape,))
 
-        self.dtype = dtype
+        self.dtype = np.dtype('float32') #force float 32
         self.shape = shape
 
     def _init_dtype(self):
         """Called from subclasses at the end of the __init__ routine.
         """
         if self.dtype is None:
-            v = np.zeros(self.shape[-1])
-            self.dtype = self.matvec(v).dtype
+            #v = np.zeros(self.shape[-1])
+            self.dtype = np.dtype('float32')#self.matvec(v).dtype #force float 32
 
     def _matmat(self, X):
         """Default matrix-matrix multiplication handler.

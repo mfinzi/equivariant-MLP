@@ -24,7 +24,7 @@ from collections import defaultdict
 class SumRep(Rep):
     concrete=True
     atomic=False
-    def __init__(self,*reps,extra_perm=None):#repcounter,repperm=None):
+    def __init__(self,*reps,extra_perm=None,viz_shape_hint=None):#repcounter,repperm=None):
         """ Constructs a tensor type based on a list of tensor ranks
             and possibly the symmetry generators gen."""
         # Integers can be used as shorthand for scalars.
@@ -40,6 +40,7 @@ class SumRep(Rep):
         self.invperm = np.argsort(self.perm)
         self.canonical=(self.perm==self.invperm).all()
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
+        if viz_shape_hint is not None: self.viz_shape_hint = viz_shape_hint
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
 
@@ -58,6 +59,7 @@ class SumRep(Rep):
     @property
     def T(self):
         """ only swaps to adjoint representation, does not reorder elems"""
+        # not necessarily still canonical ordered
         return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},self.perm)
 
     def __repr__(self):
@@ -178,12 +180,13 @@ class SumRepFromCollection(SumRep): # a different constructor for SumRep
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
 
-def distribute_product(reps):
+def distribute_product(reps,extra_perm=None):
     
     reps = [rep if isinstance(rep,SumRep) else SumRepFromCollection({rep:1}) for rep in reps]
     # compute axis_wise perm to canonical vector ordering along each axis
     reps,perms =zip(*[repsum.canonicalize() for repsum in reps])
-    order = np.arange(math.prod([len(perm) for perm in perms])).reshape(tuple(len(perm) for perm in perms))
+    axis_sizes = [len(perm) for perm in perms]
+    order = np.arange(math.prod(axis_sizes)).reshape(tuple(len(perm) for perm in perms))
     for i,perm in enumerate(perms):
         order = np.swapaxes(np.swapaxes(order,0,i)[perm,...],0,i)
     order = order.reshape(-1)
@@ -217,8 +220,9 @@ def distribute_product(reps):
     #logging.info(f"each perm {each_perm}")
     #
     total_perm = order[block_perm[each_perm]]
+    if extra_perm is not None: total_perm = extra_perm[total_perm]
     #TODO: could achieve additional reduction by canonicalizing at this step, but unnecessary for now
-    return SumRep(*ordered_reps,extra_perm=total_perm)
+    return SumRep(*ordered_reps,extra_perm=total_perm,viz_shape_hint=axis_sizes)
 
 
 @cache()
@@ -239,44 +243,81 @@ def rep_permutation(repsizes_all):
 
 class ProductRep(Rep):
     concrete=True
-    def __init__(self,*reps):
-        # Get reps and permutations
-        reps,perms = zip(*[rep.canonicalize() for rep in reps])
-        rep_counters = [rep.reps if isinstance(rep,ProductRep) else {rep:1} for rep in reps]
-        # Combine reps and permutations: Pi_a + Pi_b = Pi_{a x b}
-        self.reps,self.perm = self.compute_canonical(rep_counters,perms)
+    def __init__(self,*reps,extra_perm=None,counter=None):
+        #Two variants of the constructor:
+        if counter is not None: #one with counter specified directly
+            self.reps=counter
+            self.reps,self.perm = self.compute_canonical([counter],[np.arange(self.size()) if extra_perm is None else extra_perm])
+        else: # other with list
+            # Get reps and permutations
+            reps,perms = zip(*[rep.canonicalize() for rep in reps])
+            rep_counters = [rep.reps if isinstance(rep,ProductRep) else {rep:1} for rep in reps]
+            # Combine reps and permutations: Pi_a + Pi_b = Pi_{a x b}
+            self.reps,perm = self.compute_canonical(rep_counters,perms)
+            self.perm = extra_perm[perm] if extra_perm is not None else perm
+            
         self.invperm = np.argsort(self.perm)
         self.canonical=(self.perm==self.invperm).all()
         self.Gs = set(rep.G for rep in self.reps.keys())
-        self.G= list(self.Gs)[0] if len(self.Gs)==1 else None
+        if len(self.Gs)==1: self.G= list(self.Gs)[0]
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
-    def __new__(cls,*reps):
+    def __new__(cls,*reps,extra_perm=None,counter=None):
         if any(isinstance(rep,SumRep) for rep in reps):
             return distribute_product(reps)
+        if counter is not None: reps = counter.keys()
+        unique_groups = set(rep.G for rep in reps if hasattr(rep,'G'))
+        if len(unique_groups)>1 and len(unique_groups)!=len(reps):
+            assert counter is None
+            # write as ProductRep of separate ProductReps each with only one Group
+            reps,perms = zip(*[rep.canonicalize() for rep in reps])
+            rep_counters = [rep.reps if isinstance(rep,ProductRep) else {rep:1} for rep in reps]
+            reps,perm = cls.compute_canonical(rep_counters,perms) # so that reps is sorted by group
+            perm = extra_perm[perm] if extra_perm is not None else perm
+            group_dict = defaultdict(dict)
+            for rep,c in reps.items():
+                group_dict[rep.G][rep]=c
+            sub_products = {ProductRep(counter=repdict):1 for G,repdict in group_dict.items()}
+            print(f"calling with {sub_products}")
+            return ProductRep(counter=sub_products,extra_perm=perm) 
+            #init is being called twice because ProductRepFromCollection is a subclass
         else:
-            return super(ProductRep,cls).__new__(cls)
+            return super().__new__(cls)
 
     def canonicalize(self):
         """Returns a canonically ordered rep with order np.arange(self.size()) and the
             permutation which achieves that ordering"""
-        return ProductRepFromCollection(self.reps),self.perm
+        return ProductRep(counter=self.reps),self.perm
 
-    def rho(self,Ms): 
-        rhos = [rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)]
-        return functools.reduce(jnp.kron,rhos)[self.invperm,:][:,self.invperm]
-    def drho(self,As):
-        drhos = [rep.drho(As) for rep,c in self.reps.items() for _ in range(c)]
-        return functools.reduce(kronsum,drhos)[self.invperm,:][:,self.invperm]
+    # def rho(self,Ms): 
+    #     rhos = [rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)]
+    #     return functools.reduce(jnp.kron,rhos)[self.invperm,:][:,self.invperm]
+    # def drho(self,As):
+    #     drhos = [rep.drho(As) for rep,c in self.reps.items() for _ in range(c)]
+    #     return functools.reduce(kronsum,drhos)[self.invperm,:][:,self.invperm]
     
-    def rho_lazy(self,Ms):
+    def rho(self,Ms):
+        if self.G is not None and isinstance(Ms,dict): Ms=Ms[self.G]
         canonical_lazy = lazy_kron([rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)])
         return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
 
-    def drho_lazy(self,As):
+    def drho(self,As):
+        if self.G is not None and isinstance(As,dict): As=As[self.G]
         canonical_lazy = lazy_kronsum([rep.drho(As) for rep,c in self.reps.items() for _ in range(c)])
         return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
+
+    def symmetric_basis(self):
+        if len(self.Gs)>1: # that means each rep corresponds to a different group. Solns can be decomposed.
+            assert all(count==1 for count in self.reps.values())
+            return lazy_kron([rep.symmetric_basis() for rep,c in self.reps.items()])
+        return super().symmetric_basis()
+
+    def symmetric_projector(self):
+        if len(self.Gs)>1: # that means each rep corresponds to a different group. Solns can be decomposed.
+            assert all(count==1 for count in self.reps.values())
+            return lazy_kron([rep.symmetric_projector() for rep,c in self.reps.items()])
+        return super().symmetric_projector()
 
     def __hash__(self):
         assert self.canonical, f"Not canonical {repr(self)}? perm {self.perm}"
@@ -288,7 +329,7 @@ class ProductRep(Rep):
     @property
     def T(self): #TODO: reavaluate if this needs to change the order ( I think it does)
         """ only swaps to adjoint representation, does not reorder elems"""
-        return ProductRepFromCollection({rep.T:c for rep,c in self.reps.items()},self.perm)
+        return ProductRep(counter={rep.T:c for rep,c in self.reps.items()},extra_perm=self.perm)
     def __str__(self):
         superscript = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
         return "⊗".join([str(rep)+(f"{c}".translate(superscript) if c>1 else "") for rep,c in self.reps.items()])
@@ -332,17 +373,22 @@ class ProductRep(Rep):
         return dict(merged_cnt),final_order.reshape(-1)
 
 
-class ProductRepFromCollection(ProductRep): # a different constructor for SumRep
-    def __init__(self,counter,perm=None):
-        self.reps = counter
-        self.reps,self.perm = self.compute_canonical([counter],[np.arange(self.size()) if perm is None else perm])
-        self.invperm = np.argsort(self.perm)
-        self.canonical=(self.perm==self.invperm).all()
-        self.Gs = set(rep.G for rep in self.reps.keys())
-        self.G= list(self.Gs)[0] if len(self.Gs)==1 else None
-        self.is_regular = all(rep.is_regular for rep in self.reps.keys())
-        # if not self.canonical:
-        #     print(self,self.perm,self.invperm)
+# class ProductRepFromCollection(ProductRep): # a different constructor for SumRep
+#     def __init__(self,counter=None,extra_perm=None):
+#         print(f"counter is {counter}")
+#         assert counter is not None
+#         self.reps = counter
+#         self.reps,self.perm = self.compute_canonical([counter],[np.arange(self.size()) if extra_perm is None else extra_perm])
+#         self.invperm = np.argsort(self.perm)
+#         self.canonical=(self.perm==self.invperm).all()
+#         self.Gs = set(rep.G for rep in self.reps.keys())
+#         if len(self.Gs)==1: self.G= list(self.Gs)[0]
+#         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
+#         # if not self.canonical:
+#         #     print(self,self.perm,self.invperm)
+#     def __new__(cls,*args,**kwargs):
+#         print("new called")
+#         return Rep.__new__(cls)
 
 class DeferredSumRep(Rep):
     concrete=False
@@ -405,58 +451,19 @@ class DeferredProductRep(Rep):
 #     def drho(self,As):
 #         drhos = [rep.drho(As[G]) for (G,rep) in self.reps.items()]
 #         raise functools.reduce(kronsum,drhos,0)
-#     @property
-#     def T(self):
-#         return ProductGroupTensorRep({G:rep.T for G,rep in self.reps.items()})
+
 #     def __eq__(self, other): 
 #         if not isinstance(other,ProductGroupTensorRep): return False
 #         return len(self.reps)==len(other.reps) \
 #             and all(Ga==Gb for Ga,Gb in zip(self.reps,other.reps)) \
 #             and all(ra==rb for ra,rb in zip(self.reps.values(),other.reps.values())) \
             
-
-#     def __hash__(self):
-#         return hash(tuple(self.reps.items()))
-#     def size(self):
-#         return math.prod([rep.size() for rep in self.reps.values()])
-
-#     def __mul__(self, other): 
-#         #TODO: worry about ordering of representation differing from dict order when new elems are added
-#         out = copy.deepcopy(self) #TODO: check deepcopy not requried
-#         if isinstance(other,ProductGroupTensorRep):
-#             for Gb,rep in other.reps.items():
-#                 if Gb in out.reps: out.reps[Gb]=out.reps[Gb]*rep
-#                 else: out.reps[Gb] = rep
-#             return out
-#         elif isinstance(other,TensorRep):
-#             out.reps[other.G] = out.reps[other.G]*other
-#             return out
-#         else: return NotImplemented
-
-#     def __rmul__(self, other):
-#         out = copy.deepcopy(self)
-#         if isinstance(other,ProductGroupTensorRep):
-#             for Gb,rep in other.reps.items():
-#                 if Gb in out.reps: out.reps[Gb]=rep*out.reps[Gb]
-#                 else: out.reps[Gb] = rep
-#             return out
-#         elif isinstance(other,TensorRep):
-#             out.reps[other.G] = out.reps[other.G]*other
-#             return out
-#         else: return NotImplemented
-
-#     def __str__(self):
-#         return "⊗".join([str(rep) for rep in self.reps.values()])
-
-
-
-
-
-#@jit
+@jit
 def kronsum(A,B):
     return jnp.kron(A,jnp.eye(B.shape[-1])) + jnp.kron(jnp.eye(A.shape[-1]),B)
 
 class lazy_kron(LinearOperator):
+
     def __init__(self,Ms):
         self.Ms = Ms
         self.shape = math.prod([Mi.shape[0] for Mi in Ms]), math.prod([Mi.shape[1] for Mi in Ms])
@@ -464,25 +471,56 @@ class lazy_kron(LinearOperator):
         self.dtype=None
 
     def _matvec(self,v):
-        #print(v.shape)
-        ev = v.reshape(tuple(Mi.shape[-1] for Mi in self.Ms))
-        for i,M in enumerate(self.Ms):
-            ev_front = jnp.moveaxis(ev,i,0)
-            Mev_front = (M@ev_front.reshape((M.shape[-1],-1))).reshape((M.shape[0],)+ev_front.shape[1:])
-            ev = jnp.moveaxis(Mev_front,0,i)
-        return ev.reshape(-1)
+        return self._matmat(v).reshape(-1)
     def _matmat(self,v):
-        #print(v.shape)
-        ev = v.reshape(tuple(Mi.shape[-1] for Mi in self.Ms)+(-1,))
+        ev = v.reshape(*[Mi.shape[-1] for Mi in self.Ms],-1)
         for i,M in enumerate(self.Ms):
             ev_front = jnp.moveaxis(ev,i,0)
-            Mev_front = (M@ev_front.reshape((M.shape[-1],-1))).reshape((M.shape[0],)+ev_front.shape[1:])
+            Mev_front = (M@ev_front.reshape(M.shape[-1],-1)).reshape(M.shape[0],*ev_front.shape[1:])
             ev = jnp.moveaxis(Mev_front,0,i)
-        return ev.reshape((self.shape[0],v.shape[-1]))
+        return ev.reshape(self.shape[0],ev.shape[-1])
     def _adjoint(self):
         return lazy_kron([Mi.T for Mi in self.Ms])
     def invT(self):
         return lazy_kron([M.invT() for M in self.Ms])
+    def __new__(cls,Ms):
+        if len(Ms)==1: return Ms[0]
+        return super().__new__(cls)
+
+class lazy_kronsum(LinearOperator):
+    
+
+    def __init__(self,Ms):
+        self.Ms = Ms
+        self.shape = math.prod([Mi.shape[0] for Mi in Ms]), math.prod([Mi.shape[1] for Mi in Ms])
+        #self.dtype=Ms[0].dtype
+        self.dtype=None
+
+    def _matvec(self,v):
+        return self._matmat(v).reshape(-1)
+
+    def _matmat(self,v):
+        ev = v.reshape(*[Mi.shape[-1] for Mi in self.Ms],-1)
+        out = 0*ev
+        for i,M in enumerate(self.Ms):
+            ev_front = jnp.moveaxis(ev,i,0)
+            Mev_front = (M@ev_front.reshape(M.shape[-1],-1)).reshape(M.shape[0],*ev_front.shape[1:])
+            out += jnp.moveaxis(Mev_front,0,i)
+        return out.reshape(self.shape[0],ev.shape[-1])
+        
+
+    def _adjoint(self):
+        return lazy_kronsum([Mi.T for Mi in self.Ms])
+
+    def __new__(cls,Ms):
+        if len(Ms)==1: return Ms[0]
+        return super().__new__(cls)
+## could also be implemented as follows, but the fusing the sum into a single linearOperator is faster
+# def lazy_kronsum(Ms):
+#     n = len(Ms)
+#     lprod = np.cumprod([1]+[mi.shape[-1] for mi in Ms])
+#     rprod = np.cumprod([1]+[mi.shape[-1] for mi in reversed(Ms)])[::-1]
+#     return reduce(lambda a,b: a+b,[lazy_kron([I(lprod[i]),Mi,I(rprod[i+1])]) for i,Mi in enumerate(Ms)])
 
 class I(LinearOperator):
     def __init__(self,d):
@@ -496,18 +534,13 @@ class I(LinearOperator):
     def invT(self):
         return self
 
-def lazy_kronsum(Ms):
-    n = len(Ms)
-    lprod = np.cumprod([1]+[mi.shape[-1] for mi in Ms])
-    rprod = np.cumprod([1]+[mi.shape[-1] for mi in reversed(Ms)])[::-1]
-    return reduce(lambda a,b: a+b,[lazy_kron([I(lprod[i]),Mi,I(rprod[i+1])]) for i,Mi in enumerate(Ms)])
 
 class LazyPerm(LinearOperator):
     def __init__(self,perm):
         self.perm=perm
         self.shape = (len(perm),len(perm))
 
-    def _matmat(self,V): #(c,k) #Still needs to be tested??
+    def _matmat(self,V):
         return V[self.perm]
     def _matvec(self,V):
         return V[self.perm]
@@ -515,21 +548,3 @@ class LazyPerm(LinearOperator):
         return LazyPerm(np.argsort(self.perm))
     def invT(self):
         return self
-
-# @cache()
-# def rep_permutation(sumrep):
-#     """Permutation from flattened ordering to block ordering """
-#     #print(sumrep.shape)
-#     arange = np.arange(sumrep.size())
-#     size_cumsums = [np.cumsum([0] + [rep.size() for rep in reps]) for reps in sumrep.shapes]
-#     permutation = np.zeros([cumsum[-1] for cumsum in size_cumsums]).astype(np.int)
-#     indices_iter = itertools.product(*[range(len(reps)) for reps in sumrep.shapes])
-#     i = 0
-#     for indices in indices_iter:
-#         slices = tuple([slice(cumsum[idx], cumsum[idx + 1]) for idx, cumsum in zip(indices, size_cumsums)])
-#         slice_lengths = [sl.stop - sl.start for sl in slices]
-#         chunk_size = np.prod(slice_lengths)
-#         permutation[slices] += arange[i:i + chunk_size].reshape(*slice_lengths)
-#         i += chunk_size
-#     return permutation.reshape(-1)
-

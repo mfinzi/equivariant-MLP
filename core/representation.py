@@ -163,6 +163,7 @@ class Rep(object):
         return self*other.T
     def __lt__(self, other):
         #Canonical ordering is determined 1st by Group, then by size, then by hash
+        if other==Scalar: return False
         try: 
             if self.G<other.G: return True
             if self.G>other.G: return False

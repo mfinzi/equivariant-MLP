@@ -206,11 +206,13 @@ class SumRepFromCollection(SumRep): # a different constructor for SumRep
         #     print(self,self.perm,self.invperm)
 
 def distribute_product(reps,extra_perm=None):
-    
+
+    reps,perms =zip(*[repsum.canonicalize() for repsum in reps])
     reps = [rep if isinstance(rep,SumRep) else SumRepFromCollection({rep:1}) for rep in reps]
     # compute axis_wise perm to canonical vector ordering along each axis
-    reps,perms =zip(*[repsum.canonicalize() for repsum in reps])
+    
     axis_sizes = [len(perm) for perm in perms]
+
     order = np.arange(math.prod(axis_sizes)).reshape(tuple(len(perm) for perm in perms))
     for i,perm in enumerate(perms):
         order = np.swapaxes(np.swapaxes(order,0,i)[perm,...],0,i)
@@ -288,6 +290,7 @@ class ProductRep(Rep):
         assert len(Gs)==1, f"Multiple different groups {Gs} in product rep {self}"
         self.G= Gs[0]
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
+        #logging.info(f"prod perm={self.perm}")
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
     # def __new__(cls,*reps,extra_perm=None,counter=None):

@@ -60,8 +60,9 @@ class SumRep(Rep):
     @property
     def T(self):
         """ only swaps to adjoint representation, does not reorder elems"""
+        return SumRep(*[rep.T for rep,c in self.reps.items() for _ in range(c)],extra_perm=self.perm)
         # not necessarily still canonical ordered
-        return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},self.perm)
+        #return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},self.perm)
 
     def __repr__(self):
         return "+".join(f"{count if count > 1 else ''}{repr(rep)}" for rep, count in self.reps.items())
@@ -276,13 +277,19 @@ class ProductRep(Rep):
         if counter is not None: #one with counter specified directly
             self.reps=counter
             self.reps,self.perm = self.compute_canonical([counter],[np.arange(self.size()) if extra_perm is None else extra_perm])
+            #assert (self.perm==np.arange(len(self.perm))).all()
         else: # other with list
             # Get reps and permutations
             reps,perms = zip(*[rep.canonicalize() for rep in reps])
             rep_counters = [rep.reps if type(rep)==ProductRep else {rep:1} for rep in reps]
+            
             # Combine reps and permutations: Pi_a + Pi_b = Pi_{a x b}
             self.reps,perm = self.compute_canonical(rep_counters,perms)
+            #logging.info(f"reps {self.reps}")
             self.perm = extra_perm[perm] if extra_perm is not None else perm
+            #logging.info(f"prod perm={self.perm}")
+            # l2 = int(np.log2(self.size()))
+            # logging.info(f"prod perm={self.perm.reshape(l2*(2,))}")
             
         self.invperm = np.argsort(self.perm)
         self.canonical=(self.perm==self.invperm).all()
@@ -290,7 +297,7 @@ class ProductRep(Rep):
         assert len(Gs)==1, f"Multiple different groups {Gs} in product rep {self}"
         self.G= Gs[0]
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
-        #logging.info(f"prod perm={self.perm}")
+        
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
     # def __new__(cls,*reps,extra_perm=None,counter=None):
@@ -344,9 +351,10 @@ class ProductRep(Rep):
     def size(self):
         return math.prod([rep.size()**count for rep,count in self.reps.items()])
     @property
-    def T(self): #TODO: reavaluate if this needs to change the order ( I think it does)
+    def T(self): #TODO: reavaluate if this needs to change the order (it does not)
         """ only swaps to adjoint representation, does not reorder elems"""
-        return self.__class__(counter={rep.T:c for rep,c in self.reps.items()},extra_perm=self.perm)
+        return self.__class__(*[rep.T for rep,c in self.reps.items() for _ in range(c)],extra_perm=self.perm)
+        #return self.__class__(counter={rep.T:c for rep,c in self.reps.items()},extra_perm=self.perm)
     def __str__(self):
         superscript = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
         return "⊗".join([str(rep)+(f"{c}".translate(superscript) if c>1 else "") for rep,c in self.reps.items()])
@@ -364,11 +372,10 @@ class ProductRep(Rep):
         order = order.reshape(tuple(len(perm) for perm in rep_perms))
         # apply the canonicalizing permutations along each axis
         for i,perm in enumerate(rep_perms):
-            order = np.swapaxes(np.swapaxes(order,0,i)[perm,...],0,i)
+            order = np.moveaxis(np.moveaxis(order,i,0)[perm,...],0,i)
 
         # sort the axes by canonical ordering
-        # reshaped but with inner axes within a collection explicitly expanded
-        order = order.reshape(tuple(rep.size() for cnter in rep_cnters for rep,c in cnter.items() for _ in range(c)))
+        
         # get original axis ids
         axis_ids = []
         n=0
@@ -386,6 +393,9 @@ class ProductRep(Rep):
                     axes_perm.append(axis_ids[i][rep])
                     merged_cnt[rep]+=c
         axes_perm = np.concatenate(axes_perm)
+        #print(f"prod_axes_perm {axes_perm} with rep_cnters {rep_cnters}, orig perms {rep_perms}")
+        # reshaped but with inner axes within a collection explicitly expanded
+        order = order.reshape(tuple(rep.size() for cnter in rep_cnters for rep,c in cnter.items() for _ in range(c)))
         final_order = np.transpose(order,axes_perm)
         return dict(merged_cnt),final_order.reshape(-1)
 
@@ -564,7 +574,6 @@ class lazy_kron(LinearOperator):
 
 class lazy_kronsum(LinearOperator):
     
-
     def __init__(self,Ms):
         self.Ms = Ms
         self.shape = math.prod([Mi.shape[0] for Mi in Ms]), math.prod([Mi.shape[1] for Mi in Ms])

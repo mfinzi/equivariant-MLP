@@ -239,6 +239,16 @@ class O13(SO13p):
 class Lorentz(O13): pass
 
 @export
+class SO11p(Group):
+    lie_algebra = np.array([[0.,1.],[1.,0.]])[None]
+
+@export
+class O11(SO11p):
+    discrete_generators = np.eye(2)[None]+np.zeros((2,1,1))
+    discrete_generators[0]*=-1
+    discrete_generators[1,0,0] = -1
+
+@export
 class Sp(Group):
     def __init__(self,m):
         self.lie_algebra = np.zeros((m*(2*m+1),2*m,2*m))

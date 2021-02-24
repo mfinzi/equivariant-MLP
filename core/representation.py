@@ -93,14 +93,13 @@ class Rep(object):
             logging.info(f"{canon_rep} cache miss")
             logging.info(f"Solving basis for {self}"+(f", for G={self.G}" if hasattr(self,"G") else ""))
             #if isinstance(group,Trivial): return np.eye(size(rank,group.d))
-            C_lazy = self.constraint_matrix()
+            C_lazy = canon_rep.constraint_matrix()
             if math.prod(C_lazy.shape)>3e7: #Too large to use SVD
                 result = krylov_constraint_solve(C_lazy)
             else:
                 C_dense = C_lazy@jnp.eye(C_lazy.shape[-1])
                 result = orthogonal_complement(C_dense)
             self.solcache[canon_rep]=result
-        #print(perm,self.solcache[canon_rep].shape)
         return self.solcache[canon_rep][invperm]
     
     def symmetric_projector(self):

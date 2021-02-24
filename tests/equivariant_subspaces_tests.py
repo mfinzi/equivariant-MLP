@@ -40,7 +40,7 @@ test_groups = [SO(n) for n in [2,3,4]]+[O(n) for n in [1,2,3,4]]+\
                     [SU(n) for n in [2,3,4]] +\
                     [C(k) for k in [2,3,4,8]]+[D(k) for k in [2,3,4,8]]+\
                     [S(n) for n in [2,5,6]]+[Z(n) for n in [2,5,6]]+\
-                    [SO13p(),SO13(),O13()] +[Sp(n) for n in [1,2,3,4]]
+                    [SO11p(),SO13p(),SO13(),O13()] +[Sp(n) for n in [1,2,3,4]]
 
 class TestRepresentationSubspace(unittest.TestCase): pass
 expand_test_cases = partial(expand_cases,TestRepresentationSubspace)
@@ -49,7 +49,7 @@ expand_test_cases = partial(expand_cases,TestRepresentationSubspace)
 @expand_test_cases(test_groups)
 def test_sum(self,G):
     N=5
-    rep = T(0,2)+T(0,0)+T(1,0)+T(0,0)+T(1,1)+2*T(1,0)+T(0,2)
+    rep = T(0,2)+3*(T(0,0)+T(1,0))+T(0,0)+T(1,1)+2*T(1,0)+T(0,2)+T(0,1)+3*T(0,2)+T(2,0)
     #for G in self.test_groups:
     rep = rep(G)
     P = rep.symmetric_projector()
@@ -63,14 +63,21 @@ def test_sum(self,G):
 @expand_test_cases(test_groups)
 def test_prod(self,G):
     N=5
-    rep = T(0,1)*T(0,0)*T(2,0)*T(1,0)*T(0,0)*T(1,0)
+    #rep  = T(0,1)*T(0,0)*T(1,0)*T(0,1)*T(0,0)*T(0,1)
+    #rep  = T(0,1)*T(1,0)*T(1,0)*T(0,1)
+    # rep = T(0,1)*T(0,1)*T(1,0)*T(1,0)
+    rep = T(0,1)*T(0,0)*T(2,0)*T(1,0)*T(0,0)**3*T(0,1)**2
     #for G in self.test_groups:
     rep = rep(G)
-    P = rep.symmetric_projector()
-    v = np.random.rand(rep.size())
-    v = P@v
+    # P = rep.symmetric_projector()
+    # v = np.random.rand(rep.size())
+    # v = P@v
+    Q = rep.symmetric_basis()
+    v = Q@np.random.rand(Q.shape[-1])
     gs = G.samples(N)
     gv = (vmap(rep.rho_dense)(gs)*v).sum(-1)
+
+    #print(f"g {gs[0]} and rho_dense {rep.rho_dense(gs[0])} {rep.rho_dense(gs[0]).shape}")
     err = vmap(scale_adjusted_rel_error)(gv,v+jnp.zeros_like(gv),gs).mean()
     self.assertTrue(err<1e-5,f"Symmetric vector fails err {err:.3e} with G={G}")
 
@@ -98,11 +105,11 @@ def test_high_rank_representations(self,G):
             #     print(f"Failed with G={G} and T({p,q})")
             #     raise e
 
-@expand_test_cases([(SO(3),T(1),2*T(1)),
-    (SO(2),T(1)+2*T(0),T(1)+T(2)+2*T(0)+T(1)),
-    (SO(3),T(1)+2*T(0),T(1)+T(2)+2*T(0)+T(1)),
-    (SO(3),5*T(0)+5*T(1),3*T(0)+T(2)+2*T(1)),
-    (SO(3),5*(T(0)+T(1)),2*(T(0)+T(1))+T(2)+T(1)),
+@expand_test_cases([#(SO(3),T(1),2*T(1)),
+    #(SO(2),T(1)+2*T(0),T(1)+T(2)+2*T(0)+T(1))])#,
+    # (SO(3),T(1)+2*T(0),T(1)+T(2)+2*T(0)+T(1)),
+    # (SO(3),5*T(0)+5*T(1),3*T(0)+T(2)+2*T(1)),
+    # (SO(3),5*(T(0)+T(1)),2*(T(0)+T(1))+T(2)+T(1)),
     (SO13p(),T(2)+4*T(1,0)+T(0,1),10*T(0)+3*T(1,0)+3*T(0,1)+T(0,2)+T(2,0)+T(1,1))])           
 def test_equivariant_matrix(self,G,repin,repout):
     N=5

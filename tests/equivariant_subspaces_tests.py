@@ -103,7 +103,7 @@ def test_high_rank_representations(self,G):
     (SO(3),T(1)+2*T(0),T(1)+T(2)+2*T(0)+T(1)),
     (SO(3),5*T(0)+5*T(1),3*T(0)+T(2)+2*T(1)),
     (SO(3),5*(T(0)+T(1)),2*(T(0)+T(1))+T(2)+T(1)),
-    (SO13p(),4*T(1,0),10*T(0)+3*T(1,0)+3*T(0,1)+T(0,2)+T(2,0)+T(1,1))])           
+    (SO13p(),T(2)+4*T(1,0)+T(0,1),10*T(0)+3*T(1,0)+3*T(0,1)+T(0,2)+T(2,0)+T(1,1))])           
 def test_equivariant_matrix(self,G,repin,repout):
     N=5
     repin = repin(G)

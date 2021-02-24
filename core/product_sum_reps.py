@@ -207,7 +207,7 @@ class SumRepFromCollection(SumRep): # a different constructor for SumRep
 
 def distribute_product(reps,extra_perm=None):
     
-    reps = [rep if isinstance(rep,SumRep) else SumRep(rep) for rep in reps]
+    reps = [rep if isinstance(rep,SumRep) else SumRepFromCollection({rep:1}) for rep in reps]
     # compute axis_wise perm to canonical vector ordering along each axis
     reps,perms =zip(*[repsum.canonicalize() for repsum in reps])
     axis_sizes = [len(perm) for perm in perms]

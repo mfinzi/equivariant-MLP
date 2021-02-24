@@ -24,7 +24,7 @@ import logging
 import emlp_jax
 #repmiddle = 100*T(0)+30*T(1)+10*T(2)+3*T(3)#+1*T(4)
 
-def makeTrainer(*,dataset=O5Synthetic,network=EMLP,num_epochs=500,ndata=30000+1000,seed=2020,aug=False,
+def makeTrainer(*,dataset=O5Synthetic,network=EMLP,num_epochs=500,ndata=1000+1000,seed=2020,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':-1,'test':1000},
                 net_config={'num_layers':3,'ch':384,'group':SO(5)},log_level='info',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':1.}},save=False):

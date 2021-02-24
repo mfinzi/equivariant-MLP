@@ -1,5 +1,5 @@
 from emlp_jax.mlp import MLP,EMLP#,LinearBNSwish
-from emlp_jax.datasets import O5Synthetic,ParticleInteraction
+from emlp_jax.datasets import ParticleInteraction
 import jax.numpy as jnp
 import jax
 from emlp_jax.equivariant_subspaces import T,Scalar,Matrix,Vector
@@ -8,7 +8,7 @@ from emlp_jax.mlp import EMLP,LieLinear,Standardize
 import itertools
 import numpy as np
 import torch
-from emlp_jax.datasets import Inertia,O5Synthetic,ParticleInteraction
+from emlp_jax.datasets import Inertia,ParticleInteraction
 import objax
 import torch
 from torch.utils.data import DataLoader
@@ -24,10 +24,10 @@ import logging
 import emlp_jax
 #repmiddle = 100*T(0)+30*T(1)+10*T(2)+3*T(3)#+1*T(4)
 
-def makeTrainer(*,dataset=O5Synthetic,network=EMLP,num_epochs=500,ndata=30000+1000,seed=2020,aug=False,
+def makeTrainer(*,dataset=Inertia,network=EMLP,num_epochs=500,ndata=1000+1000,seed=2020,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':-1,'test':1000},
-                net_config={'num_layers':3,'ch':384,'group':SO(5)},log_level='info',
-                trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':1.}},save=False):
+                net_config={'num_layers':3,'ch':384,'group':SO(3)},log_level='info',
+                trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.25}},save=False):
     #logging.basicConfig(level='logging.'+log_level)    
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
@@ -37,7 +37,7 @@ def makeTrainer(*,dataset=O5Synthetic,network=EMLP,num_epochs=500,ndata=30000+10
                 num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr*min(1,e/(num_epochs/10))#*cosLr(num_epochs)(e)*min(1,e/(num_epochs/10))
+    lr_sched = lambda e: lr#*min(1,e/(num_epochs/10))
     return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":

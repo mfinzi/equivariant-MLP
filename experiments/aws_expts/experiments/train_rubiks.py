@@ -1,6 +1,6 @@
 
-from emlp_jax.datasets import InvertedCube
-from emlp_jax.groups import Cube
+from emlp_jax.datasets import BrokenRubiksCube
+from emlp_jax.groups import RubiksCube
 from emlp_jax.mlp import MLP,EMLP,Standardize
 from emlp_jax.model_trainer import ClassifierPlus
 from emlp_jax.equivariant_subspaces import T
@@ -18,10 +18,9 @@ import emlp_jax
 # intermediate_rep1 = (100*T(0)+5*T(1))#+T(2))
 # intermediate_rep2 = 100*T(0)+10*T(1)
 #middle_reps = [intermediate_rep1,intermediate_rep2,intermediate_rep1]
-rep = 138*T(0)+23*T(1)+T(2)
 def makeTrainer(*,network=EMLP,num_epochs=500,seed=2020,aug=False,
                 bs=50,lr=1e-3,device='cuda',
-                net_config={'num_layers':3,'ch':rep,'group':Cube()},log_level='info',
+                net_config={'num_layers':3,'ch':384,'group':RubiksCube()},log_level='info',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':50}},save=False):
     levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
                         'warn': logging.WARNING,'warning': logging.WARNING,
@@ -29,13 +28,13 @@ def makeTrainer(*,network=EMLP,num_epochs=500,seed=2020,aug=False,
     logging.getLogger().setLevel(levels[log_level])
     # Prep the datasets splits, model, and dataloaders
     with FixedNumpySeed(seed),FixedPytorchSeed(seed):
-        datasets = {'train':InvertedCube(train=True),'test':InvertedCube(train=False)}
+        datasets = {'train':BrokenRubiksCube(train=False),'test':BrokenRubiksCube(train=False)}
     model = Standardize(network(datasets['train'].rep_in,datasets['train'].rep_out,**net_config),datasets['train'].stats)
     dataloaders = {k:LoaderTo(DataLoader(v,batch_size=min(bs,len(v)),shuffle=(k=='train'),
                 num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr*cosLr(num_epochs)(e)
+    lr_sched = lambda e: lr*cosLr(num_epochs)(e)*min(1,e/(num_epochs/10))
     return ClassifierPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":

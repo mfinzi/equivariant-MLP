@@ -20,7 +20,7 @@ from biases.models.utils import FCtanh,FCswish,FCsoftplus, Linear, Reshape
 from typing import Optional, Tuple, Union
 from oil.utils.utils import export, Named
 import torch.nn.functional as F
-from emlp.equivariant_subspaces import T,Scalar,Matrix,Vector
+from emlp.equivariant_subspaces import T,Scalar,Matrix,Vector,Quad,repsize
 from emlp.groups import SO,O,Trivial
 from emlp.mlp import MLP, EMLP,LieLinear, uniform_rep, TensorLinearBNSwish,TensorLinear
 

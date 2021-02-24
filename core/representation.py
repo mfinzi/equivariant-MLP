@@ -42,8 +42,26 @@ class Rep(object):
     def size(self):
         print(self,type(self))
         raise NotImplementedError # The dimension of the representation
-    def rho(self,M): raise NotImplementedError # Group representation of matrix M (n,n)
-    def drho(self,A): raise NotImplementedError # Lie Algebra representation of matrix A (n,n)
+    def rho_dense(self,M):
+        return self.rho(M)@jnp.eye(self.size())
+    def drho_dense(self,A):
+        return self.rho(A)@jnp.eye(self.size())
+    # def rho(self,M): # Group representation of matrix M (n,n)
+    #     if hasattr(self,'_rho'): return self._rho(M)
+    #     elif hasattr(self,'_rho_lazy'): return self._rho_lazy(M)@jnp.eye(self.size())
+    #     else: raise NotImplementedError
+    # def drho(self,A):# Lie Algebra representation of matrix A (n,n)
+    #     if hasattr(self,'_drho'): return self._drho(M)
+    #     elif hasattr(self,'_drho_lazy'): return self._drho_lazy(M)@jnp.eye(self.size())
+    #     else: raise NotImplementedError
+    # def rho_lazy(self,M): # Group representation of matrix M (n,n)
+    #     if hasattr(self,'_rho_lazy'): return self._rho_lazy(M)
+    #     elif hasattr(self,'_rho'): return self._rho(M)
+    #     else: raise NotImplementedError
+    # def drho_lazy(self,A):# Lie Algebra representation of matrix A (n,n)
+    #     if hasattr(self,'_drho_lazy'): return self._drho_lazy(M)
+    #     elif hasattr(self,'_drho'): return self._drho
+    #     else: raise NotImplementedError
     # def rho_lazy(self,M): raise NotImplementedError # Lazy version of rho
     # def drho_lazy(self,M): raise NotImplementedError # Lazy version of drho
     # def constraint_matrix(self):
@@ -95,7 +113,7 @@ class Rep(object):
         #TODO: add support for non square
         rep,perm = self.canonicalize()
         Q = rep.symmetric_basis()
-        A = sparsify_basis(Q)[np.argsort(perm)]
+        A = (sparsify_basis(Q)[np.argsort(perm)]@np.arange(1,Q.shape[-1]+1))
         # Q= self.symmetric_basis() #THIS:
         # A = sparsify_basis(Q)
         if hasattr(self,"viz_shape_hint") and not shape:  shape = self.viz_shape_hint
@@ -195,8 +213,10 @@ class Base(Rep):
     def __call__(self,G):
         return self.__class__(G)
     def rho(self,M):
+        if hasattr(self,'G') and isinstance(M,dict): M=M[self.G]
         return M
     def drho(self,A):
+        if hasattr(self,'G') and isinstance(A,dict): A=A[self.G]
         return A
     def size(self):
         assert self.G is not None, f"must know G to find size for rep={self}"
@@ -369,12 +389,12 @@ def sparsify_basis(Q,lr=1e-2): #(n,r)
             return sparsify_basis(Q,lr=lr/3)
     Q = np.copy(Q@W.T)
     Q[np.abs(Q)<1e-2]=0
-    Q[np.abs(Q)>1e-2]=1
+    Q[np.abs(Q)>1e-2] /= np.abs(Q[np.abs(Q)>1e-2])
     A = Q@(1+np.arange(Q.shape[-1]))
-    if len(np.unique(A))!=Q.shape[-1]+1 and len(np.unique(A))!=Q.shape[-1]:
-        logging.error(f"Basis elems did not separate: found only {len(np.unique(A))}/{Q.shape[-1]}")
+    if len(np.unique(np.abs(A)))!=Q.shape[-1]+1 and len(np.unique(np.abs(A)))!=Q.shape[-1]:
+        logging.error(f"Basis elems did not separate: found only {len(np.unique(np.abs(A)))}/{Q.shape[-1]}")
         #raise ConvergenceError(f"Basis elems did not separate: found only {len(np.unique(A))}/{Q.shape[-1]}")
-    return A
+    return Q
 
 #@partial(jit,static_argnums=(0,1))
 def bilinear_weights(out_rep,in_rep):

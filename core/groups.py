@@ -79,12 +79,12 @@ class Group(object,metaclass=Named):
         return self.samples(1)[0]
 
     def samples(self,N):
-        A_dense = jnp.stack([Ai@jnp.eye(self.d) for Ai in self.lie_algebra])
-        h_dense = jnp.stack([hi@jnp.eye(self.d) for hi in self.discrete_generators])
+        A_dense = jnp.stack([Ai@jnp.eye(self.d) for Ai in self.lie_algebra]) if len(self.lie_algebra) else jnp.zeros((0,self.d,self.d))
+        h_dense = jnp.stack([hi@jnp.eye(self.d) for hi in self.discrete_generators]) if len(self.discrete_generators) else jnp.zeros((0,self.d,self.d))
         z = np.random.randn(N,A_dense.shape[0])
         if self.z_scale is not None:
             z*= self.z_scale
-        k = np.random.randint(-5,5,size=(N,A_dense.shape[0],3))
+        k = np.random.randint(-5,5,size=(N,h_dense.shape[0],3))
         jax_seed=  np.random.randint(100)
         return noise2samples(z,k,A_dense,h_dense,jax_seed)
 

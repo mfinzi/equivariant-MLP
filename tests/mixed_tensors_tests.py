@@ -1,10 +1,9 @@
 
 import numpy as np#
 import copy
-from emlp_jax.equivariant_subspaces import *
-from emlp_jax.mixed_tensors import *
-from emlp_jax.groups import *
-from emlp_jax.mlp import uniform_rep
+from core.representation import *
+from core.groups import *
+from emlp.mlp import uniform_rep
 import unittest
 from jax import vmap
 import jax.numpy as jnp

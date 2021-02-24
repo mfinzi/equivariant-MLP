@@ -19,6 +19,7 @@ import copy
 import math
 from functools import reduce
 from collections import defaultdict
+import objax
 
 
 class SumRep(Rep):
@@ -144,18 +145,42 @@ class SumRep(Rep):
             return  inp_ordered_PWs # reorder to original rep ordering
         return LinearOperator(shape=(self.size(),self.size()),matvec=lazy_QQT)
 
-    def rho(self,M): #Incorrect rho for tensor products of sums? Needs to be permuted
-        #TODO: add switching to use lazy matrices depending on size
-        rhos = [rep.rho(M) for rep,c in self.reps.items() for _ in range(c)]
-        rho_blocks = jax.scipy.linalg.block_diag(*rhos)
-        return rho_blocks[self.invperm,:][:,self.invperm]
+    ##TODO: investigate why these more idiomatic definitions with Lazy Tensors end up slower
+    # def symmetric_basis(self):
+    #     Qs = [rep.symmetric_basis() for rep in self.reps]
+    #     multiplicities  = self.reps.values()
+    #     return LazyPerm(self.invperm)@LazyDirectSum(Qs,multiplicities)
+    # def symmetric_projector(self):
+    #     Ps = [rep.symmetric_projector() for rep in self.reps]
+    #     multiplicities  = self.reps.values()
+    #     return LazyPerm(self.invperm)@LazyDirectSum(Ps,multiplicities)@LazyPerm(self.perm)
+    def rho(self,M):
+        rhos = [rep.rho(M) for rep in self.reps]
+        multiplicities = self.reps.values()
+        return LazyPerm(self.invperm)@LazyDirectSum(rhos,multiplicities)@LazyPerm(self.perm)
+    def drho(self,A):
+        drhos = [rep.drho(A) for rep in self.reps]
+        multiplicities = self.reps.values()
+        return LazyPerm(self.invperm)@LazyDirectSum(drhos,multiplicities)@LazyPerm(self.perm)
+    # def _rho_lazy(self,M):
+    #     rhos = [rep.rho_lazy(M) for rep in self.reps]
+    #     multiplicities = self.reps.values()
+    #     return LazyPerm(self.invperm)@LazyDirectSum(rhos,multiplicities)@LazyPerm(self.perm)
 
-    def drho(self,A): #Incorrect rho for tensor products of sums? Needs to be permuted
-        #TODO: add switching to use lazy matrices depending on size
-        drhos = [rep.drho(A) for rep,c in self.reps.items() for _ in range(c)]
-        drhoA_blocks = jax.scipy.linalg.block_diag(*rhos)
-        return drhoA_blocks[self.invperm,:][:,self.invperm]
+    # def _rho(self,M):
+    #     rhos = [rep.rho(M) for rep,c in self.reps.items() for _ in range(c)]
+    #     rho_blocks = jax.scipy.linalg.block_diag(*rhos)
+    #     return rho_blocks[self.invperm,:][:,self.invperm]
 
+    # def _drho_lazy(self,A):
+    #     drhos = [rep.drho_lazy(A) for rep in self.reps]
+    #     multiplicities = self.reps.values()
+    #     return LazyPerm(self.invperm)@LazyDirectSum(drhos,multiplicities)@LazyPerm(self.perm)
+
+    # def _drho(self,A):
+    #     drhos = [rep.drho(A) for rep,c in self.reps.items() for _ in range(c)]
+    #     drhoA_blocks = jax.scipy.linalg.block_diag(*rhos)
+    #     return drhoA_blocks[self.invperm,:][:,self.invperm]
 
     def as_dict(self,v):
         out_dict = {}
@@ -181,10 +206,10 @@ class SumRepFromCollection(SumRep): # a different constructor for SumRep
         #     print(self,self.perm,self.invperm)
 
 def distribute_product(reps,extra_perm=None):
-    
+    reps,perms =zip(*[repsum.canonicalize() for repsum in reps])
     reps = [rep if isinstance(rep,SumRep) else SumRepFromCollection({rep:1}) for rep in reps]
     # compute axis_wise perm to canonical vector ordering along each axis
-    reps,perms =zip(*[repsum.canonicalize() for repsum in reps])
+    
     axis_sizes = [len(perm) for perm in perms]
     order = np.arange(math.prod(axis_sizes)).reshape(tuple(len(perm) for perm in perms))
     for i,perm in enumerate(perms):
@@ -298,13 +323,13 @@ class ProductRep(Rep):
     #     drhos = [rep.drho(As) for rep,c in self.reps.items() for _ in range(c)]
     #     return functools.reduce(kronsum,drhos)[self.invperm,:][:,self.invperm]
     
-    def rho(self,Ms):
-        #if hasattr(self,'G') and isinstance(Ms,dict): Ms=Ms[self.G]
+    def rho(self,Ms,lazy=False):
+        if hasattr(self,'G') and isinstance(Ms,dict): Ms=Ms[self.G]
         canonical_lazy = lazy_kron([rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)])
         return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
 
     def drho(self,As):
-        #if hasattr(self,'G') and isinstance(As,dict): As=As[self.G]
+        if hasattr(self,'G') and isinstance(As,dict): As=As[self.G]
         canonical_lazy = lazy_kronsum([rep.drho(As) for rep,c in self.reps.items() for _ in range(c)])
         return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
 
@@ -406,49 +431,7 @@ class DirectProduct(ProductRep):
     def drho(self,As):
         canonical_lazy = lazy_kronsum([rep.drho(As) for rep,c in self.reps.items() for _ in range(c)])
         return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
-    # def canonicalize(self):
-    #     """Returns a canonically ordered rep with order np.arange(self.size()) and the
-    #         permutation which achieves that ordering"""
-    #     return DirectProduct(counter=self.reps),self.perm
 
-
-    # def __new__(cls,*reps,extra_perm=None,counter=None):
-        
-    #     if counter is not None: reps = counter.keys()
-    #     unique_groups = set(rep.G for rep in reps if hasattr(rep,'G'))
-    #     if len(unique_groups)>1 and len(unique_groups)!=len(reps):
-    #         assert counter is None
-    #         # write as ProductRep of separate ProductReps each with only one Group
-    #         reps,perms = zip(*[rep.canonicalize() for rep in reps])
-    #         rep_counters = [rep.reps if isinstance(rep,ProductRep) else {rep:1} for rep in reps]
-    #         reps,perm = cls.compute_canonical(rep_counters,perms) # so that reps is sorted by group
-    #         perm = extra_perm[perm] if extra_perm is not None else perm
-    #         group_dict = defaultdict(dict)
-    #         for rep,c in reps.items():
-    #             group_dict[rep.G][rep]=c
-    #         sub_products = {ProductRep(counter=repdict):1 for G,repdict in group_dict.items()}
-    #         print(f"calling with {sub_products}")
-    #         return ProductRep(counter=sub_products,extra_perm=perm) 
-    #         #init is being called twice because ProductRepFromCollection is a subclass
-    #     else:
-    #         return super().__new__(cls)
-
-# class ProductRepFromCollection(ProductRep): # a different constructor for SumRep
-#     def __init__(self,counter=None,extra_perm=None):
-#         print(f"counter is {counter}")
-#         assert counter is not None
-#         self.reps = counter
-#         self.reps,self.perm = self.compute_canonical([counter],[np.arange(self.size()) if extra_perm is None else extra_perm])
-#         self.invperm = np.argsort(self.perm)
-#         self.canonical=(self.perm==self.invperm).all()
-#         self.Gs = set(rep.G for rep in self.reps.keys())
-#         if len(self.Gs)==1: self.G= list(self.Gs)[0]
-#         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
-#         # if not self.canonical:
-#         #     print(self,self.perm,self.invperm)
-#     def __new__(cls,*args,**kwargs):
-#         print("new called")
-#         return Rep.__new__(cls)
 
 class DeferredSumRep(Rep):
     concrete=False
@@ -514,13 +497,50 @@ class DeferredProductRep(Rep):
 def kronsum(A,B):
     return jnp.kron(A,jnp.eye(B.shape[-1])) + jnp.kron(jnp.eye(A.shape[-1]),B)
 
+
+
+class LazyDirectSum(LinearOperator):
+    def __init__(self,Ms,multiplicities=None):
+        self.Ms = [jax.device_put(M.astype(np.float32)) if isinstance(M,(np.ndarray,jnp.ndarray)) else M for M in Ms]
+        self.multiplicities = [1 for M in Ms] if multiplicities is None else multiplicities
+        self.shape = (sum(Mi.shape[0]*c for Mi,c in zip(Ms,multiplicities)),
+                      sum(Mi.shape[0]*c for Mi,c in zip(Ms,multiplicities)))
+        #self.dtype=Ms[0].dtype
+        self.dtype=jnp.dtype('float32')
+
+    def _matvec(self,v):
+        return self._matmat(v.reshape(v.shape[0],-1)).reshape(-1)
+
+    def _matmat(self,v): # (n,k)
+        return lazy_direct_matmat(v,self.Ms,self.multiplicities)
+    def _adjoint(self):
+        return LazyDirectSum([Mi.T for Mi in self.Ms])
+    def invT(self):
+        return LazyDirectSum([M.invT() for M in self.Ms])
+    def __new__(cls,Ms,multiplicities=None):
+        if len(Ms)==1 and multiplicities is None: return Ms[0]
+        return super().__new__(cls)
+        
+def lazy_direct_matmat(v,Ms,mults):
+    n,k = v.shape
+    i=0
+    y = []
+    for M, multiplicity in zip(Ms,mults):
+        if not M.shape[-1]: continue
+        i_end = i+multiplicity*M.shape[-1]
+        elems = M@v[i:i_end].T.reshape(-1,M.shape[-1]).T
+        y.append(elems.T.reshape(k,multiplicity*M.shape[0]).T)
+        i = i_end
+    y = jnp.concatenate(y,axis=0) #concatenate over rep axis
+    return  y
+
 class lazy_kron(LinearOperator):
 
     def __init__(self,Ms):
         self.Ms = Ms
         self.shape = math.prod([Mi.shape[0] for Mi in Ms]), math.prod([Mi.shape[1] for Mi in Ms])
         #self.dtype=Ms[0].dtype
-        self.dtype=None
+        self.dtype=jnp.dtype('float32')
 
     def _matvec(self,v):
         return self._matmat(v).reshape(-1)
@@ -535,9 +555,9 @@ class lazy_kron(LinearOperator):
         return lazy_kron([Mi.T for Mi in self.Ms])
     def invT(self):
         return lazy_kron([M.invT() for M in self.Ms])
-    def __new__(cls,Ms):
-        if len(Ms)==1: return Ms[0]
-        return super().__new__(cls)
+    # def __new__(cls,Ms):
+    #     if len(Ms)==1: return Ms[0]
+    #     return super().__new__(cls)
 
 class lazy_kronsum(LinearOperator):
     
@@ -546,7 +566,7 @@ class lazy_kronsum(LinearOperator):
         self.Ms = Ms
         self.shape = math.prod([Mi.shape[0] for Mi in Ms]), math.prod([Mi.shape[1] for Mi in Ms])
         #self.dtype=Ms[0].dtype
-        self.dtype=None
+        self.dtype=jnp.dtype('float32')
 
     def _matvec(self,v):
         return self._matmat(v).reshape(-1)

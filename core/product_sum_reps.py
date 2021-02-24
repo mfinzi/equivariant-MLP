@@ -206,10 +206,10 @@ class SumRepFromCollection(SumRep): # a different constructor for SumRep
         #     print(self,self.perm,self.invperm)
 
 def distribute_product(reps,extra_perm=None):
-    reps,perms =zip(*[repsum.canonicalize() for repsum in reps])
-    reps = [rep if isinstance(rep,SumRep) else SumRepFromCollection({rep:1}) for rep in reps]
-    # compute axis_wise perm to canonical vector ordering along each axis
     
+    reps = [rep if isinstance(rep,SumRep) else SumRep(rep) for rep in reps]
+    # compute axis_wise perm to canonical vector ordering along each axis
+    reps,perms =zip(*[repsum.canonicalize() for repsum in reps])
     axis_sizes = [len(perm) for perm in perms]
     order = np.arange(math.prod(axis_sizes)).reshape(tuple(len(perm) for perm in perms))
     for i,perm in enumerate(perms):

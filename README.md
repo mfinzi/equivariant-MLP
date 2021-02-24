@@ -1,21 +1,12 @@
 # A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
 
 --------------------------------------------------------------------------------
-**[Documentation]()** | **[Paper]()**
+**[Documentation](https://emlp.readthedocs.io/en/latest/)** | **[Paper]()**
 
 
 *EMLP* is a jax library for the automated construction of equivariant layers in deep learning.
 
 --------------------------------------------------------------------------------
-<!-- The library is structured into four subpackages with different high-level features:
-
-| Component                                                                  | Description                                                      |
-| ---------------------------------------------------------------------------| ---------------------------------------------------------------- |
-| [**e2cnn.group**](https://github.com/QUVA-Lab/e2cnn/blob/master/group/)                | implements basic concepts of *group* and *representation* theory |
-| [**e2cnn.kernels**](https://github.com/QUVA-Lab/e2cnn/blob/master/kernels/)            | solves for spaces of equivariant convolution kernels             |
-| [**e2cnn.gspaces**](https://github.com/QUVA-Lab/e2cnn/blob/master/gspaces/)            | defines the image plane and its symmetries                       |
-| [**e2cnn.nn**](https://github.com/QUVA-Lab/e2cnn/blob/master/nn/)                      | contains equivariant modules to build deep neural networks       |
-------------------------------------------------------------------------------------------------------------------------------------------------- -->
 
 # Installation instructions
 

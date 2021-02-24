@@ -1,12 +1,12 @@
-# equivariant-MLP
+# A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
 
-A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
 --------------------------------------------------------------------------------
 **[Documentation]()** | **[Paper]()**
 
-*EMLP* is a jax library for the automated construction of equivariant layers in deep learning.
---------------------------------------------------------------------------------
 
+*EMLP* is a jax library for the automated construction of equivariant layers in deep learning.
+
+--------------------------------------------------------------------------------
 <!-- The library is structured into four subpackages with different high-level features:
 
 | Component                                                                  | Description                                                      |

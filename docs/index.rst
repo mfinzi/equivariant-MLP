@@ -5,7 +5,7 @@
 
 
 EMLP reference documentation
-===========================
+============================
 
 A type system for the automated construction of equivariant layers.
 

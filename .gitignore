@@ -135,3 +135,7 @@ dmypy.json
 *.tfevents*
 *.df
 *.s
+
+# additional excludes specific to the repo
+*.t
+*.dat

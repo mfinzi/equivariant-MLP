@@ -16,7 +16,7 @@ from functools import lru_cache as cache
 def gated(sumrep):
     return sumrep+sum([Scalar(rep.G) for rep in sumrep.reps if rep!=Scalar and not rep.is_regular])
 
-@cache
+@cache(maxsize=None)
 def gate_indices(sumrep): #TODO: add regular
     """ Indices for scalars, and also additional scalar gates
         added by gated(sumrep)"""
@@ -31,7 +31,7 @@ def gate_indices(sumrep): #TODO: add regular
         i+=rep.size()
     return indices
 
-@cache
+@cache(maxsize=None)
 def scalar_mask(sumrep):
     channels = sumrep.size()
     mask = np.ones(channels)>0
@@ -41,7 +41,7 @@ def scalar_mask(sumrep):
         i+=rep.size()
     return mask
 
-@cache
+@cache(maxsize=None)
 def regular_mask(sumrep):
     channels = sumrep.size()
     mask = np.ones(channels)<0

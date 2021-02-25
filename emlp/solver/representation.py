@@ -8,8 +8,8 @@ from jax import device_put
 import optax
 import collections,itertools
 from functools import lru_cache as cache
-from emlp.solver.utils import disk_cache,ltqdm
-from emlp.solver.linear_operator_jax import LinearOperator
+from .utils import ltqdm,prod
+from .linear_operator_jax import LinearOperator
 import scipy as sp
 import scipy.linalg
 import functools
@@ -94,7 +94,7 @@ class Rep(object):
             logging.info(f"Solving basis for {self}"+(f", for G={self.G}" if hasattr(self,"G") else ""))
             #if isinstance(group,Trivial): return np.eye(size(rank,group.d))
             C_lazy = canon_rep.constraint_matrix()
-            if math.prod(C_lazy.shape)>3e7: #Too large to use SVD
+            if prod(C_lazy.shape)>3e7: #Too large to use SVD
                 result = krylov_constraint_solve(C_lazy)
             else:
                 C_dense = C_lazy@jnp.eye(C_lazy.shape[-1])
@@ -436,5 +436,5 @@ def bilinear_weights(out_rep,in_rep):
         
 @jit
 def mul_part(bparams,x,bids):
-    b = math.prod(x.shape[:-1])
+    b = prod(x.shape[:-1])
     return (bparams@x[...,bids].T.reshape(bparams.shape[-1],-1)).reshape(-1,b).T

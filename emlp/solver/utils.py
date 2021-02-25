@@ -3,7 +3,7 @@ import logging
 
 import time
 import io
-
+from functools import reduce
 from tqdm.auto import tqdm
 tqdm.get_lock().locks = []
 

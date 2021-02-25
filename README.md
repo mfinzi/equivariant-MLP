@@ -46,7 +46,7 @@ If you find our work helpful, please cite it with
 @article{finzi2021arbitrary,
   title={A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups},
   author={Finzi, Marc and Welling, Max and Wilson, Andrew Gordon},
-  journal={ICML},
+  journal={Arxiv},
   year={2021}
 }
 ```

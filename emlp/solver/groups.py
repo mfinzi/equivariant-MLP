@@ -11,7 +11,8 @@ from .linear_operators import LazyShift,SwapMatrix,Rot90,LazyKron,LazyKronsum,La
 from jax import jit,vmap
 from functools import partial
 import logging
-#from .product_sum_reps import lazy_kron,lazy_kronsum,LazyPerm,I
+# this line needs to be here or imports break???
+from .product_sum_reps import rep_permutation 
 
 def rel_err(A,B):
     return jnp.mean(jnp.abs(A-B))/(jnp.mean(jnp.abs(A)) + jnp.mean(jnp.abs(B))+1e-6)

@@ -138,7 +138,7 @@ class LazyDirectSum(LinearOperator):
     def invT(self):
         return LazyDirectSum([M.invT() for M in self.Ms])
     def to_dense(self):
-        Ms_all = [self.Ms[i] for i in range(len(self.Ms)) for _ in range(self.multiplicities[i])]
+        Ms_all = [M for M,c in zip(self.Ms,self.multiplicities) for _ in range(c)]
         Ms_all = [Mi.to_dense() if isinstance(Mi,LinearOperator) else Mi for Mi in Ms_all]
         return jax.scipy.linalg.block_diag(*Ms_all)
     def __new__(cls,Ms,multiplicities=None):

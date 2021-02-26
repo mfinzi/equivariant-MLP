@@ -427,7 +427,7 @@ class LinearOperator(object):
         """ Default implementation of to_dense which produces the dense
             matrix corresponding to the given lazy matrix. Defaults to
             multiplying by the identity """
-        return self@jnp.eye(self.shape[-1])
+        return self@np.eye(self.shape[-1])
 
 
 class _CustomLinearOperator(LinearOperator):

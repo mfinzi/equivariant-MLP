@@ -16,12 +16,12 @@ import scipy.linalg
 import functools
 import random
 import logging
-import emlp.solver
 import math
 from jax.ops import index, index_add, index_update
 import matplotlib.pyplot as plt
 from collections import Counter
 from functools import reduce
+import emlp.solver
 #TODO: add rep,v = flatten({'Scalar':..., 'Vector':...,}), to_dict(rep,vector) returns {'Scalar':..., 'Vector':...,}
 #TODO and simpler rep = flatten({Scalar:2,Vector:10,...}),
 # Do we even want + operator to implement non canonical orderings?

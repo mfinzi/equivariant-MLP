@@ -105,7 +105,7 @@ class ConcatLazy(LinearOperator):
         a collection of matrices Ms along axis=0 """
     def __init__(self,Ms):
         self.Ms = Ms
-        assert all(M.shape==Ms.shape[0] for M in Ms),\
+        assert all(M.shape[0]==Ms[0].shape[0] for M in Ms),\
              f"Trying to concatenate matrices of different sizes {[M.shape for M in Ms]}"
         self.shape = (sum(M.shape[0] for M in Ms),Ms[0].shape[1])
 
@@ -116,7 +116,7 @@ class ConcatLazy(LinearOperator):
         return sum([self.Ms[i].T@Vs[i] for i in range(len(self.Ms))])
     def to_dense(self):
         dense_Ms = [M.to_dense() if isinstance(M,LinearOperator) else M for M in self.Ms]
-        return jnp.concatenate(dense_ms,axis=0)
+        return jnp.concatenate(dense_Ms,axis=0)
     
 class LazyDirectSum(LinearOperator):
     def __init__(self,Ms,multiplicities=None):

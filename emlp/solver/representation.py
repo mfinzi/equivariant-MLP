@@ -10,7 +10,7 @@ import collections,itertools
 from functools import lru_cache as cache
 from .utils import ltqdm,prod
 from .linear_operator_jax import LinearOperator
-from .linear_operators import Lazy,ConcatLazy
+from .linear_operators import Lazy,ConcatLazy,I
 import scipy as sp
 import scipy.linalg
 import functools

@@ -2,6 +2,7 @@ from .linear_operator_jax import LinearOperator
 import jax.numpy as jnp
 import numpy as np
 import jax.jit as jit
+import jax
 from functools import reduce
 
 class Lazy(LinearOperator):

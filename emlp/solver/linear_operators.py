@@ -4,6 +4,7 @@ import numpy as np
 from jax import jit
 import jax
 from functools import reduce
+from .utils import prod as product
 
 class Lazy(LinearOperator):
     def __init__(self,dense_matrix):

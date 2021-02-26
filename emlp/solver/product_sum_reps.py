@@ -96,7 +96,6 @@ class SumRep(Rep):
                 permlist.append(shifted_perms[i][ids[i]:ids[i]+c*rep.size()])
                 ids[i]+=+c*rep.size()
                 merged_cnt[rep]+=c
-        #print(permlist)
         return dict(merged_cnt),np.concatenate(permlist)
 
     def symmetric_basis(self):
@@ -329,7 +328,7 @@ class ProductRep(Rep):
     def size(self):
         return product([rep.size()**count for rep,count in self.reps.items()])
     @property
-    def T(self): #TODO: reavaluate if this needs to change the order (it does not)
+    def T(self):
         """ only swaps to adjoint representation, does not reorder elems"""
         return self.__class__(*[rep.T for rep,c in self.reps.items() for _ in range(c)],extra_perm=self.perm)
         #return self.__class__(counter={rep.T:c for rep,c in self.reps.items()},extra_perm=self.perm)
@@ -435,7 +434,6 @@ class DeferredSumRep(Rep):
     def __call__(self,G):
         if G is None: return self
         return sum([rep(G) for rep in self.to_sum])
-        #return SumRep(*[rep(G) for rep in self.to_sum])
     def __repr__(self):
         return '('+"+".join(f"{rep}" for rep in self.to_sum)+')'
     def __str__(self):
@@ -454,33 +452,10 @@ class DeferredProductRep(Rep):
     def __call__(self,G):
         if G is None: return self
         return reduce(lambda a,b:a*b,[rep(G) for rep in self.to_prod])
-        #return ProductRep(*[rep(G) for rep in self.to_prod])
     def __repr__(self):
         return "⊗".join(f"{rep}" for rep in self.to_prod)
     def __str__(self):
         return repr(self)
     @property
     def T(self):
-        return DeferredProductRep(*[rep.T for rep in self.to_prod])#TODO: need to reverse the order?
-
-# class ProductGroupTensorRep(Rep): # Eventually will need to handle reordering to canonical G1,G2, etc (from hash?)
-#     atomic=False
-#     # TO be used like (T(0) + T(1))(SO(3))*T(1)(S(5)) -> T(2)(SO(3))
-#     def __init__(self,rep_dict):
-#         assert len(rep_dict)>1, "Not product rep?"
-#         self.reps = rep_dict
-#         #for rep in rep_dict.values():
-#         #self.ordering = 
-#     def rho(self,Ms): 
-#         rhos = [rep.rho(Ms[G]) for (G,rep) in self.reps.items()]
-#         return functools.reduce(jnp.kron,rhos,1)
-#     def drho(self,As):
-#         drhos = [rep.drho(As[G]) for (G,rep) in self.reps.items()]
-#         raise functools.reduce(kronsum,drhos,0)
-
-#     def __eq__(self, other): 
-#         if not isinstance(other,ProductGroupTensorRep): return False
-#         return len(self.reps)==len(other.reps) \
-#             and all(Ga==Gb for Ga,Gb in zip(self.reps,other.reps)) \
-#             and all(ra==rb for ra,rb in zip(self.reps.values(),other.reps.values())) \
-            
+        return DeferredProductRep(*[rep.T for rep in self.to_prod])

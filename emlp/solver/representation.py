@@ -10,7 +10,7 @@ import collections,itertools
 from functools import lru_cache as cache
 from .utils import ltqdm,prod
 from .linear_operator_jax import LinearOperator
-from .linear_operators import Lazy
+from .linear_operators import Lazy,ConcatLazy
 import scipy as sp
 import scipy.linalg
 import functools
@@ -49,38 +49,17 @@ class Rep(object):
     def drho_dense(self,A):
         rho = self.drho(M)
         return drho.to_dense() if isinstance(drho,LinearOperator) else drho
-    # def rho(self,M): # Group representation of matrix M (n,n)
-    #     if hasattr(self,'_rho'): return self._rho(M)
-    #     elif hasattr(self,'_rho_lazy'): return self._rho_lazy(M)@jnp.eye(self.size())
-    #     else: raise NotImplementedError
-    # def drho(self,A):# Lie Algebra representation of matrix A (n,n)
-    #     if hasattr(self,'_drho'): return self._drho(M)
-    #     elif hasattr(self,'_drho_lazy'): return self._drho_lazy(M)@jnp.eye(self.size())
-    #     else: raise NotImplementedError
-    # def rho_lazy(self,M): # Group representation of matrix M (n,n)
-    #     if hasattr(self,'_rho_lazy'): return self._rho_lazy(M)
-    #     elif hasattr(self,'_rho'): return self._rho(M)
-    #     else: raise NotImplementedError
-    # def drho_lazy(self,A):# Lie Algebra representation of matrix A (n,n)
-    #     if hasattr(self,'_drho_lazy'): return self._drho_lazy(M)
-    #     elif hasattr(self,'_drho'): return self._drho
-    #     else: raise NotImplementedError
-    # def rho_lazy(self,M): raise NotImplementedError # Lazy version of rho
-    # def drho_lazy(self,M): raise NotImplementedError # Lazy version of drho
-    # def constraint_matrix(self):
-    #     """ Given a sequence of exponential generators [A1,A2,...]
-    #     and a tensor rank (p,q), the function concatenates the representations
-    #     [drho(A1), drho(A2), ...] into a single large projection matrix.
-    #     Input: [generators seq(tensor(d,d))], [rank tuple(p,q)], [d int] """
-    #     constraints = [] # Multiply by identity to convert lazy to dense matrices
-    #     constraints.extend([self.drho(A)@jnp.eye(self.size()) for A in self.G.lie_algebra])
-    #     constraints.extend([self.rho(h)@jnp.eye(self.size())-jnp.eye(self.size()) for h in self.G.discrete_generators])
-    #     P = jnp.concatenate(constraints,axis=0) if constraints else jnp.zeros((1,self.size()))
-    #     return P
     
     def constraint_matrix(self):
-        """ A lazy version of constraint_matrix"""
-        return ConstraintMatrixLazy(self.G,self.rho,self.drho,self.size())
+        """ Given a sequence of exponential generators [A1,A2,...]
+        and a tensor rank (p,q), the function concatenates the representations
+        [drho(A1), drho(A2), ...] into a single large constraint matrix C.
+        Input: [generators seq(tensor(d,d))], [rank tuple(p,q)], [d int] """
+        n = self.size()
+        constraints = []
+        constraints.extend([self.rho(h)-I(n) for h in self.G.discrete_generators])
+        constraints.extend([self.drho(A) for A in self.G.lie_algebra])
+        return ConcatLazy(constraints) if constraints else jnp.zeros(1,n)
 
     #@disk_cache('./_subspace_cache_jax.dat')
     solcache = {}
@@ -100,8 +79,7 @@ class Rep(object):
             if prod(C_lazy.shape)>3e7: #Too large to use SVD
                 result = krylov_constraint_solve(C_lazy)
             else:
-                C_dense = C_lazy@jnp.eye(C_lazy.shape[-1])
-                result = orthogonal_complement(C_dense)
+                result = orthogonal_complement(C_lazy.to_dense())
             self.solcache[canon_rep]=result
         return self.solcache[canon_rep][invperm]
     
@@ -250,44 +228,6 @@ Scalar = ScalarRep()#V**0
 def T(p,q=0,G=None):
     return (V**p*V.T**q)(G)
 
-class ConstraintMatrixLazy(LinearOperator):
-    def __init__(self,group,rho_lazy,drho_lazy,size):
-        self.d = group.d
-        self.rho_lazy=rho_lazy
-        self.drho_lazy=drho_lazy
-        # if group.discrete_generators_lazy is not NotImplemented:
-        #     self.hi = group.discrete_generators_lazy
-        # else: 
-        #     self.hi=group.discrete_generators
-        #     logging.debug(f"no discrete lazy found for {group}")
-        # if group.lie_algebra_lazy is not NotImplemented:
-        #     self.Ai = group.lie_algebra_lazy
-        # else:
-        #     self.Ai = group.lie_algebra
-        #     logging.debug(f"no Lie Algebra lazy found for {group}")
-        self.hi = group.discrete_generators
-        self.Ai = group.lie_algebra
-        self.G=group
-        self.n_constraints= len(self.hi)+len(self.Ai)
-        if not self.n_constraints: raise NotImplementedError
-        self.c = size
-        self.dtype=np.float32
-    @property
-    def shape(self):
-        return (self.c*self.n_constraints,self.c)
-    def _matmat(self,V): #(c,k)
-        constraints = []
-        constraints.extend([self.drho_lazy(A)@V for A in self.Ai])
-        constraints.extend([self.rho_lazy(h)@V-V for h in self.hi])
-        CV = jnp.concatenate(constraints,axis=0)
-        return CV
-    def _rmatmat(self,V):
-        n_constraints = len(self.hi)+len(self.Ai)
-        Vi = jnp.split(V,self.n_constraints)
-        out = 0
-        out += sum([self.drho_lazy(A).T@Vi[i] for i,A in enumerate(self.Ai)])
-        out += sum([self.rho_lazy(h).T@Vi[i+len(self.Ai)] for i,h in enumerate(self.hi)])
-        return out
 
 def orthogonal_complement(proj):
     """ Computes the orthogonal complement to a given matrix proj"""

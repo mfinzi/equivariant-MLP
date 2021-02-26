@@ -2,7 +2,7 @@ from .linear_operator_jax import LinearOperator
 import jax.numpy as jnp
 import numpy as np
 import jax.jit as jit
-
+from functools import reduce
 
 class Lazy(LinearOperator):
     def __init__(self,dense_matrix):
@@ -36,6 +36,10 @@ class LazyDirectSum(LinearOperator):
         return LazyDirectSum([Mi.T for Mi in self.Ms])
     def invT(self):
         return LazyDirectSum([M.invT() for M in self.Ms])
+    def to_dense(self):
+        Ms_all = [self.Ms[i] for i in range(len(self.Ms)) for _ in range(self.multiplicities[i])]
+        Ms_all = [Mi.to_dense() if isinstance(Mi,LinearOperator) else Mi for Mi in Ms_all]
+        return jax.scipy.linalg.block_diag(*Ms_all)
     def __new__(cls,Ms,multiplicities=None):
         if len(Ms)==1 and multiplicities is None: return Ms[0]
         return super().__new__(cls)
@@ -74,9 +78,16 @@ class LazyKron(LinearOperator):
         return LazyKron([Mi.T for Mi in self.Ms])
     def invT(self):
         return LazyKron([M.invT() for M in self.Ms])
-    # def __new__(cls,Ms):
-    #     if len(Ms)==1: return Ms[0]
-    #     return super().__new__(cls)
+    def to_dense(self):
+        Ms = [M.to_dense() if isinstance(M,LinearOperator) else M for M in self.Ms]
+        return reduce(jnp.kron,Ms)
+    def __new__(cls,Ms):
+        if len(Ms)==1: return Ms[0]
+        return super().__new__(cls)
+
+@jit
+def kronsum(A,B):
+    return jnp.kron(A,jnp.eye(B.shape[-1])) + jnp.kron(jnp.eye(A.shape[-1]),B)
 
 class LazyKronsum(LinearOperator):
     
@@ -101,7 +112,9 @@ class LazyKronsum(LinearOperator):
 
     def _adjoint(self):
         return LazyKronsum([Mi.T for Mi in self.Ms])
-
+    def to_dense(self):
+        Ms = [M.to_dense() if isinstance(M,LinearOperator) else M for M in self.Ms]
+        return reduce(kronsum,Ms)
     def __new__(cls,Ms):
         if len(Ms)==1: return Ms[0]
         return super().__new__(cls)

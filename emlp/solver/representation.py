@@ -44,9 +44,11 @@ class Rep(object):
         print(self,type(self))
         raise NotImplementedError # The dimension of the representation
     def rho_dense(self,M):
-        return self.rho(M)@jnp.eye(self.size())
+        rho = self.rho(M)
+        return rho.to_dense() if isinstance(rho,LinearOperator) else rho
     def drho_dense(self,A):
-        return self.rho(A)@jnp.eye(self.size())
+        rho = self.drho(M)
+        return drho.to_dense() if isinstance(drho,LinearOperator) else drho
     # def rho(self,M): # Group representation of matrix M (n,n)
     #     if hasattr(self,'_rho'): return self._rho(M)
     #     elif hasattr(self,'_rho_lazy'): return self._rho_lazy(M)@jnp.eye(self.size())
@@ -108,17 +110,6 @@ class Rep(object):
         Q_lazy = Lazy(Q)
         P = Q_lazy@Q_lazy.H
         return P
-
-    def visualize(self,*shape):
-        #TODO: add support for non square
-        rep,perm = self.canonicalize()
-        Q = rep.symmetric_basis()
-        A = (sparsify_basis(Q)[np.argsort(perm)]@np.arange(1,Q.shape[-1]+1))
-        # Q= self.symmetric_basis() #THIS:
-        # A = sparsify_basis(Q)
-        if hasattr(self,"viz_shape_hint") and not shape:  shape = self.viz_shape_hint
-        plt.imshow(A.reshape(shape))
-        plt.axis('off')
 
     def __add__(self, other): # Tensor sum representation R1 + R2
         if isinstance(other,int):

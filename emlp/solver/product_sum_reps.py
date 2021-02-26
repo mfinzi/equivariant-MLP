@@ -27,7 +27,7 @@ import objax
 class SumRep(Rep):
     concrete=True
     atomic=False
-    def __init__(self,*reps,extra_perm=None,viz_shape_hint=None):#repcounter,repperm=None):
+    def __init__(self,*reps,extra_perm=None):#repcounter,repperm=None):
         """ Constructs a tensor type based on a list of tensor ranks
             and possibly the symmetry generators gen."""
         # Integers can be used as shorthand for scalars.
@@ -43,7 +43,6 @@ class SumRep(Rep):
         self.invperm = np.argsort(self.perm)
         self.canonical=(self.perm==self.invperm).all()
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
-        if viz_shape_hint is not None: self.viz_shape_hint = viz_shape_hint
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
 
@@ -253,7 +252,7 @@ def distribute_product(reps,extra_perm=None):
     total_perm = order[block_perm[each_perm]]
     if extra_perm is not None: total_perm = extra_perm[total_perm]
     #TODO: could achieve additional reduction by canonicalizing at this step, but unnecessary for now
-    return SumRep(*ordered_reps,extra_perm=total_perm,viz_shape_hint=axis_sizes)
+    return SumRep(*ordered_reps,extra_perm=total_perm)
 
 
 @cache(maxsize=None)
@@ -508,9 +507,3 @@ class DeferredProductRep(Rep):
 #             and all(Ga==Gb for Ga,Gb in zip(self.reps,other.reps)) \
 #             and all(ra==rb for ra,rb in zip(self.reps.values(),other.reps.values())) \
             
-@jit
-def kronsum(A,B):
-    return jnp.kron(A,jnp.eye(B.shape[-1])) + jnp.kron(jnp.eye(A.shape[-1]),B)
-
-
-

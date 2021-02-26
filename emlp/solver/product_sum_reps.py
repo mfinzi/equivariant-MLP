@@ -298,29 +298,6 @@ class ProductRep(Rep):
         assert len(Gs)==1, f"Multiple different groups {Gs} in product rep {self}"
         self.G= Gs[0]
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
-        
-        # if not self.canonical:
-        #     print(self,self.perm,self.invperm)
-    # def __new__(cls,*reps,extra_perm=None,counter=None):
-        
-    #     if counter is not None: reps = counter.keys()
-    #     unique_groups = set(rep.G for rep in reps if hasattr(rep,'G'))
-    #     if len(unique_groups)>1 and len(unique_groups)!=len(reps):
-    #         assert counter is None
-    #         # write as ProductRep of separate ProductReps each with only one Group
-    #         reps,perms = zip(*[rep.canonicalize() for rep in reps])
-    #         rep_counters = [rep.reps if isinstance(rep,ProductRep) else {rep:1} for rep in reps]
-    #         reps,perm = cls.compute_canonical(rep_counters,perms) # so that reps is sorted by group
-    #         perm = extra_perm[perm] if extra_perm is not None else perm
-    #         group_dict = defaultdict(dict)
-    #         for rep,c in reps.items():
-    #             group_dict[rep.G][rep]=c
-    #         sub_products = {ProductRep(counter=repdict):1 for G,repdict in group_dict.items()}
-    #         print(f"calling with {sub_products}")
-    #         return ProductRep(counter=sub_products,extra_perm=perm) 
-    #         #init is being called twice because ProductRepFromCollection is a subclass
-    #     else:
-    #         return super().__new__(cls)
 
     def canonicalize(self):
         """Returns a canonically ordered rep with order np.arange(self.size()) and the

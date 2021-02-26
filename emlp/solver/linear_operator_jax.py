@@ -589,6 +589,11 @@ class _ProductLinearOperator(LinearOperator):
     def invT(self):
         A,B = self.args
         return A.invT()*B.invT()
+    def to_dense(self):
+        A,B = self.args
+        A = A.to_dense() if isinstance(A,LinearOperator) else A
+        B = B.to_dense() if isinstance(B,LinearOperator) else B
+        return A@B
 
 
 class _ScaledLinearOperator(LinearOperator):
@@ -616,6 +621,12 @@ class _ScaledLinearOperator(LinearOperator):
     def _adjoint(self):
         A, alpha = self.args
         return A.H * np.conj(alpha)
+    def invT(self):
+        A, alpha = self.args
+        return (1/alpha)*A.T
+    def to_dense(self):
+        A, alpha = self.args
+        return alpha*A.to_dense()
 
 
 class _PowerLinearOperator(LinearOperator):
@@ -651,6 +662,9 @@ class _PowerLinearOperator(LinearOperator):
     def _adjoint(self):
         A, p = self.args
         return A.H ** p
+    def invT(self):
+        A, p = self.args
+        return A.invT()**p
 
 
 class MatrixLinearOperator(LinearOperator):

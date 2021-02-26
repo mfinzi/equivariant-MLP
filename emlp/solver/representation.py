@@ -10,6 +10,7 @@ import collections,itertools
 from functools import lru_cache as cache
 from .utils import ltqdm,prod
 from .linear_operator_jax import LinearOperator
+from .linear_operators import Lazy
 import scipy as sp
 import scipy.linalg
 import functools
@@ -252,20 +253,6 @@ class Dual(Base):
     def __lt__(self,other):
         if isinstance(other,Base): return False
         return super().__lt__(other)
-
-class Lazy(LinearOperator):
-    def __init__(self,dense_matrix):
-        self.A = dense_matrix
-        self.shape = self.A.shape
-        self.dtype = self.A.dtype
-    def _matmat(self,V):
-        return self.A@V
-    def _matvec(self,v):
-        return self.A@v
-    def _rmatmat(self,V):
-        return self.A.T@V
-    def _rmatvec(self,v):
-        return self.A.T@v
 
 V=Vector= Base()
 Scalar = ScalarRep()#V**0

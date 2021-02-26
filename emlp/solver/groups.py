@@ -7,11 +7,11 @@ import jax.numpy as jnp
 from objax.nn.init import kaiming_normal, xavier_normal
 from objax.module import Module
 import objax
-from .linear_operator_jax import LinearOperator
+from .linear_operators import LazyShift,SwapMatrix,Rot90,LazyKron,LazyKronsum,LazyPerm,I
 from jax import jit,vmap
 from functools import partial
 import logging
-from .product_sum_reps import lazy_kron,lazy_kronsum,LazyPerm,I
+#from .product_sum_reps import lazy_kron,lazy_kronsum,LazyPerm,I
 
 def rel_err(A,B):
     return jnp.mean(jnp.abs(A-B))/(jnp.mean(jnp.abs(A)) + jnp.mean(jnp.abs(B))+1e-6)
@@ -271,20 +271,6 @@ class Sp(Group):
 @export
 class Symplectic(Sp): pass
 
-class LazyShift(LinearOperator):
-    def __init__(self,n,k=1):
-        self.k=k
-        self.shape = (n,n)
-
-    def _matmat(self,V): #(c,k) #Still needs to be tested??
-        return jnp.roll(V,self.k,axis=0)
-    def _matvec(self,V):
-        return jnp.roll(V,self.k,axis=0)
-    def _adjoint(self):
-        return LazyShift(self.shape[0],-self.k)
-    def invT(self):
-        return self
-
 @export
 class Z(Group):
     def __init__(self,n):
@@ -394,19 +380,7 @@ def unpad(padded_perm):
 
 
 
-class SwapMatrix(LinearOperator):
-    def __init__(self,swaprows,n):
-        self.swaprows=swaprows
-        self.shape = (n,n)
-    def _matmat(self,V): #(c,k)
-        V = jax.ops.index_update(V, jax.ops.index[self.swaprows], V[self.swaprows[::-1]])
-        return V
-    def _matvec(self,V):
-        return self._matmat(V)
-    def _adjoint(self):
-        return self
-    def invT(self):
-        return self
+
 
 @export
 class RubiksCube(Group): #3x3 rubiks cube
@@ -472,21 +446,6 @@ class RubiksCube2x2(Group):
         self.perms = [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]
         self.discrete_generators = [LazyPerm(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
         super().__init__()
-
-
-
-class Rot90(LinearOperator):
-    def __init__(self,n,k):
-        self.shape = (n*n,n*n)
-        self.n=n
-        self.k = k
-    def _matmat(self,V): #(c,k)
-        return jnp.rot90(V.reshape((self.n,self.n,-1)),self.k).reshape(V.shape)
-    def _matvec(self,V):
-        return jnp.rot90(V.reshape((self.n,self.n,-1)),self.k).reshape(V.shape)
-    def invT(self):
-        return self
-
 
 @export
 class ZnxZn(Group):

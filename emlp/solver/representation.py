@@ -9,8 +9,8 @@ import optax
 import collections,itertools
 from functools import lru_cache as cache
 from .utils import ltqdm,prod
-from .linear_operator_jax import LinearOperator
-from .linear_operators import Lazy,ConcatLazy,I
+from .linear_operator_jax import LinearOperator,Lazy
+from .linear_operators import ConcatLazy,I,lazify
 import scipy as sp
 import scipy.linalg
 import functools
@@ -57,9 +57,9 @@ class Rep(object):
         Input: [generators seq(tensor(d,d))], [rank tuple(p,q)], [d int] """
         n = self.size()
         constraints = []
-        constraints.extend([self.rho(h)-I(n) for h in self.G.discrete_generators])
-        constraints.extend([self.drho(A) for A in self.G.lie_algebra])
-        return ConcatLazy(constraints) if constraints else jnp.zeros(1,n)
+        constraints.extend([lazify(self.rho(h))-I(n) for h in self.G.discrete_generators])
+        constraints.extend([lazify(self.drho(A)) for A in self.G.lie_algebra])
+        return ConcatLazy(constraints) if constraints else lazify(jnp.zeros(1,n))
 
     #@disk_cache('./_subspace_cache_jax.dat')
     solcache = {}
@@ -85,7 +85,7 @@ class Rep(object):
     
     def symmetric_projector(self):
         Q = self.symmetric_basis()
-        Q_lazy = Lazy(Q)
+        Q_lazy = lazify(Q)
         P = Q_lazy@Q_lazy.H
         return P
 
@@ -105,6 +105,10 @@ class Rep(object):
         if isinstance(other,(int,ScalarRep)):
             if other==1 or other==Scalar: return self
             if other==0: return 0
+            if (not hasattr(self,'concrete')) or self.concrete:
+                return emlp.solver.product_sum_reps.SumRep(*(other*[self]))
+            else:
+                return emlp.solver.product_sum_reps.DeferredSumRep(*(other*[self]))
             return sum(other*[self])
         elif all(rep.concrete for rep in (self,other) if hasattr(rep,'concrete')):
             if any(isinstance(rep,emlp.solver.product_sum_reps.SumRep) for rep in [self,other]):
@@ -119,7 +123,10 @@ class Rep(object):
         if isinstance(other,(int,ScalarRep)): 
             if other==1 or other==Scalar: return self
             if other==0: return 0
-            return sum(other*[self])
+            if (not hasattr(self,'concrete')) or self.concrete:
+                return emlp.solver.product_sum_reps.SumRep(*(other*[self]))
+            else:
+                return emlp.solver.product_sum_reps.DeferredSumRep(*(other*[self]))
         else: return NotImplemented
 
     def __pow__(self,other):
@@ -288,6 +295,7 @@ class ConvergenceError(Exception): pass
 def sparsify_basis(Q,lr=1e-2): #(n,r)
     W = np.random.randn(Q.shape[-1],Q.shape[-1])
     W,_ = np.linalg.qr(W)
+    W = device_put(W.astype(jnp.float32))
     opt_init,opt_update = optax.adam(lr)#optax.sgd(1e2,.9)#optax.adam(lr)#optax.sgd(3e-3,.9)#optax.adam(lr)
     opt_update = jit(opt_update)
     opt_state = opt_init(W)  # init stats

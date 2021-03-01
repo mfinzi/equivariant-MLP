@@ -373,9 +373,12 @@ class LinearOperator(object):
     def __add__(self, x):
         if isinstance(x, LinearOperator):
             return _SumLinearOperator(self, x)
+        elif isinstance(x,np.ndarray) and len(x.shape)==2:
+            return _SumLinearOperator(self, Lazy(x))
         else:
             return NotImplemented
-
+    def __radd__(self,x):
+        return self.__add__(x)
     def __neg__(self):
         return _ScaledLinearOperator(self, -1)
 
@@ -717,49 +720,68 @@ class IdentityOperator(LinearOperator):
         return self
 
 
-def aslinearoperator(A):
-    """Return A as a LinearOperator.
-    'A' may be any of the following types:
-     - ndarray
-     - matrix
-     - sparse matrix (e.g. csr_matrix, lil_matrix, etc.)
-     - LinearOperator
-     - An object with .shape and .matvec attributes
-    See the LinearOperator documentation for additional information.
-    Notes
-    -----
-    If 'A' has no .dtype attribute, the data type is determined by calling
-    :func:`LinearOperator.matvec()` - set the .dtype attribute to prevent this
-    call upon the linear operator creation.
-    Examples
-    --------
-    >>> from scipy.sparse.linalg import aslinearoperator
-    >>> M = np.array([[1,2,3],[4,5,6]], dtype=np.int32)
-    >>> aslinearoperator(M)
-    <2x3 MatrixLinearOperator with dtype=int32>
-    """
-    if isinstance(A, LinearOperator):
-        return A
+class Lazy(LinearOperator):
+    def __init__(self,dense_matrix):
+        self.A = dense_matrix
+        super().__init__(self.A.dtype,self.A.shape)
+        
+    def _matmat(self,V):
+        return self.A@V
+    def _matvec(self,v):
+        return self.A@v
+    def _rmatmat(self,V):
+        return self.A.T@V
+    def _rmatvec(self,v):
+        return self.A.T@v
+    def to_dense(self):
+        return self.A
+    def invT(self):
+        return Lazy(np.linalg.inv(self.A).T)
 
-    elif isinstance(A, np.ndarray):
-        if A.ndim > 2:
-            raise ValueError('array must have ndim <= 2')
-        return MatrixLinearOperator(A)
 
-    else:
-        if hasattr(A, 'shape') and hasattr(A, 'matvec'):
-            rmatvec = None
-            rmatmat = None
-            dtype = None
+# def aslinearoperator(A):
+#     """Return A as a LinearOperator.
+#     'A' may be any of the following types:
+#      - ndarray
+#      - matrix
+#      - sparse matrix (e.g. csr_matrix, lil_matrix, etc.)
+#      - LinearOperator
+#      - An object with .shape and .matvec attributes
+#     See the LinearOperator documentation for additional information.
+#     Notes
+#     -----
+#     If 'A' has no .dtype attribute, the data type is determined by calling
+#     :func:`LinearOperator.matvec()` - set the .dtype attribute to prevent this
+#     call upon the linear operator creation.
+#     Examples
+#     --------
+#     >>> from scipy.sparse.linalg import aslinearoperator
+#     >>> M = np.array([[1,2,3],[4,5,6]], dtype=np.int32)
+#     >>> aslinearoperator(M)
+#     <2x3 MatrixLinearOperator with dtype=int32>
+#     """
+#     if isinstance(A, LinearOperator):
+#         return A
 
-            if hasattr(A, 'rmatvec'):
-                rmatvec = A.rmatvec
-            if hasattr(A, 'rmatmat'):
-                rmatmat = A.rmatmat
-            if hasattr(A, 'dtype'):
-                dtype = A.dtype
-            return LinearOperator(A.shape, A.matvec, rmatvec=rmatvec,
-                                  rmatmat=rmatmat, dtype=dtype)
+#     elif isinstance(A, np.ndarray):
+#         if A.ndim > 2:
+#             raise ValueError('array must have ndim <= 2')
+#         return MatrixLinearOperator(A)
 
-        else:
-            raise TypeError('type not understood')
+#     else:
+#         if hasattr(A, 'shape') and hasattr(A, 'matvec'):
+#             rmatvec = None
+#             rmatmat = None
+#             dtype = None
+
+#             if hasattr(A, 'rmatvec'):
+#                 rmatvec = A.rmatvec
+#             if hasattr(A, 'rmatmat'):
+#                 rmatmat = A.rmatmat
+#             if hasattr(A, 'dtype'):
+#                 dtype = A.dtype
+#             return LinearOperator(A.shape, A.matvec, rmatvec=rmatvec,
+#                                   rmatmat=rmatmat, dtype=dtype)
+
+#         else:
+#             raise TypeError('type not understood')

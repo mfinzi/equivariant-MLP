@@ -14,7 +14,7 @@ import functools
 import random
 from .representation import Rep
 from .linear_operator_jax import LinearOperator
-from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I
+from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify
 import logging
 import copy
 import math
@@ -41,7 +41,7 @@ class SumRep(Rep):
         self.reps,perm = self.compute_canonical(rep_counters,perms)
         self.perm = extra_perm[perm] if extra_perm is not None else perm
         self.invperm = np.argsort(self.perm)
-        self.canonical=(self.perm==self.invperm).all()
+        self.canonical=(self.perm==np.arange(len(self.perm))).all()
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
@@ -104,55 +104,64 @@ class SumRep(Rep):
         to the projection matrix drho(Mi). Function returns both the
         dimension of the active subspace (r) and also a function that
         maps an array of size (*,r) to a vector v with a representaiton
-        given by the rnaks that satisfies drho(Mi)v=0 for each i.
+        given by the ranks that satisfies drho(Mi)v=0 for each i.
         Inputs: [generators seq(tensor(d,d))] [ranks seq(tuple(p,q))]
         Outputs: [r int] [projection (tensor(r)->tensor(rep_dim))]"""
         Qs = {rep: rep.symmetric_basis() for rep in self.reps}
         Qs = {rep: (jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for rep,Q in Qs.items()}
         active_dims = sum([self.reps[rep]*Qs[rep].shape[-1] for rep in Qs.keys()])
+        multiplicities = self.reps.values()
         def lazy_Q(array):
-            array = array.T
-            i=0
-            Ws = []
-            for rep, multiplicity in self.reps.items():
-                Qr = Qs[rep]
-                if not Qr.shape[-1]: continue
-                i_end = i+multiplicity*Qr.shape[-1]
-                elems = Qr@array[...,i:i_end].reshape(-1,Qr.shape[-1]).T
-                Ws.append(elems.T.reshape(*array.shape[:-1],multiplicity*rep.size()))
-                i = i_end
-            Ws = jnp.concatenate(Ws,axis=-1) #concatenate over rep axis
-            inp_ordered_Ws = Ws[...,self.invperm] #(should it be inverse?) reorder to original rep ordering 
-            return  inp_ordered_Ws.T
+            return lazy_direct_matmat(array,Qs.values(),multiplicities)[self.invperm]
+        # def lazy_Q(array):
+        #     array = array.T
+        #     i=0
+        #     Ws = []
+        #     for rep, multiplicity in self.reps.items():
+        #         Qr = Qs[rep]
+        #         if not Qr.shape[-1]: continue
+        #         i_end = i+multiplicity*Qr.shape[-1]
+        #         elems = Qr@array[...,i:i_end].reshape(-1,Qr.shape[-1]).T
+        #         Ws.append(elems.T.reshape(*array.shape[:-1],multiplicity*rep.size()))
+        #         i = i_end
+        #     Ws = jnp.concatenate(Ws,axis=-1) #concatenate over rep axis
+        #     inp_ordered_Ws = Ws[...,self.invperm] #(should it be inverse?) reorder to original rep ordering 
+        #     return  inp_ordered_Ws.T
         return LinearOperator(shape=(self.size(),active_dims),matvec=lazy_Q,matmat=lazy_Q)
 
     def symmetric_projector(self):
         Ps = {rep:rep.symmetric_projector() for rep in self.reps}
-        
         # Apply the projections for each rep, concatenate, and permute back to orig rep order
-        def lazy_QQT(W):
-            ordered_W = W[self.perm]
-            PWs = []
-            i=0
-            for rep, multiplicity in self.reps.items():
-                P = Ps[rep]
-                i_end = i+multiplicity*rep.size()
-                PWs.append((P@ordered_W[i:i_end].reshape(multiplicity,rep.size()).T).T.reshape(-1))
-                i = i_end
-                #print(rep,multiplicity,i_end)
-            PWs = jnp.concatenate(PWs,axis=-1) #concatenate over rep axis
-            inp_ordered_PWs = PWs[self.invperm]
-            #print(inp_ordered_PWs)
-            return  inp_ordered_PWs # reorder to original rep ordering
-        return LinearOperator(shape=(self.size(),self.size()),matvec=lazy_QQT)
+        # def lazy_QQT(W):
+        #     ordered_W = W[self.perm]
+        #     PWs = []
+        #     i=0
+        #     for rep, multiplicity in self.reps.items():
+        #         P = Ps[rep]
+        #         i_end = i+multiplicity*rep.size()
+        #         PWs.append((P@ordered_W[i:i_end].reshape(multiplicity,rep.size()).T).T.reshape(-1))
+        #         i = i_end
+        #         #print(rep,multiplicity,i_end)
+        #     PWs = jnp.concatenate(PWs,axis=-1) #concatenate over rep axis
+        #     inp_ordered_PWs = PWs[self.invperm]
+        #     #print(inp_ordered_PWs)
+        #     return  inp_ordered_PWs # reorder to original rep ordering
+        multiplicities = self.reps.values()
+        def lazy_P(array):
+            return lazy_direct_matmat(array,Ps.values(),multiplicities)[self.invperm]
+        return LinearOperator(shape=(self.size(),self.size()),matvec=lazy_P,matmat=lazy_P)
 
-    ##TODO: investigate why these more idiomatic definitions with Lazy Tensors end up slower
+    # ##TODO: investigate why these more idiomatic definitions with Lazy Tensors end up slower
     # def symmetric_basis(self):
     #     Qs = [rep.symmetric_basis() for rep in self.reps]
+    #     Qs = [(jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for Q in Qs]
     #     multiplicities  = self.reps.values()
-    #     return LazyPerm(self.invperm)@LazyDirectSum(Qs,multiplicities)
+    #     Q = I(len(self.perm))
+    #     Q@jnp.zeros((Q.shape[-1],1))
+    #     return Q#LazyPerm(self.invperm)#LazyDirectSum(Qs,multiplicities)#LazyPerm(self.invperm)@LazyDirectSum(Qs,multiplicities)
     # def symmetric_projector(self):
     #     Ps = [rep.symmetric_projector() for rep in self.reps]
+    #     Ps = (jax.device_put(P.astype(np.float32)) if isinstance(P,(np.ndarray)) else P)
     #     multiplicities  = self.reps.values()
     #     return LazyPerm(self.invperm)@LazyDirectSum(Ps,multiplicities)@LazyPerm(self.perm)
     def rho(self,M):
@@ -201,7 +210,7 @@ class SumRepFromCollection(SumRep): # a different constructor for SumRep
         self.perm = np.arange(self.size()) if perm is None else perm
         self.reps,self.perm = self.compute_canonical([counter],[self.perm])
         self.invperm = np.argsort(self.perm)
-        self.canonical=(self.perm==self.invperm).all()
+        self.canonical=(self.perm==np.arange(len(self.perm))).all()
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
@@ -433,7 +442,7 @@ class DeferredSumRep(Rep):
        
     def __call__(self,G):
         if G is None: return self
-        return sum([rep(G) for rep in self.to_sum])
+        return SumRep(*[rep(G) for rep in self.to_sum])
     def __repr__(self):
         return '('+"+".join(f"{rep}" for rep in self.to_sum)+')'
     def __str__(self):

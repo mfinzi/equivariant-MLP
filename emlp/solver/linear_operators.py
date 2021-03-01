@@ -1,4 +1,4 @@
-from .linear_operator_jax import LinearOperator
+from .linear_operator_jax import LinearOperator,Lazy
 import jax.numpy as jnp
 import numpy as np
 from jax import jit
@@ -6,25 +6,15 @@ import jax
 from functools import reduce
 from .utils import prod as product
 
-class Lazy(LinearOperator):
-    def __init__(self,dense_matrix):
-        self.A = dense_matrix
-        self.shape = self.A.shape
-        self.dtype = self.A.dtype
-    def _matmat(self,V):
-        return self.A@V
-    def _matvec(self,v):
-        return self.A@v
-    def _rmatmat(self,V):
-        return self.A.T@V
-    def _rmatvec(self,v):
-        return self.A.T@v
-    def to_dense(self):
-        return self.A
+def lazify(x):
+    if isinstance(x,LinearOperator): return x
+    elif isinstance(x,(jnp.ndarray,np.ndarray)): return Lazy(x)
+    else: raise NotImplementedError
 
 class I(LinearOperator):
     def __init__(self,d):
-        self.shape = (d,d)
+        shape = (d,d)
+        super().__init__(None, shape)
     def _matmat(self,V): #(c,k)
         return V
     def _matvec(self,V):
@@ -121,15 +111,16 @@ class ConcatLazy(LinearOperator):
     
 class LazyDirectSum(LinearOperator):
     def __init__(self,Ms,multiplicities=None):
-        self.Ms = [jax.device_put(M.astype(np.float32)) if isinstance(M,(np.ndarray,jnp.ndarray)) else M for M in Ms]
+        self.Ms = [jax.device_put(M.astype(np.float32)) if isinstance(M,(np.ndarray)) else M for M in Ms]
         self.multiplicities = [1 for M in Ms] if multiplicities is None else multiplicities
-        self.shape = (sum(Mi.shape[0]*c for Mi,c in zip(Ms,multiplicities)),
+        shape = (sum(Mi.shape[0]*c for Mi,c in zip(Ms,multiplicities)),
                       sum(Mi.shape[0]*c for Mi,c in zip(Ms,multiplicities)))
+        super().__init__(None,shape)
         #self.dtype=Ms[0].dtype
-        self.dtype=jnp.dtype('float32')
+        #self.dtype=jnp.dtype('float32')
 
     def _matvec(self,v):
-        return self._matmat(v.reshape(v.shape[0],-1)).reshape(-1)
+        return lazy_direct_matmat(v,self.Ms,self.multiplicities)
 
     def _matmat(self,v): # (n,k)
         return lazy_direct_matmat(v,self.Ms,self.multiplicities)
@@ -141,23 +132,22 @@ class LazyDirectSum(LinearOperator):
         Ms_all = [M for M,c in zip(self.Ms,self.multiplicities) for _ in range(c)]
         Ms_all = [Mi.to_dense() if isinstance(Mi,LinearOperator) else Mi for Mi in Ms_all]
         return jax.scipy.linalg.block_diag(*Ms_all)
-    def __new__(cls,Ms,multiplicities=None):
-        if len(Ms)==1 and multiplicities is None: return Ms[0]
-        return super().__new__(cls)
+    # def __new__(cls,Ms,multiplicities=None):
+    #     if len(Ms)==1 and multiplicities is None: return Ms[0]
+    #     return super().__new__(cls)
         
 def lazy_direct_matmat(v,Ms,mults):
-    n,k = v.shape
+    n = v.shape[0]
     i=0
     y = []
     for M, multiplicity in zip(Ms,mults):
         if not M.shape[-1]: continue
         i_end = i+multiplicity*M.shape[-1]
         elems = M@v[i:i_end].T.reshape(-1,M.shape[-1]).T
-        y.append(elems.T.reshape(k,multiplicity*M.shape[0]).T)
+        y.append(elems.T.reshape(-1,multiplicity*M.shape[0]).T)
         i = i_end
     y = jnp.concatenate(y,axis=0) #concatenate over rep axis
     return  y
-
 
 
 class LazyPerm(LinearOperator):

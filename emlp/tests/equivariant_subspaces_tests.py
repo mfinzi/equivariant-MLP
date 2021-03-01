@@ -105,11 +105,10 @@ def test_high_rank_representations(self,G):
             #     print(f"Failed with G={G} and T({p,q})")
             #     raise e
 
-@expand_test_cases([#(SO(3),T(1),2*T(1)),
-    #(SO(2),T(1)+2*T(0),T(1)+T(2)+2*T(0)+T(1))])#,
-    # (SO(3),T(1)+2*T(0),T(1)+T(2)+2*T(0)+T(1)),
-    # (SO(3),5*T(0)+5*T(1),3*T(0)+T(2)+2*T(1)),
-    # (SO(3),5*(T(0)+T(1)),2*(T(0)+T(1))+T(2)+T(1)),
+@expand_test_cases([
+    (SO(3),T(1)+2*T(0),T(1)+T(2)+2*T(0)+T(1)),
+    (SO(3),5*T(0)+5*T(1),3*T(0)+T(2)+2*T(1)),
+    (SO(3),5*(T(0)+T(1)),2*(T(0)+T(1))+T(2)+T(1)),
     (SO13p(),T(2)+4*T(1,0)+T(0,1),10*T(0)+3*T(1,0)+3*T(0,1)+T(0,2)+T(2,0)+T(1,1))])           
 def test_equivariant_matrix(self,G,repin,repout):
     N=5
@@ -161,7 +160,7 @@ def test_bilinear_layer(self,G,repin,repout):
     self.assertTrue(equiv_err<1e-6,f"Bilinear Equivariance fails err {equiv_err:.3e} with G={G}")
 
 @expand_test_cases([SO(n) for n in [2,3]]+[O(n) for n in [2,3]]+\
-                #[SU(n) for n in [2,3]]+[U(n) for n in [1,2,3]]+\
+                [SU(n) for n in [2,3]]+[U(n) for n in [1,2,3]]+\
                 [S(n) for n in [5,6]]+[Z(n) for n in [5,6]]+\
                 [SO13p(),SO13(),O13()])# + [Sp(n) for n in [1,2,3,4]])
 def test_large_representations(self,G): #Currently failing for lorentz and sp groups

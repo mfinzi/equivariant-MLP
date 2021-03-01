@@ -152,8 +152,8 @@ def noise2samples(zs,ks,lie_algebra,discrete_generators,seed=0):
 class DirectProduct(Group):
     def __init__(self,G1,G2):
         I1,I2 = I(G1.d),I(G2.d)
-        self.lie_algebra = [LazyKronsum([A1,0*I2]) for A1 in G1.lie_algebra]+[lazy_kronsum([0*I1,A2]) for A2 in G2.lie_algebra]
-        self.discrete_generators = [LazyKron([M1,I2]) for M1 in G1.discrete_generators]+[lazy_kron([I1,M2]) for M2 in G2.discrete_generators]
+        self.lie_algebra = [LazyKronsum([A1,0*I2]) for A1 in G1.lie_algebra]+[LazyKronsum([0*I1,A2]) for A2 in G2.lie_algebra]
+        self.discrete_generators = [LazyKron([M1,I2]) for M1 in G1.discrete_generators]+[LazyKron([I1,M2]) for M2 in G2.discrete_generators]
         self.names = (repr(G1),repr(G2))
         super().__init__()
         
@@ -455,7 +455,7 @@ class ZnxZn(Group):
         nshift = Zn.discrete_generators[0]
         In = I(n)
         Idense = np.eye(n*n)
-        self.discrete_generators = [lazy_kron([nshift,In]),lazy_kron([In,nshift])]
+        self.discrete_generators = [LazyKron([nshift,In]),LazyKron([In,nshift])]
         super().__init__(n)
 
 @export
@@ -469,7 +469,7 @@ class ZksZnxZn(Group):
         Ik = I(k)
         Idense = np.eye(k*n*n)
         assert k in [2,4]
-        self.discrete_generators = [lazy_kron([Ik,nshift,In]),lazy_kron([Ik,In,nshift]),lazy_kron([kshift,Rot90(n,4//k)])]
+        self.discrete_generators = [LazyKron([Ik,nshift,In]),LazyKron([Ik,In,nshift]),LazyKron([kshift,Rot90(n,4//k)])]
         super().__init__(k,n)
 
 class Embed(Group):

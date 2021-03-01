@@ -152,8 +152,8 @@ def noise2samples(zs,ks,lie_algebra,discrete_generators,seed=0):
 class DirectProduct(Group):
     def __init__(self,G1,G2):
         I1,I2 = I(G1.d),I(G2.d)
-        self.lie_algebra = [lazy_kronsum([A1,0*I2]) for A1 in G1.lie_algebra]+[lazy_kronsum([0*I1,A2]) for A2 in G2.lie_algebra]
-        self.discrete_generators = [lazy_kron([M1,I2]) for M1 in G1.discrete_generators]+[lazy_kron([I1,M2]) for M2 in G2.discrete_generators]
+        self.lie_algebra = [LazyKronsum([A1,0*I2]) for A1 in G1.lie_algebra]+[lazy_kronsum([0*I1,A2]) for A2 in G2.lie_algebra]
+        self.discrete_generators = [LazyKron([M1,I2]) for M1 in G1.discrete_generators]+[lazy_kron([I1,M2]) for M2 in G2.discrete_generators]
         self.names = (repr(G1),repr(G2))
         super().__init__()
         

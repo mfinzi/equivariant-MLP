@@ -160,7 +160,7 @@ def test_bilinear_layer(self,G,repin,repout):
     self.assertTrue(equiv_err<1e-6,f"Bilinear Equivariance fails err {equiv_err:.3e} with G={G}")
 
 @expand_test_cases([SO(n) for n in [2,3]]+[O(n) for n in [2,3]]+\
-                [SU(n) for n in [2,3]]+[U(n) for n in [1,2,3]]+\
+                [SU(n) for n in [2,3]]+\
                 [S(n) for n in [5,6]]+[Z(n) for n in [5,6]]+\
                 [SO13p(),SO13(),O13()])# + [Sp(n) for n in [1,2,3,4]])
 def test_large_representations(self,G): #Currently failing for lorentz and sp groups

@@ -12,18 +12,23 @@ A type system for the automated construction of equivariant layers.
 
 .. toctree::
    :maxdepth: 1
-   :caption: Tutorials
+   :caption: Getting Started
 
    notebooks/quickstart.md
-   notebooks/model.md
+   notebooks/building_a_model.md
    notebooks/new_groups.md
 
 .. toctree::
    :maxdepth: 1
-   :caption: Advanced Tutorials
+   :caption: Advanced Features
 
    notebooks/mixed_tensors.md
    notebooks/new_representations.md
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Examples
+
 
 .. toctree::
    :maxdepth: 1
@@ -34,7 +39,7 @@ A type system for the automated construction of equivariant layers.
 .. toctree::
    :maxdepth: 2
    :caption: Developer documentation
-
+   testing.md
    documentation.md
 
 

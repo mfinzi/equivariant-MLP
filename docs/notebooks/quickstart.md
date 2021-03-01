@@ -12,23 +12,29 @@ kernelspec:
   name: python3
 ---
 
-# Getting Familiar with the Type System
+# Getting Started with Equivariant Representations
+
+```{code-cell} ipython3
+
+```
+
+EMLP computes the symmetric subspace for a linear representation $\rho$ and a matrix group $G$, solving the constraint to find an element $v\in V$ that satisfies $\forall g\in G: \ \ \rho(g)v=v$
+
+For example, we can find invariant vectors of the cyclic translation group $\mathbb{Z}_n$ which is just the constant $\vec{1}$ scaled to have unit norm.
 
 ```{code-cell} ipython3
 from emlp.solver.representation import V,sparsify_basis
-from emlp.solver.groups import *
+from emlp.solver.groups import Z,S,SO,O,O13,RubiksCube
 import jax.numpy as jnp
-import logging
-logging.getLogger().setLevel(logging.INFO)
 ```
-
-EMLP computes the symmetric subspace for a linear representation $\rho$ and a matrix group $G$, solving the constraint to find an element $v\in V$ that satisfies$$\forall g\in G: \ \ \rho(g)v=v$$
-
-For example, we can find invariant vectors of the cyclic translation group $\mathbb{Z}_n$ which is just the constant $\vec{1}$ scaled to have unit norm. 
 
 ```{code-cell} ipython3
 V(Z(5)).symmetric_basis()
 ```
+
+## The Representation Type System
+
++++
 
 Each implemented group comes with a faithful 'base' representation $V$. Because faithful representations are one-to-one, we can build any representation by transforming this base representation.
 
@@ -44,7 +50,7 @@ We can combine and use these operators interchangeably:
 (V+V.T)*(V*V.T+V)
 ```
 
-We use the shorthand $cV$ can be used for $V\oplus V\oplus...\oplus V$ and $V^c = V\otimes V\otimes...\otimes V$, not that this different from the typical notation with cartesian products of sets.
+We use the shorthand $cV$ to mean $V\oplus V\oplus...\oplus V$ and $V^c = V\otimes V\otimes...\otimes V$. Note that this differs from the common notation where $V^c$ denotes the cartesian products the set (like with $\mathbb{R}^c$) which would be the same as $cV$ in this notation. Being more formal we could distinguish the two by denoting $V^{\otimes c}=V\otimes V\otimes...\otimes V$ but to stay consistent with the python interface, we will not.
 
 ```{code-cell} ipython3
 5*V*2
@@ -67,13 +73,19 @@ Although for groups like the Lorentz group $SO(1,3)$ with non orthogonal represe
 
 ```{code-cell} ipython3
 V(SO(3)).T+V(SO(3))
+```
 
+```{code-cell} ipython3
 V(SO13()).T+V(SO13())
 ```
 
 Linear maps from $V_1\rightarrow V_2$ have the type $V_2\otimes V_1^*$. The `V>>W` is shorthand for `W*V.T` and produces linear maps from `V` to `W`.
 
 Imposing (cyclic) Translation Equivariance $G=\mathbb{Z}_n$ on linear maps $V\rightarrow V$ yields circular convolutions (circulant matrices) which can be expressed as a linear combination of $n$ basis elements of size $n\times n$.
+
++++
+
+## Exploring and Visualizing Equivariant Bases
 
 ```{code-cell} ipython3
 G = Z(6)
@@ -142,60 +154,18 @@ vis(repin,repout)
 print((repin>>repout).symmetric_basis().shape)
 ```
 
-## Composite Representations
-
-+++
-
-How about maps from graphs to sets? Lets say a graph consists of one node feature and one edge feature which can be represented with the $\oplus$ operator.
-
-```{code-cell} ipython3
-W = V(S(6))
-repin = W+W**2 # (one set feature and one edge feature)
-repout = W     # (one set feature)
-
-vis(repin,repout)
-print((repin>>repout).symmetric_basis().shape)
-```
-
-We can compute the bases for representations that have many copies or multiplicity of a given representation type, such as for the many channels in a neural network. The `rep.symmetric_basis()` and `rep.symmetric_projector()` can return lazy matrices $Q$ and $P=QQ^T$ when the representations are composite (or when the representation is specified lazily). [implementation change is making this much slower than normal, using smaller values]
-
-+++
-
-For example with a more realistically sized layer with 100 global constants, 100 set feature channels, and 20 edge feature channels ($100V^0+100V^1+20V^2$) we have
-
-```{code-cell} ipython3
-
-W = V(S(6))
-repin = 100*W**0 + 100*W+20*W**2
-repout = repin
-rep_map = repin>>repout
-print(f"{rep_map}, of size {rep_map.size()}")
-
-# Q = rep_map.symmetric_basis()
-# print(Q.shape)
-```
-
-These Lazy matrices are modeled after https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html. Unfortunately the larger matrices are harder to visualize, maybe someone can figure out how to do this better?
-
-```{code-cell} ipython3
-P =rep_map.symmetric_projector()
-v = np.random.randn(P.shape[-1])
-v = P@v
-plt.imshow(v.reshape(repout.size(),repin.size()))
-plt.axis('off')
-```
-
-But more fun than continuous groups are discrete groups!
-How about the $2$D rotation group $SO(3)$. It's well known that the only equivariant object for the vector space $V^{\otimes 3}$ is the Levi-Civita symbol $\epsilon_{ijk}$. Since the values are both $0$, positive, and negative (leading to more than `Q.shape[-1]` clusters) we disable the clustering.
+How about the continuous $2$D rotation group $SO(3)$? It's well known that the only equivariant object for the vector space $V^{\otimes 3}$ is the Levi-Civita symbol $\epsilon_{ijk}$. Since the values are both $0$, positive, and negative (leading to more than `Q.shape[-1]` clusters) we disable the clustering.
 
 ```{code-cell} ipython3
 W = V(SO(3))
 repin = W**2
 repout = W
 Q = (repin>>repout).symmetric_basis()
-print(Q.shape)
+print(f"Basis matrix of shape {Q.shape}")
 vis(repin,repout,cluster=False)
+```
 
+```{code-cell} ipython3
 print(sparsify_basis(Q).reshape(3,3,3))
 ```
 
@@ -203,7 +173,7 @@ print(sparsify_basis(Q).reshape(3,3,3))
 from emlp.solver.representation import T
 ```
 
-## High Dimensional Representations
+### High Dimensional Representations
 
 +++
 
@@ -219,4 +189,46 @@ vis(W**5,W**3)
 
 ```{code-cell} ipython3
 vis(V(RubiksCube()),V(RubiksCube()))
+```
+
+## Composite Representations and Lazy Matrices
+
++++
+
+How about maps from graphs to sets? Lets say a graph consists of one node feature and one edge feature which can be represented with the $\oplus$ operator.
+
+```{code-cell} ipython3
+W = V(S(6))
+repin = W+W**2 # (one set feature and one edge feature)
+repout = W     # (one set feature)
+
+vis(repin,repout)
+print((repin>>repout).symmetric_basis().shape)
+```
+
+Representations that have many copies or multiplicity of a given representation type, such as for the many channels in a neural network, are simply examples of the $\otimes$ operator (`+` in python). The `rep.symmetric_basis()` and `rep.symmetric_projector()` can return lazy matrices $Q$ and $P=QQ^T$ when the representations are composite (or when the representation is specified lazily). [implementation change is making this much slower than normal, using smaller values]
+
++++
+
+For example with a more realistically sized layer with 100 global constants, 100 set feature channels, and 20 edge feature channels ($100V^0+100V^1+20V^2$) we have
+
+```{code-cell} ipython3
+W = V(S(6))
+repin = 100*W**0 + 100*W+20*W**2
+repout = repin
+rep_map = repin>>repout
+print(f"{rep_map}, of size {rep_map.size()}")
+
+Q = rep_map.symmetric_basis()
+print(f"Basis matrix of shape {Q.shape}")
+```
+
+These Lazy matrices are modeled after https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html. Unfortunately the larger matrices are harder to visualize, let us know if you have a good idea for how!
+
+```{code-cell} ipython3
+P =rep_map.symmetric_projector()
+v = np.random.randn(P.shape[-1])
+v = P@v
+plt.imshow(v.reshape(repout.size(),repin.size()))
+plt.axis('off')
 ```

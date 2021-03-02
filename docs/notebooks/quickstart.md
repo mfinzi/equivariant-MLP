@@ -14,19 +14,37 @@ kernelspec:
 
 # Getting Started with Equivariant Representations
 
-```{code-cell} ipython3
++++
 
-```
+Our general approach to equivariance is centered around the idea of _representations_, a prescription of how a group element acts on a given vector space.
 
-EMLP computes the symmetric subspace for a linear representation $\rho$ and a matrix group $G$, solving the constraint to find an element $v\in V$ that satisfies $\forall g\in G: \ \ \rho(g)v=v$
+Given a vector space $V$ and a group $G$, elements of the group $g\in G$ can act on a vector $v\in V$ by the representation matrix $v\mapsto \rho(g)v$. The vector space $V$ and the matrix $\rho$ are often referred to interchangeably as the representation.
 
-For example, we can find invariant vectors of the cyclic translation group $\mathbb{Z}_n$ which is just the constant $\vec{1}$ scaled to have unit norm.
+For example with the cyclic translation group $\mathbb{Z}_4$, we implement a (faithful) base representation $V$ which cyclicly translates the elements. Sampling an arbitrary transformation, we have
 
 ```{code-cell} ipython3
 from emlp.solver.representation import V,sparsify_basis
-from emlp.solver.groups import Z,S,SO,O,O13,RubiksCube
+from emlp.solver.groups import Z,S,SO,O,O13,SO13,RubiksCube
 import jax.numpy as jnp
+import numpy as np
 ```
+
+```{code-cell} ipython3
+G=Z(4)
+rep = V(G)
+v = np.random.randn(rep.size())
+g = G.sample()
+print(f"𝜌(g) =\n{rep.rho(g)}")
+print(f"v = {v}")
+print(f"𝜌(g)v = {rep.rho(g)@v:}")
+```
+
+The symmetric subspace of the representation is the space of solutions to the constraint $\forall g\in G: \ \ \rho(g)v=v$.
+For any representation, you can get the basis $Q \in \mathbb{R}^{n\times r}$ for this symmetric subspace with `rep.symmetric_basis()` and the matrix $P=QQ^T$ which projects to this subspace with `rep.symmetric_projector()`.
+
++++
+
+For example, we can find invariant vectors of the cyclic translation group $\mathbb{Z}_n$ which is just the constant $\vec{1}$ scaled to have unit norm.
 
 ```{code-cell} ipython3
 V(Z(5)).symmetric_basis()
@@ -38,7 +56,7 @@ V(Z(5)).symmetric_basis()
 
 Each implemented group comes with a faithful 'base' representation $V$. Because faithful representations are one-to-one, we can build any representation by transforming this base representation.
 
-We provide several operators to transform and construct representations in different ways built and later go on to show how to do this more generally. In our type system, representations can be combined with the direct sum $\rho_a \oplus\rho_b$ operator, the tensor product $\rho_a\otimes\rho_b$, the dual $\rho^*$. We implement these with the python operators `+`, `*`, and `.T`.
+We provide several operators to transform and construct representations in different ways built and later go on to show how to do this more generally. In our type system, representations can be combined with the direct sum $\rho_a \oplus\rho_b$ operator, the tensor product $\rho_a\otimes\rho_b$, the dual $\rho^*$ and these operators are implemented as the python operators `+`, `*`, and `.T`.
 
 ```{code-cell} ipython3
 V+V,  V*V,  V.T
@@ -54,7 +72,9 @@ We use the shorthand $cV$ to mean $V\oplus V\oplus...\oplus V$ and $V^c = V\otim
 
 ```{code-cell} ipython3
 5*V*2
+```
 
+```{code-cell} ipython3
 2*V**3
 ```
 
@@ -231,4 +251,8 @@ v = np.random.randn(P.shape[-1])
 v = P@v
 plt.imshow(v.reshape(repout.size(),repin.size()))
 plt.axis('off')
+```
+
+```{code-cell} ipython3
+
 ```

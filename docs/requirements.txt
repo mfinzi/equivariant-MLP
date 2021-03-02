@@ -11,4 +11,4 @@ pytest-xdist
 jupytext
 # Packages used for notebook execution
 matplotlib
-#.  # install emlp itself from current directory.
+.  # install emlp itself from current directory.

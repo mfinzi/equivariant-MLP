@@ -52,9 +52,10 @@ class LazyKron(LinearOperator):
         if len(Ms)==1: return Ms[0]
         return super().__new__(cls)
 
-@jit
+#@jit
 def kronsum(A,B):
     return jnp.kron(A,jnp.eye(B.shape[-1])) + jnp.kron(jnp.eye(A.shape[-1]),B)
+
 
 class LazyKronsum(LinearOperator):
     

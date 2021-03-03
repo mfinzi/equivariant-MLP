@@ -25,6 +25,7 @@ class Group(object,metaclass=Named):
     z_scale=None # For scale noise for sampling elements
     is_orthogonal=None
     is_regular = None
+    d = None
     def __init__(self,*args,**kwargs):
         # # Set dense lie_algebra using lie_algebra_lazy if applicable
         # if self.lie_algebra is NotImplemented and self.lie_algebra_lazy is not NotImplemented:
@@ -34,6 +35,13 @@ class Group(object,metaclass=Named):
         # if self.discrete_generators is NotImplemented and self.discrete_generators_lazy is not NotImplemented:
         #     Idense = np.eye(self.discrete_generators_lazy[0].shape[0])
         #     self.discrete_generators = np.stack([h@Idense for h in self.discrete_generators_lazy])
+
+        # get the dimension of the base group representation
+        if self.d is None: 
+            if self.lie_algebra is not NotImplemented and len(self.lie_algebra):
+                self.d= self.lie_algebra[0].shape[-1]
+            if self.discrete_generators is not NotImplemented and len(self.discrete_generators):
+                self.d= self.discrete_generators[0].shape[-1]
 
         if self.lie_algebra is NotImplemented:
             self.lie_algebra = np.zeros((0,self.d,self.d))
@@ -62,19 +70,12 @@ class Group(object,metaclass=Named):
             if len(self.discrete_generators)!=0:
                 h_dense = jnp.stack([hi@jnp.eye(self.d) for hi in self.discrete_generators])
                 self.is_regular &= ((h_dense==1).astype(np.int).sum(-1)==1).all()
-        
+
 
     def exp(self,A):
         return expm(A)
     def num_constraints(self):
         return len(self.lie_algebra)+len(self.discrete_generators)
-    @property
-    def d(self):
-        if self.lie_algebra is not NotImplemented and len(self.lie_algebra):
-            return self.lie_algebra[0].shape[-1]
-        if self.discrete_generators is not NotImplemented and len(self.discrete_generators):
-            return self.discrete_generators[0].shape[-1]
-        return self._d
 
     def sample(self):
         return self.samples(1)[0]
@@ -171,7 +172,7 @@ class SemiDirectProduct(Group):
 @export
 class Trivial(Group): #""" The trivial group G={I} in N dimensions """
     def __init__(self,N):
-        self._d = N
+        self.d = N
         super().__init__(N)
 
 @export

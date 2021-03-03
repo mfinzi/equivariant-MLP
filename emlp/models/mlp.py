@@ -121,7 +121,9 @@ def uniform_rep(ch,group):
         max_rank = lambertW(ch,d) # compute the max rank tensor that can fit up to
         Ns[:max_rank+1] += np.array([d**(max_rank-r) for r in range(max_rank+1)],dtype=int)
         ch -= (max_rank+1)*d**max_rank # compute leftover channels
-    return sum([binomial_allocation(nr,r,group) for r,nr in enumerate(Ns)])
+    sum_rep = sum([binomial_allocation(nr,r,group) for r,nr in enumerate(Ns)])
+    sum_rep,perm = sum_rep.canonicalize()
+    return sum_rep
 
 def lambertW(ch,d):
     """ Returns solution to x*d^x = ch rounded down."""
@@ -176,8 +178,7 @@ class EMLP(Module,metaclass=Named):
         )
         #self.network = LieLinear(self.rep_in,self.rep_out)
     def __call__(self,x,training=True):
-        y = self.network(x)
-        return y
+        return self.network(x)
 
 # @export
 # class EMLP2(Module):

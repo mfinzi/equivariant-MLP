@@ -189,14 +189,6 @@ vis(repin,repout,cluster=False)
 print(sparsify_basis(Q).reshape(3,3,3))
 ```
 
-```{code-cell} ipython3
-from emlp.solver.representation import T
-```
-
-### High Dimensional Representations
-
-+++
-
 We can also solve for very high dimensional representations which we automatically switch to using the automated iterative Krylov subspace method
 
 ```{code-cell} ipython3
@@ -243,7 +235,7 @@ Q = rep_map.symmetric_basis()
 print(f"Basis matrix of shape {Q.shape}")
 ```
 
-These Lazy matrices are modeled after https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html. Unfortunately the larger matrices are harder to visualize, let us know if you have a good idea for how!
+These Lazy matrices are modeled after [scipy LinearOperators](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.LinearOperator.html). Unfortunately the larger matrices are harder to visualize as for the matrix above we need 84000 different colors! We are happy to field suggestions for visualizing very large bases.
 
 ```{code-cell} ipython3
 P =rep_map.symmetric_projector()

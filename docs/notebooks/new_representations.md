@@ -12,7 +12,7 @@ kernelspec:
   name: python3
 ---
 
-# New Representations
+# Implementing New Representations
 
 ```{code-cell} ipython3
 

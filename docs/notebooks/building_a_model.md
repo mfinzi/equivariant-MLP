@@ -67,6 +67,14 @@ model = EMLP(dataset.rep_in,dataset.rep_out,group=G,num_layers=3,ch=256)
 ```
 
 ```{code-cell} ipython3
+
+```
+
+```{code-cell} ipython3
+
+```
+
+```{code-cell} ipython3
 from emlp.models.mlp import uniform_rep
 r = uniform_rep(512,G)
 print(r)

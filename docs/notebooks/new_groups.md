@@ -12,8 +12,6 @@ kernelspec:
   name: python3
 ---
 
-# New Groups
+# Implementing a New Group
 
-```{code-cell} ipython3
-
-```
++++

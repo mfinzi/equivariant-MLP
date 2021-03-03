@@ -112,7 +112,7 @@ G = Z(6)
 repin = V(G)
 repout = V(G)
 conv_basis = (repin>>repout).symmetric_basis()
-print(conv_basis.shape)
+print(f"Conv basis has shape {conv_basis.shape}")
 ```
 
 While we provide an orthogonal basis, these bases are not always easy to make sense of as an array of numbers (any rotation of an orthogonal basis is still an orthogonal basis)
@@ -138,8 +138,8 @@ def vis_basis(basis,shape,cluster=True):
     plt.axis('off')
 
 def vis(repin,repout,cluster=True):
-    Q = (repin>>repout).symmetric_basis()
-    vis_basis(Q,(repout.size(),repin.size()),cluster)
+    Q = (repin>>repout).symmetric_basis() # compute the equivariant basis
+    vis_basis(Q,(repout.size(),repin.size()),cluster) # visualize it
 ```
 
 Our convolutional basis is the familiar (circulant) convolution matrix.
@@ -171,7 +171,7 @@ What about graphs, which are composed both of sets as well as adjacency matrices
 repin = V(S(6))**2
 repout = V(S(6))**2
 vis(repin,repout)
-print((repin>>repout).symmetric_basis().shape)
+print(f"Basis matrix of shape {(repin>>repout).symmetric_basis().shape}")
 ```
 
 How about the continuous $2$D rotation group $SO(3)$? It's well known that the only equivariant object for the vector space $V^{\otimes 3}$ is the Levi-Civita symbol $\epsilon_{ijk}$. Since the values are both $0$, positive, and negative (leading to more than `Q.shape[-1]` clusters) we disable the clustering.
@@ -213,9 +213,8 @@ How about maps from graphs to sets? Lets say a graph consists of one node featur
 W = V(S(6))
 repin = W+W**2 # (one set feature and one edge feature)
 repout = W     # (one set feature)
-
 vis(repin,repout)
-print((repin>>repout).symmetric_basis().shape)
+print(f"Basis matrix of shape {(repin>>repout).symmetric_basis().shape}")
 ```
 
 Representations that have many copies or multiplicity of a given representation type, such as for the many channels in a neural network, are simply examples of the $\otimes$ operator (`+` in python). The `rep.symmetric_basis()` and `rep.symmetric_projector()` can return lazy matrices $Q$ and $P=QQ^T$ when the representations are composite (or when the representation is specified lazily). [implementation change is making this much slower than normal, using smaller values]
@@ -242,7 +241,7 @@ P =rep_map.symmetric_projector()
 v = np.random.randn(P.shape[-1])
 v = P@v
 plt.imshow(v.reshape(repout.size(),repin.size()))
-plt.axis('off')
+plt.axis('off');
 ```
 
 ```{code-cell} ipython3

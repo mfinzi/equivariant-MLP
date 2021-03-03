@@ -12,7 +12,7 @@ kernelspec:
   name: python3
 ---
 
-# mixed_tensors
+# Combining Representations from Different Groups
 
 ```{code-cell} ipython3
 

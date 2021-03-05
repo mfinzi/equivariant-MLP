@@ -34,7 +34,7 @@ def makeTrainer(*,dataset=None,network=EMLP,num_epochs=300,ndata=1000+2000,seed=
                 num_workers=0,pin_memory=False)) for k,v in datasets.items()}
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
-    lr_sched = lambda e: lr*min(1,e/(num_epochs/10))
+    lr_sched = lambda e: lr#*min(1,e/(num_epochs/10)) # Learning rate warmup
     return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":

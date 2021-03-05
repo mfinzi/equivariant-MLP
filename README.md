@@ -12,7 +12,7 @@
 
 To install as a package, run `pip install git+https://github.com/mfinzi/equivariant-MLP.git`.
 
-To run the scripts you will need to clone the repo and install it locally which you can do with
+To run the scripts you will instead need to clone the repo and install it locally which you can do with
 ```bash
 git clone https://github.com/mfinzi/equivariant-MLP.git
 cd equivariant-MLP

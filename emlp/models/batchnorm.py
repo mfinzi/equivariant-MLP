@@ -7,6 +7,7 @@ import jax
 from jax import jit
 import jax.numpy as jnp
 from emlp.solver.representation import Scalar
+from emlp.solver.product_sum_reps import SumRep
 import logging
 import objax.functional as F
 from functools import partial
@@ -14,19 +15,21 @@ import objax
 from functools import lru_cache as cache
 
 def gated(sumrep):
-    return sumrep+sum([Scalar(rep.G) for rep in sumrep.reps if rep!=Scalar and not rep.is_regular])
+    return sumrep+sum([Scalar(rep.G) for rep in sumrep if rep!=Scalar and not rep.is_regular])
 
 @cache(maxsize=None)
 def gate_indices(sumrep): #TODO: add regular
     """ Indices for scalars, and also additional scalar gates
         added by gated(sumrep)"""
+    assert isinstance(sumrep,SumRep), f"unexpected type for gate indices {type(sumrep)}"
     channels = sumrep.size()
+    perm = sumrep.perm
     indices = np.arange(channels)
     num_nonscalars = 0
     i=0
-    for rep in sumrep.reps:
+    for rep in sumrep:
         if rep!=Scalar and not rep.is_regular:
-            indices[i:i+rep.size()] = channels+num_nonscalars
+            indices[perm[i:i+rep.size()]] = channels+num_nonscalars
             num_nonscalars+=1
         i+=rep.size()
     return indices
@@ -34,10 +37,11 @@ def gate_indices(sumrep): #TODO: add regular
 @cache(maxsize=None)
 def scalar_mask(sumrep):
     channels = sumrep.size()
+    perm = sumrep.perm
     mask = np.ones(channels)>0
     i=0
-    for rep in sumrep.reps:
-        if rep!=Scalar: mask[i:i+rep.size()] = False
+    for rep in sumrep:
+        if rep!=Scalar: mask[perm[i:i+rep.size()]] = False
         i+=rep.size()
     return mask
 
@@ -46,8 +50,8 @@ def regular_mask(sumrep):
     channels = sumrep.size()
     mask = np.ones(channels)<0
     i=0
-    for rep in sumrep.reps:
-        if rep.is_regular: mask[i:i+rep.size()] = True
+    for rep in sumrep:
+        if rep.is_regular: mask[perm[i:i+rep.size()]] = True
         i+=rep.size()
     return mask
 

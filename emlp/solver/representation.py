@@ -22,6 +22,10 @@ import matplotlib.pyplot as plt
 from collections import Counter
 from functools import reduce
 import emlp.solver
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from tqdm.auto import tqdm
 #TODO: add rep,v = flatten({'Scalar':..., 'Vector':...,}), to_dict(rep,vector) returns {'Scalar':..., 'Vector':...,}
 #TODO and simpler rep = flatten({Scalar:2,Vector:10,...}),
 # Do we even want + operator to implement non canonical orderings?
@@ -79,7 +83,8 @@ class Rep(object):
             if prod(C_lazy.shape)>3e7: #Too large to use SVD
                 result = krylov_constraint_solve(C_lazy)
             else:
-                result = orthogonal_complement(C_lazy.to_dense())
+                C_dense = C_lazy.to_dense()
+                result = orthogonal_complement(C_dense)
             self.solcache[canon_rep]=result
         return self.solcache[canon_rep][invperm]
     
@@ -119,6 +124,7 @@ class Rep(object):
                 return emlp.solver.product_sum_reps.ProductRep(self,other)
         else:
             return emlp.solver.product_sum_reps.DeferredProductRep(self,other)
+            
     def __rmul__(self,other):
         if isinstance(other,(int,ScalarRep)): 
             if other==1 or other==Scalar: return self
@@ -257,30 +263,46 @@ def krylov_constraint_solve(C,tol=1e-5):
 
 def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
     W = np.random.randn(C.shape[-1],r)/np.sqrt(C.shape[-1])# if W0 is None else W0
-
+    W = device_put(W)
     opt_init,opt_update = optax.sgd(lr,.9)
     opt_state = opt_init(W)  # init stats
 
     def loss(W):
         return (jnp.absolute(C@W)**2).sum()/2 # added absolute for complex support
-    loss_and_grad = jit(jax.value_and_grad(loss))
 
-    for i in ltqdm(range(20000),desc=f'Krylov Solving for Equivariant Subspace r<={r}',level='info'):
+    loss_and_grad = jit(jax.value_and_grad(loss))
+    # setup progress bar
+    pbar = tqdm(total=100,desc=f'Krylov Solving for Equivariant Subspace r<={r}',
+    bar_format="{l_bar}{bar}| {n:.3g}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]")
+    prog_val = 0
+    lstart, _ = loss_and_grad(W)
+    
+    for i in range(20000):
+        
         lossval, grad = loss_and_grad(W)
         updates, opt_state = opt_update(grad, opt_state, W)
         W = optax.apply_updates(W, updates)
-        #W /= jnp.sqrt((W**2).sum(0,keepdims=True))
-        if jnp.sqrt(lossval) <tol: break # has converged
+        # update progress bar
+        progress = max(100*np.log(lossval/lstart)/np.log(tol**2/lstart)-prog_val,0)
+        progress = min(100-prog_val,progress)
+        if progress>0:
+            prog_val += progress
+            pbar.update(progress)
+
+        if jnp.sqrt(lossval) <tol: # check convergence condition
+            pbar.close()
+            break # has converged
         if lossval>2e3 and i>100: # Solve diverged due to too high learning rate
             logging.warning(f"Constraint solving diverged, trying lower learning rate {lr/3:.2e}")
             if lr < 1e-4: raise ConvergenceError(f"Failed to converge even with smaller learning rate {lr:.2e}")
             return krylov_constraint_solve_upto_r(C,r,tol,lr=lr/3)
     else: raise ConvergenceError("Failed to converge.")
     # Orthogonalize solution at the end
-    U,S,VT = np.linalg.svd(np.array(W),full_matrices=False)
-    
+    U,S,VT = np.linalg.svd(np.array(W),full_matrices=False) 
+    # Would like to do economy SVD here (to not have the unecessary O(n^2) memory cost) 
+    # but this is not supported in numpy (or Jax) unfortunately.
     rank = (S>10*tol).sum()
-    Q = U[:,:rank]
+    Q = device_put(U[:,:rank])
     # final_L
     final_L = loss_and_grad(Q)[0]
     assert final_L <tol, f"Normalized basis has too high error {final_L:.2e} for tol {tol:.2e}"
@@ -288,7 +310,7 @@ def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
     assert rank==0 or scutoff < S[rank-1]/100, f"Singular value gap too small: {S[rank-1]:.2e} \
         above cutoff {scutoff:.2e} below cutoff. Final L {final_L:.2e}, earlier {S[rank-5:rank]}"
     #logging.debug(f"found Rank {r}, above cutoff {S[rank-1]:.3e} after {S[rank] if r>rank else np.inf:.3e}. Loss {final_L:.1e}")
-    return device_put(Q)
+    return Q
 
 class ConvergenceError(Exception): pass
 
@@ -364,3 +386,18 @@ def bilinear_weights(out_rep,in_rep):
 def mul_part(bparams,x,bids):
     b = prod(x.shape[:-1])
     return (bparams@x[...,bids].T.reshape(bparams.shape[-1],-1)).reshape(-1,b).T
+
+
+def vis(repin,repout,cluster=True):
+    rep = (repin>>repout)
+    P = rep.symmetric_projector() # compute the equivariant basis
+    Q = rep.symmetric_basis()
+    v = np.random.randn(P.shape[1])  # sample random vector
+    v = P@v                         # project onto equivariant subspace
+    if cluster: # cluster nearby values for better color separation in plot
+        v = KMeans(n_clusters=Q.shape[-1]).fit(v.reshape(-1,1)).labels_
+    plt.imshow(v.reshape(repout.size(),repin.size()))
+    plt.axis('off')
+
+
+import emlp.solver.groups # Why is this necessary to avoid circular import?

@@ -54,24 +54,69 @@ Lets get started with a toy dataset: learning how an inertia matrix depends on t
 ```{code-cell} ipython3
 from emlp.models.datasets import Inertia
 from emlp.solver.groups import SO,O,S,Z
-dataset = Inertia(100) # Initialize dataset with 100 examples
-G = O(3)
-print(f"Input type: {dataset.rep_in(G)}, output type: {dataset.rep_out(G)}")
+trainset = Inertia(1000) # Initialize dataset with 1000 examples
+testset = Inertia(2000)
+G = SO(3)
+print(f"Input type: {trainset.rep_in(G)}, output type: {trainset.rep_out(G)}")
 ```
 
 For convenience, we store in the dataset the types for the input and the output. `5V⁰` are the $5$ mass values and `5V` are the position vectors of those masses, `V²` is the matrix type for the output, equivalent to $T_2$. To initialize the EMLP, we just need these input and output representations, the symmetry group, and the size of the network as parametrized by number of layers and number of channels (the dimension of the feature representation).
 
 ```{code-cell} ipython3
-from emlp.models.mlp import EMLP
-model = EMLP(dataset.rep_in,dataset.rep_out,group=G,num_layers=3,ch=256)
+from emlp.models.mlp import EMLP,MLP
+model = EMLP(dataset.rep_in,dataset.rep_out,group=G,num_layers=3,ch=384)
+# uncomment the following line to instead try the MLP baseline
+#model = MLP(dataset.rep_in,dataset.rep_out,group=G,num_layers=3,ch=384)
 ```
 
 ```{code-cell} ipython3
+BS=500
+lr=3e-3
+NUM_EPOCHS=1000
 
+import objax
+import jax.numpy as jnp
+import numpy as np
+from tqdm.auto import tqdm
+from torch.utils.data import DataLoader
+
+opt = objax.optimizer.Adam(model.vars())
+
+@objax.Function.with_vars(model.vars())
+def loss(x, y,training=True):
+    yhat = model(x, training=training)
+    return ((yhat-y)**2).mean()
+
+
+gv = objax.GradValues(loss, model.vars())
+
+@objax.Function.with_vars(model.vars())
+def train_op(x, y, lr):
+    g, v = gv(x, y)
+    opt(lr=lr, grads=g)
+    return v
+
+train_op = objax.Jit(train_op)
+test_loss = objax.Jit(objax.ForceArgs(loss, training=False))
+
+trainloader = DataLoader(trainset,batch_size=BS,shuffle=True)
+testloader = DataLoader(testset,batch_size=BS,shuffle=True)
 ```
 
 ```{code-cell} ipython3
+test_losses = []
+train_losses = []
+for epoch in tqdm(range(NUM_EPOCHS)):
+    train_losses.append(np.mean([train_op(jnp.array(x),jnp.array(y),lr) for (x,y) in trainloader]))
+    if not epoch%10:
+        test_losses.append(np.mean([test_loss(jnp.array(x),jnp.array(y)) for (x,y) in testloader]))
+```
 
+```{code-cell} ipython3
+import matplotlib.pyplot as plt
+plt.plot(np.arange(NUM_EPOCHS),train_losses,label='Train loss')
+plt.plot(np.arange(0,NUM_EPOCHS,10),test_losses,label='Test loss')
+plt.legend()
 ```
 
 ```{code-cell} ipython3

@@ -126,8 +126,10 @@ html_static_path = ['_static']
 #
 # html_sidebars = {}
 
+# commented out notebook execution
 # -- Options for myst ----------------------------------------------
-jupyter_execute_notebooks = "force"
+jupyter_execute_notebooks = "off"# changed from "force"
+#jupyter_execute_notebooks = "cache"
 execution_allow_errors = False
 execution_fail_on_error = True  # Requires https://github.com/executablebooks/MyST-NB/pull/296
 

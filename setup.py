@@ -9,7 +9,7 @@ setup(name="Equivariant-MLP",
       license='MIT',
       python_requires='>=3.6',
       install_requires=['h5py','objax',
-      'olive-oil-ml @ git+https://github.com/mfinzi/olive-oil-ml','optax'],
+      'olive-oil-ml @ git+https://github.com/mfinzi/olive-oil-ml','optax','tqdm>=4.38'],
       packages=find_packages(),
       long_description=open('README.md').read(),
 )

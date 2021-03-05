@@ -33,13 +33,15 @@ A type system for the automated construction of equivariant layers.
 .. toctree::
    :maxdepth: 1
    :caption: Notes
+
+   testing.md
    inner_workings.md
    CHANGELOG.md
 
 .. toctree::
    :maxdepth: 2
    :caption: Developer documentation
-   testing.md
+
    documentation.md
 
 

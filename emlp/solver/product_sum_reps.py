@@ -172,25 +172,9 @@ class SumRep(Rep):
         drhos = [rep.drho(A) for rep in self.reps]
         multiplicities = self.reps.values()
         return LazyPerm(self.invperm)@LazyDirectSum(drhos,multiplicities)@LazyPerm(self.perm)
-    # def _rho_lazy(self,M):
-    #     rhos = [rep.rho_lazy(M) for rep in self.reps]
-    #     multiplicities = self.reps.values()
-    #     return LazyPerm(self.invperm)@LazyDirectSum(rhos,multiplicities)@LazyPerm(self.perm)
-
-    # def _rho(self,M):
-    #     rhos = [rep.rho(M) for rep,c in self.reps.items() for _ in range(c)]
-    #     rho_blocks = jax.scipy.linalg.block_diag(*rhos)
-    #     return rho_blocks[self.invperm,:][:,self.invperm]
-
-    # def _drho_lazy(self,A):
-    #     drhos = [rep.drho_lazy(A) for rep in self.reps]
-    #     multiplicities = self.reps.values()
-    #     return LazyPerm(self.invperm)@LazyDirectSum(drhos,multiplicities)@LazyPerm(self.perm)
-
-    # def _drho(self,A):
-    #     drhos = [rep.drho(A) for rep,c in self.reps.items() for _ in range(c)]
-    #     drhoA_blocks = jax.scipy.linalg.block_diag(*rhos)
-    #     return drhoA_blocks[self.invperm,:][:,self.invperm]
+        
+    def __iter__(self): # not a great idea to use this method (ignores permutation ordering)
+        return (rep for rep,c in self.reps.items() for _ in range(c))
 
     def as_dict(self,v):
         out_dict = {}

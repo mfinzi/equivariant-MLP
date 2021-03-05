@@ -10,7 +10,7 @@
 
 Our type system is centered on it making it easy to combine representations using $\rho_a \otimes \rho_b$, $\rho_a \oplus \rho_b$, $\rho^*$. For any given matrix group and representation formed in our type system, you can get the equivariant basis with `rep.symmetric_basis()` or a matrix which projects to that subspace with `rep.symmetric_projector()`. For example:
 
-```
+```python
 W=V(Sp(3))
 repin = (W+2*W**2)*(W.T+1*W).T + W.T
 repout = 3*W**0 + W*W.T

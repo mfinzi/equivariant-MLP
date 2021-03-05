@@ -35,7 +35,7 @@ def makeTrainer(*,dataset=None,network=EMLP,num_epochs=300,ndata=1000+2000,seed=
     dataloaders['Train'] = dataloaders['train']
     opt_constr = objax.optimizer.Adam
     lr_sched = lambda e: lr*min(1,e/(num_epochs/10))
-    return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config
+    return RegressorPlus(model,dataloaders,opt_constr,lr_sched,**trainer_config)
 
 if __name__ == "__main__":
     cfg = argupdated_config(makeTrainer.__kwdefaults__,

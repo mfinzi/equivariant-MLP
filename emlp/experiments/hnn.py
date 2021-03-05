@@ -13,7 +13,7 @@ import torch
 import torch
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr, islice, export,FixedNumpySeed,FixedPytorchSeed,Named
-from slax.utils import LoaderTo
+from emlp.slax.utils import LoaderTo
 from oil.datasetup.datasets import split_dataset
 from oil.tuning.args import argupdated_config
 from functools import partial

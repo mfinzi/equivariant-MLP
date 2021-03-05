@@ -2,7 +2,7 @@ from emlp.models.mlp import MLP,EMLP#,LinearBNSwish
 from emlp.models.datasets import O5Synthetic,ParticleInteraction
 import jax.numpy as jnp
 import jax
-from emlp.solver.representation import T,Scalar,Matrix,Vector
+from emlp.solver.representation import T,Scalar
 from emlp.solver.groups import SO,O,Trivial,Lorentz,O13,SO13,SO13p
 from emlp.models.mlp import EMLP,LieLinear,Standardize
 from emlp.models.model_trainer import RegressorPlus
@@ -12,14 +12,14 @@ import torch
 import torch
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr, islice, export,FixedNumpySeed,FixedPytorchSeed
-from slax.utils import LoaderTo
+from emlp.slax.utils import LoaderTo
 from oil.tuning.study import train_trial
 from oil.datasetup.datasets import split_dataset
 from oil.tuning.args import argupdated_config
 from functools import partial
 import torch.nn as nn
 import logging
-import emlp.models.
+import emlp.models
 import objax
 #repmiddle = 100*T(0)+30*T(1)+10*T(2)+3*T(3)#+1*T(4)
 

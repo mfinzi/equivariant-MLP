@@ -217,7 +217,7 @@ vis(repin,repout)
 print(f"Basis matrix of shape {(repin>>repout).symmetric_basis().shape}")
 ```
 
-Representations that have many copies or multiplicity of a given representation type, such as for the many channels in a neural network, are simply examples of the $\otimes$ operator (`+` in python). The `rep.symmetric_basis()` and `rep.symmetric_projector()` can return lazy matrices $Q$ and $P=QQ^T$ when the representations are composite (or when the representation is specified lazily). [implementation change is making this much slower than normal, using smaller values]
+Representations that have many copies or multiplicity of a given representation type, such as for the many channels in a neural network, are simply examples of the $\oplus$ operator (`+` in python). The `rep.symmetric_basis()` and `rep.symmetric_projector()` can return lazy matrices $Q$ and $P=QQ^T$ when the representations are composite (or when the representation is specified lazily). [implementation change is making this much slower than normal, using smaller values]
 
 +++
 

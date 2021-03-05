@@ -12,7 +12,36 @@ kernelspec:
   name: python3
 ---
 
-# Combining Representations from Different Groups
+# Combining Representations from Different Groups (experimental)
+
+```{code-cell} ipython3
+from emlp.solver.groups import *
+from emlp.solver.representation import T,vis
+```
+
+```{code-cell} ipython3
+rep = 2*T(1)(Z(3))*T(1)(S(4))+T(1)(SO(2))
+```
+
+```{code-cell} ipython3
+(rep>>rep)
+```
+
+```{code-cell} ipython3
+vis(rep,rep)
+```
+
+```{code-cell} ipython3
+repin,repout = T(1)(SO(3))*T(2)(S(4)),T(2)(SO(3))*T(1)(S(4))
+```
+
+```{code-cell} ipython3
+repin>>repout
+```
+
+```{code-cell} ipython3
+#vis(repin,repout)
+```
 
 ```{code-cell} ipython3
 

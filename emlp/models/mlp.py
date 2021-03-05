@@ -77,6 +77,8 @@ class EMLPBlock(Module):
         self.rep_out=rep_out
         self.linear = LieLinear(rep_in,gated(rep_out))
         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
+        # self.linear = LieLinear(rep_in,rep_out)
+        # self.bilinear = BiLinear(rep_out,rep_out)
         #self.bn = TensorBN(gated(rep_out))
         self.nonlinearity = GatedNonlinearity(rep_out)
     def __call__(self,x):

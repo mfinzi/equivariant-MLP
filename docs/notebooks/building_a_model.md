@@ -64,21 +64,28 @@ For convenience, we store in the dataset the types for the input and the output.
 
 ```{code-cell} ipython3
 from emlp.models.mlp import EMLP,MLP
-model = EMLP(dataset.rep_in,dataset.rep_out,group=G,num_layers=3,ch=384)
+model = EMLP(trainset.rep_in,trainset.rep_out,group=G,num_layers=3,ch=384)
 # uncomment the following line to instead try the MLP baseline
-#model = MLP(dataset.rep_in,dataset.rep_out,group=G,num_layers=3,ch=384)
+#model = MLP(trainset.rep_in,trainset.rep_out,group=G,num_layers=3,ch=384)
 ```
+
+## Example Objax Training Loop
+
++++
+
+We build our EMLP model with [objax](https://objax.readthedocs.io/en/latest/) because we feel the object oriented design makes building complicated layers easier. Below is a minimal training loop that you could use to train EMLP.
 
 ```{code-cell} ipython3
 BS=500
 lr=3e-3
-NUM_EPOCHS=1000
+NUM_EPOCHS=500
 
 import objax
 import jax.numpy as jnp
 import numpy as np
 from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
+from jax import vmap
 
 opt = objax.optimizer.Adam(model.vars())
 
@@ -87,10 +94,9 @@ def loss(x, y,training=True):
     yhat = model(x, training=training)
     return ((yhat-y)**2).mean()
 
-
 gv = objax.GradValues(loss, model.vars())
 
-@objax.Function.with_vars(model.vars())
+@objax.Function.with_vars(model.vars()+opt.vars())
 def train_op(x, y, lr):
     g, v = gv(x, y)
     opt(lr=lr, grads=g)
@@ -117,7 +123,37 @@ import matplotlib.pyplot as plt
 plt.plot(np.arange(NUM_EPOCHS),train_losses,label='Train loss')
 plt.plot(np.arange(0,NUM_EPOCHS,10),test_losses,label='Test loss')
 plt.legend()
+plt.yscale('log')
 ```
+
+```{code-cell} ipython3
+def rel_err(a,b):
+    return jnp.sqrt(((a-b)**2).mean())/(jnp.sqrt((a**2).mean())+jnp.sqrt((b**2).mean()))#
+
+rin,rout = trainset.rep_in(G),trainset.rep_out(G)
+
+def equivariance_err(mb):
+    x,y = mb
+    x,y= jnp.array(x),jnp.array(y)
+    gs = G.samples(x.shape[0])
+    rho_gin = vmap(rin.rho_dense)(gs)
+    rho_gout = vmap(rout.rho_dense)(gs)
+    y1 = model((rho_gin@x[...,None])[...,0],training=False)
+    y2 = (rho_gout@model(x,training=False)[...,None])[...,0]
+    return rel_err(y1,y2)
+```
+
+As expected, the network continues to be equivariant as it is trained.
+
+```{code-cell} ipython3
+print(f"Average test equivariance error {np.mean([equivariance_err(mb) for mb in testloader]):.2e}")
+```
+
+## Equivariant Linear Layers (low level) 
+
++++
+
+Internally for EMLP, we use representations that uniformly allocate dimensions between different tensor representations.
 
 ```{code-cell} ipython3
 from emlp.models.mlp import uniform_rep
@@ -125,37 +161,45 @@ r = uniform_rep(512,G)
 print(r)
 ```
 
+Below is a trimmed down version of EMLP, so you can see how it is built from the component layers.
+
 ```{code-cell} ipython3
-# class EMLP(Module,metaclass=Named):
-#     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
-#         super().__init__()
-#         logging.info("Initing EMLP")
-#         self.rep_in =rep_in(group)
-#         self.rep_out = rep_out(group)
-        
-#         self.G=group
-#         # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
-#         if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]#[uniform_rep(ch,group) for _ in range(num_layers)]
-#         elif isinstance(ch,Rep): middle_layers = num_layers*[ch(group)]
-#         else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
-#         #assert all((not rep.G is None) for rep in middle_layers[0].reps)
-#         reps = [self.rep_in]+middle_layers
-#         #logging.info(f"Reps: {reps}")
-#         self.network = Sequential(
-#             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-#             LieLinear(reps[-1],self.rep_out)
-#         )
-#         #self.network = LieLinear(self.rep_in,self.rep_out)
-#     def __call__(self,x,training=True):
-#         return self.network(x)
+from objax.module import Module
+from emlp.models.mlp import Sequential,EMLPBlock,LieLinear
+
+class EMLP(Module):
+    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
+        super().__init__()
+        reps = [rep_in(group)]+num_layers*[uniform_rep(ch,group)]
+        self.network = Sequential(
+            *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+            LieLinear(reps[-1],rep_out(group))
+        )
+    def __call__(self,x,training=True):
+        return self.network(x)
 ```
 
 ```{code-cell} ipython3
 
 ```
 
-## Equivariant Linear Layers (low level) 
-
 ```{code-cell} ipython3
 
+```
+
+```{code-cell} ipython3
+# from emlp.models.mlp import Standardize
+# from emlp.models.model_trainer import RegressorPlus
+# from emlp.slax.utils import LoaderTo
+# BS=500
+# lr=3e-3
+# NUM_EPOCHS=100
+
+# dataloaders = {k:LoaderTo(DataLoader(v,batch_size=BS,shuffle=(k=='train'),
+#                 num_workers=0,pin_memory=False)) for k,v in {'train':trainset,'test':testset}.items()}
+# dataloaders['Train'] = dataloaders['train']
+# opt_constr = objax.optimizer.Adam
+# lr_sched = lambda e: lr
+# trainer = RegressorPlus(model,dataloaders,opt_constr,lr_sched,log_args={'minPeriod':.02,'timeFrac':.25})
+# trainer.train(NUM_EPOCHS)
 ```

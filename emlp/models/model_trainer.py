@@ -16,17 +16,12 @@ def rel_err(a,b):
 def scale_adjusted_rel_err(a,b,g):
     return  jnp.sqrt(((a-b)**2).mean())/(jnp.sqrt((a**2).mean())+jnp.sqrt((b**2).mean())+jnp.abs(g-jnp.eye(g.shape[-1])).mean())
 
-# def scale_adjusted_rel_error(t1,t2,g):
-#     return jnp.mean(jnp.abs(t1-t2))/(jnp.mean(jnp.abs(t1)) + jnp.mean(jnp.abs(t2))+jnp.mean()+1e-7)
-
 def equivariance_err(model,mb,group=None):
     x,y = mb
     group = model.model.G if group is None else group
     gs = group.samples(x.shape[0])
     rho_gin = vmap(model.model.rep_in.rho_dense)(gs)
     rho_gout = vmap(model.model.rep_out.rho_dense)(gs)
-    #rho_gin = jnp.stack([model.model.rep_in.rho(g) for g in ])
-    #rho_gout = jnp.stack([model.model.rep_out.rho(g) for g in group.samples(x.shape[0])])
     y1 = model.predict((rho_gin@x[...,None])[...,0])
     y2 = (rho_gout@model.predict(x)[...,None])[...,0]
     return np.asarray(scale_adjusted_rel_err(y1,y2,gs))

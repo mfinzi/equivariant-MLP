@@ -8,6 +8,7 @@
 
 *WARNING*: Our library (and paper) have not yet been released, and may have sharp edges, bugs, and may be subject to breaking changes. 
 Use at your own caution. But if you notice things behaving unexpectedly or get frustrated, send me an email so I can make the library better.
+
 --------------------------------------------------------------------------------
 
 Our type system is centered on it making it easy to combine representations using ρᵤ⊗ρᵥ, ρᵤ⊕ρᵥ, ρ*. For any given matrix group and representation formed in our type system, you can get the equivariant basis with `rep.symmetric_basis()` or a matrix which projects to that subspace with `rep.symmetric_projector()`. For example:

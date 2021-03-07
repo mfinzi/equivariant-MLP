@@ -12,7 +12,15 @@ kernelspec:
   name: python3
 ---
 
-# Implementing New Representations (TODO)
+# Multilinear Maps (TODO)
+
+```{code-cell} ipython3
+from emlp.solver.representation import V
+```
+
+```{code-cell} ipython3
+V>>(V>>V)
+```
 
 ```{code-cell} ipython3
 

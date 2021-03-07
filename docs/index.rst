@@ -24,6 +24,7 @@ A type system for the automated construction of equivariant layers.
 
    notebooks/mixed_tensors.md
    notebooks/new_representations.md
+   notebooks/multilinear_maps.md
 
 .. toctree::
    :maxdepth: 1

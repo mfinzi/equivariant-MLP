@@ -41,7 +41,6 @@ def symplectic_form(z):
 def hamiltonian_dynamics(hamiltonian, z,t):
     grad_h = grad(hamiltonian)
     gh = grad_h(z)
-    #print(z.shape,gh.shape)
     return symplectic_form(gh)
 
 def HamiltonianFlow(H,z0,T):

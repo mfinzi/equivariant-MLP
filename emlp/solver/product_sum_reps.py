@@ -1,39 +1,24 @@
 import numpy as np
-#import torch
 import jax
 from jax import jit
-from functools import partial
-import jax.numpy as jnp
-from jax import device_put
 import collections,itertools
 from functools import lru_cache as cache
 from .utils import prod as product
-import scipy as sp
-import scipy.linalg
-import functools
-import random
 from .representation import Rep
 from .linear_operator_jax import LinearOperator
 from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify
-import logging
-import copy
-import math
 from functools import reduce
 from collections import defaultdict
-import objax
-
 
 
 class SumRep(Rep):
     concrete=True
-    atomic=False
     def __init__(self,*reps,extra_perm=None):#repcounter,repperm=None):
         """ Constructs a tensor type based on a list of tensor ranks
             and possibly the symmetry generators gen."""
         # Integers can be used as shorthand for scalars.
         reps = [SumRepFromCollection({Scalar:rep}) if isinstance(rep,int) else rep for rep in reps]
         # Get reps and permutations
-        #print(f"received following {reps}, {len(reps)}")
         reps,perms = zip(*[rep.canonicalize() for rep in reps])
         rep_counters = [rep.reps if isinstance(rep,SumRep) else {rep:1} for rep in reps]
         # Combine reps and permutations: ∑_a + ∑_b = ∑_{a∪b}
@@ -43,20 +28,26 @@ class SumRep(Rep):
         self.invperm = np.argsort(self.perm)
         self.canonical=(self.perm==np.arange(len(self.perm))).all()
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
-        # if not self.canonical:
-        #     print(self,self.perm,self.invperm)
 
-    def canonicalize(self):
-        """Returns a canonically ordered rep with order np.arange(self.size()) and the
-            permutation which achieves that ordering"""
-        return SumRepFromCollection(self.reps),self.perm
+    def size(self):
+        return sum(rep.size()*count for rep,count in self.reps.items())
+    def rho(self,M):
+        rhos = [rep.rho(M) for rep in self.reps]
+        multiplicities = self.reps.values()
+        return LazyPerm(self.invperm)@LazyDirectSum(rhos,multiplicities)@LazyPerm(self.perm)
+    def drho(self,A):
+        drhos = [rep.drho(A) for rep in self.reps]
+        multiplicities = self.reps.values()
+        return LazyPerm(self.invperm)@LazyDirectSum(drhos,multiplicities)@LazyPerm(self.perm)
+
+    
     def __eq__(self, other):
         assert self.canonical
         return self.reps==other.reps# and self.perm == other.perm
-    def __len__(self):
-        return sum(multiplicity for multiplicity in self.reps.values())
-    def size(self):
-        return sum(rep.size()*count for rep,count in self.reps.items())
+    
+    def __hash__(self):
+        assert self.canonical
+        return hash(tuple(self.reps.items()))
 
     @property
     def T(self):
@@ -71,10 +62,51 @@ class SumRep(Rep):
         tensors = "+".join(f"{count if count > 1 else ''}{rep}" for rep, count in self.reps.items())
         return tensors#+f" @ d={self.d}" if self.d is not None else tensors
 
-    def __hash__(self):
-        assert self.canonical
-        return hash(tuple(self.reps.items()))
+    def canonicalize(self):
+        """Returns a canonically ordered rep with order np.arange(self.size()) and the
+            permutation which achieves that ordering"""
+        return SumRepFromCollection(self.reps),self.perm
 
+    def __call__(self,G):
+        return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},perm=self.perm)
+
+
+
+    def symmetric_basis(self):
+        """ Overrides default implementation with a more efficient version which decomposes the constraints
+            across the sum."""
+        Qs = {rep: rep.symmetric_basis() for rep in self.reps}
+        Qs = {rep: (jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for rep,Q in Qs.items()}
+        active_dims = sum([self.reps[rep]*Qs[rep].shape[-1] for rep in Qs.keys()])
+        multiplicities = self.reps.values()
+        def lazy_Q(array):
+            return lazy_direct_matmat(array,Qs.values(),multiplicities)[self.invperm]
+        return LinearOperator(shape=(self.size(),active_dims),matvec=lazy_Q,matmat=lazy_Q)
+
+    def symmetric_projector(self):
+        """ Overrides default implementation with a more efficient version which decomposes the constraints
+            across the sum."""
+        Ps = {rep:rep.symmetric_projector() for rep in self.reps}
+        multiplicities = self.reps.values()
+        def lazy_P(array):
+            return lazy_direct_matmat(array,Ps.values(),multiplicities)[self.invperm]
+        return LinearOperator(shape=(self.size(),self.size()),matvec=lazy_P,matmat=lazy_P)
+
+    # ##TODO: investigate why these more idiomatic definitions with Lazy Tensors end up slower
+    # def symmetric_basis(self):
+    #     Qs = [rep.symmetric_basis() for rep in self.reps]
+    #     Qs = [(jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for Q in Qs]
+    #     multiplicities  = self.reps.values()
+    #     Q = I(len(self.perm))
+    #     Q@jnp.zeros((Q.shape[-1],1))
+    #     return Q#LazyPerm(self.invperm)#LazyDirectSum(Qs,multiplicities)#LazyPerm(self.invperm)@LazyDirectSum(Qs,multiplicities)
+    # def symmetric_projector(self):
+    #     Ps = [rep.symmetric_projector() for rep in self.reps]
+    #     Ps = (jax.device_put(P.astype(np.float32)) if isinstance(P,(np.ndarray)) else P)
+    #     multiplicities  = self.reps.values()
+    #     return LazyPerm(self.invperm)@LazyDirectSum(Ps,multiplicities)@LazyPerm(self.perm)
+
+    # Some additional SumRep specific methods to be used for internal purposes
     @staticmethod
     def compute_canonical(rep_cnters,rep_perms):
         """ given that rep1_perm and rep2_perm are the canonical orderings for
@@ -97,85 +129,10 @@ class SumRep(Rep):
                 ids[i]+=+c*rep.size()
                 merged_cnt[rep]+=c
         return dict(merged_cnt),np.concatenate(permlist)
-
-    def symmetric_basis(self):
-        """ Given a representation which is a sequence of tensors
-        with ranks (p_i,q_i), computes the orthogonal complement
-        to the projection matrix drho(Mi). Function returns both the
-        dimension of the active subspace (r) and also a function that
-        maps an array of size (*,r) to a vector v with a representaiton
-        given by the ranks that satisfies drho(Mi)v=0 for each i.
-        Inputs: [generators seq(tensor(d,d))] [ranks seq(tuple(p,q))]
-        Outputs: [r int] [projection (tensor(r)->tensor(rep_dim))]"""
-        Qs = {rep: rep.symmetric_basis() for rep in self.reps}
-        Qs = {rep: (jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for rep,Q in Qs.items()}
-        active_dims = sum([self.reps[rep]*Qs[rep].shape[-1] for rep in Qs.keys()])
-        multiplicities = self.reps.values()
-        def lazy_Q(array):
-            return lazy_direct_matmat(array,Qs.values(),multiplicities)[self.invperm]
-        # def lazy_Q(array):
-        #     array = array.T
-        #     i=0
-        #     Ws = []
-        #     for rep, multiplicity in self.reps.items():
-        #         Qr = Qs[rep]
-        #         if not Qr.shape[-1]: continue
-        #         i_end = i+multiplicity*Qr.shape[-1]
-        #         elems = Qr@array[...,i:i_end].reshape(-1,Qr.shape[-1]).T
-        #         Ws.append(elems.T.reshape(*array.shape[:-1],multiplicity*rep.size()))
-        #         i = i_end
-        #     Ws = jnp.concatenate(Ws,axis=-1) #concatenate over rep axis
-        #     inp_ordered_Ws = Ws[...,self.invperm] #(should it be inverse?) reorder to original rep ordering 
-        #     return  inp_ordered_Ws.T
-        return LinearOperator(shape=(self.size(),active_dims),matvec=lazy_Q,matmat=lazy_Q)
-
-    def symmetric_projector(self):
-        Ps = {rep:rep.symmetric_projector() for rep in self.reps}
-        # Apply the projections for each rep, concatenate, and permute back to orig rep order
-        # def lazy_QQT(W):
-        #     ordered_W = W[self.perm]
-        #     PWs = []
-        #     i=0
-        #     for rep, multiplicity in self.reps.items():
-        #         P = Ps[rep]
-        #         i_end = i+multiplicity*rep.size()
-        #         PWs.append((P@ordered_W[i:i_end].reshape(multiplicity,rep.size()).T).T.reshape(-1))
-        #         i = i_end
-        #         #print(rep,multiplicity,i_end)
-        #     PWs = jnp.concatenate(PWs,axis=-1) #concatenate over rep axis
-        #     inp_ordered_PWs = PWs[self.invperm]
-        #     #print(inp_ordered_PWs)
-        #     return  inp_ordered_PWs # reorder to original rep ordering
-        multiplicities = self.reps.values()
-        def lazy_P(array):
-            return lazy_direct_matmat(array,Ps.values(),multiplicities)[self.invperm]
-        return LinearOperator(shape=(self.size(),self.size()),matvec=lazy_P,matmat=lazy_P)
-
-    # ##TODO: investigate why these more idiomatic definitions with Lazy Tensors end up slower
-    # def symmetric_basis(self):
-    #     Qs = [rep.symmetric_basis() for rep in self.reps]
-    #     Qs = [(jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for Q in Qs]
-    #     multiplicities  = self.reps.values()
-    #     Q = I(len(self.perm))
-    #     Q@jnp.zeros((Q.shape[-1],1))
-    #     return Q#LazyPerm(self.invperm)#LazyDirectSum(Qs,multiplicities)#LazyPerm(self.invperm)@LazyDirectSum(Qs,multiplicities)
-    # def symmetric_projector(self):
-    #     Ps = [rep.symmetric_projector() for rep in self.reps]
-    #     Ps = (jax.device_put(P.astype(np.float32)) if isinstance(P,(np.ndarray)) else P)
-    #     multiplicities  = self.reps.values()
-    #     return LazyPerm(self.invperm)@LazyDirectSum(Ps,multiplicities)@LazyPerm(self.perm)
-    def rho(self,M):
-        rhos = [rep.rho(M) for rep in self.reps]
-        multiplicities = self.reps.values()
-        return LazyPerm(self.invperm)@LazyDirectSum(rhos,multiplicities)@LazyPerm(self.perm)
-    def drho(self,A):
-        drhos = [rep.drho(A) for rep in self.reps]
-        multiplicities = self.reps.values()
-        return LazyPerm(self.invperm)@LazyDirectSum(drhos,multiplicities)@LazyPerm(self.perm)
-        
     def __iter__(self): # not a great idea to use this method (ignores permutation ordering)
         return (rep for rep,c in self.reps.items() for _ in range(c))
-
+    def __len__(self):
+        return sum(multiplicity for multiplicity in self.reps.values())
     def as_dict(self,v):
         out_dict = {}
         i =0
@@ -185,9 +142,8 @@ class SumRep(Rep):
             i+= chunk
         return out_dict
 
-    def __call__(self,G):
-        return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},perm=self.perm)
-
+    
+#TODO: consolidate with the __init__ method of the basic SumRep
 class SumRepFromCollection(SumRep): # a different constructor for SumRep
     def __init__(self,counter,perm=None):
         self.reps = counter
@@ -200,7 +156,9 @@ class SumRepFromCollection(SumRep): # a different constructor for SumRep
         #     print(self,self.perm,self.invperm)
 
 def distribute_product(reps,extra_perm=None):
-
+    """ For expanding products of sums into sums of products, (ρ₁⊕ρ₂)⊗ρ₃ = (ρ₁⊗ρ₃)⊕(ρ₂⊗ρ₃).
+        takes in a sequence of reps=[ρ₁,ρ₂,ρ₃,...] which are to be multiplied together and at
+        least one of the reps is a SumRep, and distributes out the terms."""
     reps,perms =zip(*[repsum.canonicalize() for repsum in reps])
     reps = [rep if isinstance(rep,SumRep) else SumRepFromCollection({rep:1}) for rep in reps]
     # compute axis_wise perm to canonical vector ordering along each axis
@@ -270,20 +228,15 @@ class ProductRep(Rep):
         if counter is not None: #one with counter specified directly
             self.reps=counter
             self.reps,self.perm = self.compute_canonical([counter],[np.arange(self.size()) if extra_perm is None else extra_perm])
-            #assert (self.perm==np.arange(len(self.perm))).all()
         else: # other with list
             # Get reps and permutations
             reps,perms = zip(*[rep.canonicalize() for rep in reps])
             rep_counters = [rep.reps if type(rep)==ProductRep else {rep:1} for rep in reps]
             
-            # Combine reps and permutations: Pi_a + Pi_b = Pi_{a x b}
+            # Combine reps and permutations: ∏_a ⊗ ∏_b = ∏_{a ∪ b}
             self.reps,perm = self.compute_canonical(rep_counters,perms)
-            #logging.info(f"reps {self.reps}")
             self.perm = extra_perm[perm] if extra_perm is not None else perm
-            #logging.info(f"prod perm={self.perm}")
-            # l2 = int(np.log2(self.size()))
-            # logging.info(f"prod perm={self.perm.reshape(l2*(2,))}")
-            
+
         self.invperm = np.argsort(self.perm)
         self.canonical=(self.perm==self.invperm).all()
         Gs = tuple(set(rep.G for rep in self.reps.keys()))
@@ -291,18 +244,9 @@ class ProductRep(Rep):
         self.G= Gs[0]
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
 
-    def canonicalize(self):
-        """Returns a canonically ordered rep with order np.arange(self.size()) and the
-            permutation which achieves that ordering"""
-        return self.__class__(counter=self.reps),self.perm
+    def size(self):
+        return product([rep.size()**count for rep,count in self.reps.items()])
 
-    # def rho(self,Ms): 
-    #     rhos = [rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)]
-    #     return functools.reduce(jnp.kron,rhos)[self.invperm,:][:,self.invperm]
-    # def drho(self,As):
-    #     drhos = [rep.drho(As) for rep,c in self.reps.items() for _ in range(c)]
-    #     return functools.reduce(kronsum,drhos)[self.invperm,:][:,self.invperm]
-    
     def rho(self,Ms,lazy=False):
         if hasattr(self,'G') and isinstance(Ms,dict): Ms=Ms[self.G]
         canonical_lazy = LazyKron([rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)])
@@ -318,8 +262,7 @@ class ProductRep(Rep):
         return hash(tuple(self.reps.items()))
     def __eq__(self, other): #TODO: worry about non canonical?
         return isinstance(other,ProductRep) and self.reps==other.reps# and self.perm == other.perm
-    def size(self):
-        return product([rep.size()**count for rep,count in self.reps.items()])
+    
     @property
     def T(self):
         """ only swaps to adjoint representation, does not reorder elems"""
@@ -328,6 +271,11 @@ class ProductRep(Rep):
     def __str__(self):
         superscript = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
         return "⊗".join([str(rep)+(f"{c}".translate(superscript) if c>1 else "") for rep,c in self.reps.items()])
+
+    def canonicalize(self):
+        """Returns a canonically ordered rep with order np.arange(self.size()) and the
+            permutation which achieves that ordering"""
+        return self.__class__(counter=self.reps),self.perm
 
     @staticmethod
     def compute_canonical(rep_cnters,rep_perms):
@@ -343,9 +291,7 @@ class ProductRep(Rep):
         # apply the canonicalizing permutations along each axis
         for i,perm in enumerate(rep_perms):
             order = np.moveaxis(np.moveaxis(order,i,0)[perm,...],0,i)
-
         # sort the axes by canonical ordering
-        
         # get original axis ids
         axis_ids = []
         n=0
@@ -363,7 +309,6 @@ class ProductRep(Rep):
                     axes_perm.append(axis_ids[i][rep])
                     merged_cnt[rep]+=c
         axes_perm = np.concatenate(axes_perm)
-        #print(f"prod_axes_perm {axes_perm} with rep_cnters {rep_cnters}, orig perms {rep_perms}")
         # reshaped but with inner axes within a collection explicitly expanded
         order = order.reshape(tuple(rep.size() for cnter in rep_cnters for rep,c in cnter.items() for _ in range(c)))
         final_order = np.transpose(order,axes_perm)
@@ -371,6 +316,11 @@ class ProductRep(Rep):
 
 
 class DirectProduct(ProductRep):
+    """ Tensor product of representations ρ₁⊗ρ₂, but where the sub representations
+        ρ₁ and ρ₂ are representations of distinct groups (ie ρ₁⊗ρ₂ is a representation
+        of the direct product of groups G=G₁×G₂). As a result, the solutions for the two
+        sub representations can be solved independently and assembled together with the
+        kronecker product: Q = Q₁⊗Q₂ and P = P₁⊗P₂"""
     def __init__(self, *reps,counter=None,extra_perm=None):
         #Two variants of the constructor:
         if counter is not None: #one with counter specified directly
@@ -397,9 +347,6 @@ class DirectProduct(ProductRep):
         # if len(self.G)==1: self.G= self.G[0]
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
         assert all(count==1 for count in self.reps.values())
-    def __str__(self):
-        superscript = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
-        return "⊗".join([str(rep)+f"_{rep.G}" for rep,c in self.reps.items()])
 
     def symmetric_basis(self):
         return LazyKron([rep.symmetric_basis() for rep,c in self.reps.items()])
@@ -414,6 +361,10 @@ class DirectProduct(ProductRep):
     def drho(self,As):
         canonical_lazy = LazyKronsum([rep.drho(As) for rep,c in self.reps.items() for _ in range(c)])
         return LazyPerm(self.invperm)@canonical_lazy@LazyPerm(self.perm)
+
+    def __str__(self):
+        superscript = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+        return "⊗".join([str(rep)+f"_{rep.G}" for rep,c in self.reps.items()])
 
 
 class DeferredSumRep(Rep):

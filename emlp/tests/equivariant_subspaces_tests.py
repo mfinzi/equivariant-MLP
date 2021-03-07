@@ -11,7 +11,7 @@ import logging
 import argparse
 import sys
 import copy
-from functools import partialmethod
+from functools import partialmethod,partial
 
 def rel_error(t1,t2):
     error = jnp.sqrt(jnp.mean(jnp.absolute(t1-t2)**2))

@@ -139,3 +139,6 @@ dmypy.json
 # additional excludes specific to the repo
 *.t
 *.dat
+*.h5
+*.pkl
+*.json

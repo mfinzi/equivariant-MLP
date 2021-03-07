@@ -9,6 +9,7 @@ tqdm.get_lock().locks = []
 
 prod = lambda c: reduce(lambda a,b:a*b,c)
 
+
 # class TqdmToLogger(io.StringIO):
 #     """
 #         Output stream for TQDM which will output to logger module instead of

@@ -8,7 +8,7 @@ myst-nb
 # Packages used for CI tests.
 pytest
 pytest-xdist
-jupytext
+#jupytext
 # Packages used for notebook execution
 matplotlib
 #.  # install emlp itself from current directory.

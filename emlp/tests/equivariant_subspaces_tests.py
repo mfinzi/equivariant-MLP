@@ -50,7 +50,6 @@ expand_test_cases = partial(expand_cases,TestRepresentationSubspace)
 def test_sum(self,G):
     N=5
     rep = T(0,2)+3*(T(0,0)+T(1,0))+T(0,0)+T(1,1)+2*T(1,0)+T(0,2)+T(0,1)+3*T(0,2)+T(2,0)
-    #for G in self.test_groups:
     rep = rep(G)
     P = rep.symmetric_projector()
     v = np.random.rand(rep.size())
@@ -63,11 +62,7 @@ def test_sum(self,G):
 @expand_test_cases(test_groups)
 def test_prod(self,G):
     N=5
-    #rep  = T(0,1)*T(0,0)*T(1,0)*T(0,1)*T(0,0)*T(0,1)
-    #rep  = T(0,1)*T(1,0)*T(1,0)*T(0,1)
-    # rep = T(0,1)*T(0,1)*T(1,0)*T(1,0)
     rep = T(0,1)*T(0,0)*T(2,0)*T(1,0)*T(0,0)**3*T(0,1)**2
-    #for G in self.test_groups:
     rep = rep(G)
     # P = rep.symmetric_projector()
     # v = np.random.rand(rep.size())
@@ -90,7 +85,7 @@ def test_high_rank_representations(self,G):
             if G.num_constraints()*G.d**(3*(p+q))>1e12: continue
             if G.is_orthogonal and q>0: continue
             #try:
-            print(p,q,T(p,q))
+            #logging.info(f"{p},{q},{T(p,q)}")
             rep = T(p,q)(G)
             P = rep.symmetric_projector()
             v = np.random.rand(rep.size())

@@ -3,9 +3,9 @@ import jax.numpy as jnp
 import objax.nn as nn
 import objax.functional as F
 import numpy as np
-from emlp.solver.representation import T,Rep
+from emlp.solver.representation import T,Rep,Scalar
 from emlp.solver.representation import bilinear_weights
-from emlp.models.batchnorm import TensorBN,gate_indices,gated
+from emlp.models.batchnorm import TensorBN,gate_indices
 import collections
 from oil.utils.utils import Named,export
 import scipy as sp
@@ -68,6 +68,13 @@ class BiLinear(Module):
         return out
 
 @export
+def gated(sumrep):
+    """ Returns the rep with an additional scalar 'gate' for each of the nonscalars and non regular
+        reps in the input. To be used as the output for linear (and or bilinear) layers directly
+        before a :func:`GatedNonlinearity` to produce its scalar gates. """
+    return sumrep+sum([Scalar(rep.G) for rep in sumrep if rep!=Scalar and not rep.is_regular])
+
+@export
 class GatedNonlinearity(Module):
     """ Gated nonlinearity. Requires input to have the additional gate scalars
         for every non regular and non scalar rep. Applies swish to regular and
@@ -86,13 +93,11 @@ class EMLPBlock(Module):
         and gated nonlinearity. """
     def __init__(self,rep_in,rep_out):
         super().__init__()
-        self.rep_out=rep_out
         self.linear = LieLinear(rep_in,gated(rep_out))
         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
         self.nonlinearity = GatedNonlinearity(rep_out)
     def __call__(self,x):
         lin = self.linear(x)
-        #preact = self.bn(self.bilinear(lin)+lin,training=training)
         preact =self.bilinear(lin)+lin
         return self.nonlinearity(preact)
 

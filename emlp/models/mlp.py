@@ -28,7 +28,8 @@ def Sequential(*args):
     return nn.Sequential(args)
 
 @export
-class LieLinear(nn.Linear):  #
+class LieLinear(nn.Linear):
+    """ Basic equivariant Linear layer from repin to repout."""
     def __init__(self, repin, repout):
         nin,nout = repin.size(),repout.size()
         super().__init__(nin,nout)
@@ -51,6 +52,8 @@ class LieLinear(nn.Linear):  #
 
 @export
 class BiLinear(Module):
+    """ Cheap bilinear layer (adds parameters for each part of the input which can be
+        interpreted as a linear map from a part of the input to the output representation)."""
     def __init__(self, repin, repout):
         super().__init__()
         Wdim, weight_proj = bilinear_weights(repout,repin)
@@ -59,12 +62,16 @@ class BiLinear(Module):
         logging.info(f"BiW components: dim:{Wdim}")
 
     def __call__(self, x,training=True):
+        # compatible with non sumreps? need to check
         W = self.weight_proj(self.w.value,x)
         out= .1*(W@x[...,None])[...,0]
         return out
 
 @export
-class GatedNonlinearity(Module): #TODO: support elementwise swish for regular reps
+class GatedNonlinearity(Module):
+    """ Gated nonlinearity. Requires input to have the additional gate scalars
+        for every non regular and non scalar rep. Applies swish to regular and
+        scalar reps. (Right now assumes rep is a SumRep. TODO: extend to non sumreps)"""
     def __init__(self,rep):
         super().__init__()
         self.rep=rep
@@ -75,14 +82,13 @@ class GatedNonlinearity(Module): #TODO: support elementwise swish for regular re
 
 @export
 class EMLPBlock(Module):
+    """ Basic building block of EMLP consisting of G-Linear, biLinear,
+        and gated nonlinearity. """
     def __init__(self,rep_in,rep_out):
         super().__init__()
         self.rep_out=rep_out
         self.linear = LieLinear(rep_in,gated(rep_out))
         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
-        # self.linear = LieLinear(rep_in,rep_out)
-        # self.bilinear = BiLinear(rep_out,rep_out)
-        #self.bn = TensorBN(gated(rep_out))
         self.nonlinearity = GatedNonlinearity(rep_out)
     def __call__(self,x):
         lin = self.linear(x)
@@ -94,7 +100,15 @@ class EMLPBlock(Module):
 def uniform_rep(ch,group):
     """ A heuristic method for allocating a given number of channels (ch)
         into tensor types. Attempts to distribute the channels evenly across
-        the different tensor types. """
+        the different tensor types. Useful for hands off layer construction.
+        
+        Args:
+            ch (int): total number of channels
+            group (Group): symmetry group
+
+        Returns:
+            SumRep: The direct sum representation with dim(V)=ch
+        """
     d = group.d
     Ns = np.zeros((lambertW(ch,d)+1,),int) # number of tensors of each rank
     while ch>0:
@@ -138,6 +152,17 @@ def uniform_allocation(N,rank):
 
 @export
 class EMLP(Module,metaclass=Named):
+    """ Equivariant MultiLayer Perceptron.
+
+        Args:
+            rep_in (Rep): input representation
+            rep_out (Rep): output representation
+            group (Group): symmetry group
+            ch (int): number of channels in the hidden layers
+            num_layers (int): number of hidden layers
+
+        Returns:
+            Module: the EMLP objax module."""
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
         super().__init__()
         logging.info("Initing EMLP")
@@ -168,6 +193,7 @@ def MLPBlock(cin,cout):
 
 @export
 class MLP(Module,metaclass=Named):
+    """ Standard baseline MLP. Representations and group are used for shapes only. """
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
         super().__init__()
         self.rep_in =rep_in(group)
@@ -186,6 +212,16 @@ class MLP(Module,metaclass=Named):
 
 @export
 class Standardize(Module):
+    """ A convenience module to wrap a given module, normalize its input
+        by some dataset x mean and std stats, and unnormalize its output by
+        the dataset y mean and std stats. 
+
+        Args:
+            model (Module): model to wrap
+            ds_stats ((μx,σx,μy,σy) or (μx,σx)): tuple of the normalization stats
+        
+        Returns:
+            Module: Wrapped model with input normalization (and output unnormalization)"""
     def __init__(self,model,ds_stats):
         super().__init__()
         self.model = model
@@ -218,13 +254,11 @@ class MLPode(Module,metaclass=Named):
         )
     def __call__(self,z,t):
         return self.net(z)
-    # def dynamics(self,z,t):
-    #     return self.net(z)
-    # def __call__(self,z0,T):
-    #     #dynamics = objax.Jit(vmap(partial(hamiltonian_dynamics,self.H),(0,None)),self.net.vars())
-    #     return odeint(self.dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+
 @export
 class EMLPode(EMLP):
+    """ Neural ODE Equivariant MLP. Same args as EMLP."""
+    #__doc__ += EMLP.__doc__.split('.')[1]
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
         #super().__init__()
         logging.info("Initing EMLP")
@@ -245,11 +279,7 @@ class EMLPode(EMLP):
         )
     def __call__(self,z,t):
         return self.network(z)
-    # def dynamics(self,x,t):
-    #     return self.network(x)
-    # def __call__(self,z0,T):
-    #     #dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,self.H)),(0,None)))
-    #     return odeint(self.dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+
 # Networks for hamiltonian dynamics (need to sum for batched Hamiltonian grads)
 @export
 class MLPH(Module,metaclass=Named):
@@ -270,18 +300,13 @@ class MLPH(Module,metaclass=Named):
         return y
     def __call__(self,x):
         return self.H(x)
-    # def __call__(self,z0,T):
-    #     #print(dynamics(z0,T[0]).shape)
-    #     dynamics = jit(vmap(partial(hamiltonian_dynamics,self.H),(0,None)))#,self.net.vars())
-    #     return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))
+
 @export
 class EMLPH(EMLP):
+    """ Equivariant EMLP modeling a Hamiltonian for HNN. Same args as EMLP"""
+    #__doc__ += EMLP.__doc__.split('.')[1]
     def H(self,x):#,training=True):
         y = self.network(x)
         return y.sum()
     def __call__(self,x):
         return self.H(x)
-    # def __call__(self,z0,T):
-    #     dynamics = jit(vmap(jit(partial(hamiltonian_dynamics,self.H)),(0,None)))
-    #     #print(dynamics(z0,T[0]).shape)
-    #     return odeint(dynamics, z0, T, rtol=1e-6, atol=1e-6).transpose((1,0,2))

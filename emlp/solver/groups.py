@@ -1,7 +1,8 @@
 
 import numpy as np
 from scipy.linalg import expm
-from oil.utils.utils import Named,export
+from oil.utils.utils import Named
+from .utils import export
 import jax
 import jax.numpy as jnp
 from objax.nn.init import kaiming_normal, xavier_normal
@@ -27,19 +28,10 @@ class Group(object,metaclass=Named):
     z_scale=None # For scale noise for sampling elements
     is_orthogonal=None
     is_regular = None
-    d = None  #: The dimension of the base representation
+    d = NotImplemented  #: The dimension of the base representation
     def __init__(self,*args,**kwargs):
-        # # Set dense lie_algebra using lie_algebra_lazy if applicable
-        # if self.lie_algebra is NotImplemented and self.lie_algebra_lazy is not NotImplemented:
-        #     Idense = np.eye(self.lie_algebra_lazy[0].shape[0])
-        #     self.lie_algebra = np.stack([h@Idense for h in self.lie_algebra_lazy])
-        # # Set dense discrete_generators using discrete_generators_lazy if applicable
-        # if self.discrete_generators is NotImplemented and self.discrete_generators_lazy is not NotImplemented:
-        #     Idense = np.eye(self.discrete_generators_lazy[0].shape[0])
-        #     self.discrete_generators = np.stack([h@Idense for h in self.discrete_generators_lazy])
-
         # get the dimension of the base group representation
-        if self.d is None: 
+        if self.d is NotImplemented: 
             if self.lie_algebra is not NotImplemented and len(self.lie_algebra):
                 self.d= self.lie_algebra[0].shape[-1]
             if self.discrete_generators is not NotImplemented and len(self.discrete_generators):
@@ -109,15 +101,10 @@ class Group(object,metaclass=Named):
         return outstr
     def __eq__(self,G2): #TODO: check that spans are equal?
         return repr(self)==repr(G2)
-        # if self.lie_algebra.shape!=G2.lie_algebra.shape or \
-        #     self.discrete_generators.shape!=G2.discrete_generators.shape:
-        #     return False
-        # return  (self.lie_algebra==G2.lie_algebra).all() and (self.discrete_generators==G2.discrete_generators).all()
+        
     def __hash__(self):
         return hash(repr(self))
-        # algebra = jax.device_get(self.lie_algebra).tobytes()
-        # gens = jax.device_get(self.discrete_generators).tobytes()
-        # return hash((algebra,gens,self.lie_algebra.shape,self.discrete_generators.shape))
+
     def __lt__(self, other):
         return hash(self) < hash(other) #For sorting purposes only
 
@@ -151,8 +138,6 @@ def noise2sample(z,ks,lie_algebra,discrete_generators,seed=0):
 @jit
 def noise2samples(zs,ks,lie_algebra,discrete_generators,seed=0):
     return vmap(noise2sample,(0,0,None,None,None),0)(zs,ks,lie_algebra,discrete_generators,seed)
-
-
 
 
 class DirectProduct(Group):
@@ -193,6 +178,7 @@ class SO(Group):
                 self.lie_algebra[k,j,i] = -1
                 k+=1
         super().__init__(N)
+
 @export
 class O(SO): 
     """ The Orthogonal group O(N) in N dimensions"""
@@ -200,6 +186,7 @@ class O(SO):
         self.discrete_generators = np.eye(N)[None]
         self.discrete_generators[0,0,0]=-1
         super().__init__(N)
+
 @export
 class C(Group): 
     """ The Cyclic group Ck in 2 dimensions"""
@@ -239,7 +226,7 @@ class SO13p(Group):
 
     # Adjust variance for samples along boost generators. For equivariance checks
     # the exps for high order tensors can get very large numbers
-    z_scale = np.array([.3,.3,.3,1,1,1])
+    z_scale = np.array([.3,.3,.3,1,1,1]) # can get rid of now
 @export
 class SO13(SO13p):
     discrete_generators = -np.eye(4)[None]
@@ -255,10 +242,12 @@ class Lorentz(O13): pass
 
 @export
 class SO11p(Group):
+    """ The identity component of O(1,1) (Lorentz group in 1+1 dimensions)"""
     lie_algebra = np.array([[0.,1.],[1.,0.]])[None]
 
 @export
 class O11(SO11p):
+    """ The Lorentz group O(1,1) in 1+1 dimensions """
     discrete_generators = np.eye(2)[None]+np.zeros((2,1,1))
     discrete_generators[0]*=-1
     discrete_generators[1,0,0] = -1
@@ -266,7 +255,7 @@ class O11(SO11p):
 @export
 class Sp(Group):
     """ Symplectic group Sp(m) in 2m dimensions (sometimes referred to 
-        instead as Sp(2m)"""
+        instead as Sp(2m) )"""
     def __init__(self,m):
         self.lie_algebra = np.zeros((m*(2*m+1),2*m,2*m))
         k=0
@@ -284,10 +273,7 @@ class Sp(Group):
                 self.lie_algebra[k,j,m+i] = 1
                 k+=1
         super().__init__(m)
-
-@export
-class Symplectic(Sp): pass
-
+        
 @export
 class Z(Group):
     r""" The cyclic group Z_n (discrete translation group) of order n.
@@ -297,39 +283,22 @@ class Z(Group):
         super().__init__(n)
 
 @export
-class DiscreteTranslation(Z): pass # Alias cyclic translations with Z
-
-@export
 class S(Group): #The permutation group
     r""" The permutation group S_n with an n dimensional regular representation."""
     def __init__(self,n):
-        #K=n//5
-        # perms = np.arange(n)[None]+np.zeros((K,1)).astype(int)
-        # for i in range(1,K):
-        #     perms[i,[0,(i*n)//K]] = perms[i,[(i*n)//K,0]]
-        # print(perms)
-        # self.discrete_generators = [LazyPerm(perm) for perm in perms]+[LazyShift(n)]
         perms = np.arange(n)[None]+np.zeros((n-1,1)).astype(int)
         perms[:,0] = np.arange(1,n)
         perms[np.arange(n-1),np.arange(1,n)[None]]=0
         self.discrete_generators = [LazyPerm(perm) for perm in perms]
-        #self.discrete_generators = [SwapMatrix((0,i),n) for i in range(1,n)]
-        # Adding superflous extra generators can actually *decrease* the runtime of the iterative
-        # krylov solver by improving the conditioning of the constraint matrix
-        # swap_perm = np.arange(n).astype(int)
-        # swap_perm[[0,1]] = swap_perm[[1,0]]
-        # swap_perm2 = np.arange(n).astype(int)
-        # swap_perm2[[0,n//2]] = swap_perm2[[n//2,0]]
-        # self.discrete_generators = [LazyPerm(swap_perm)]+[LazyShift(n,2**i) for i in range(int(np.log2(n)))]
+        # Adding superflous extra generators surprisingly can sometimes actually *decrease* 
+        # the runtime of the iterative krylov solver by improving the conditioning 
+        # of the constraint matrix
         super().__init__(n)
 
 @export
-class Permutation(S): pass #Alias permutation group with Sn.
-
-@export
 class U(Group): # Of dimension n^2
+    """ The unitary group U(n) in n dimensions (complex)"""
     def __init__(self,n):
-        """ The unitary group U(n) in n dimensions (complex)"""
         lie_algebra_real = np.zeros((n**2,n,n))
         lie_algebra_imag = np.zeros((n**2,n,n))
         k=0
@@ -351,8 +320,8 @@ class U(Group): # Of dimension n^2
         super().__init__(n)
 @export
 class SU(Group): # Of dimension n^2-1
+    """ The special unitary group SU(n) in n dimensions (complex)"""
     def __init__(self,n):
-        """ The special unitary group SU(n) in n dimensions (complex)"""
         if n==1: return Trivial(1)
         lie_algebra_real = np.zeros((n**2-1,n,n))
         lie_algebra_imag = np.zeros((n**2-1,n,n))
@@ -471,6 +440,8 @@ class RubiksCube(Group): #3x3 rubiks cube
 
 @export
 class ZksZnxZn(Group):
+    """ One of the original GCNN groups ℤₖ⋉(ℤₙ×ℤₙ) for translation in x,y
+        and rotation with the discrete 90 degree rotations (k=4) or 180 degree (k=2)"""
     def __init__(self,k,n):
         Zn = Z(n)
         Zk = Z(k)
@@ -504,12 +475,15 @@ class Embed(Group):
 
 @export
 def SO2eR3():
+    """ SO(2) embedded in R^3 with rotations about z axis"""
     return Embed(SO(2),3,slice(2))
 
 @export
 def O2eR3():
+    """ O(2) embedded in R^3 with rotations about z axis"""
     return Embed(O(2),3,slice(2))
 
 @export
 def DkeR3(k):
+    """ Dihedral D(k) embedded in R^3 with rotations about z axis"""
     return Embed(D(k),3,slice(2))

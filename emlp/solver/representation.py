@@ -12,7 +12,7 @@ import logging
 import matplotlib.pyplot as plt
 from functools import reduce
 import emlp.solver
-from oil.utils.utils import export
+from .utils import export
 
 #TODO: add rep,v = flatten({'Scalar':..., 'Vector':...,}), to_dict(rep,vector) returns {'Scalar':..., 'Vector':...,}
 #TODO and simpler rep = flatten({Scalar:2,Vector:10,...}),

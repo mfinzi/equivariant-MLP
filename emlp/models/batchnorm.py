@@ -13,6 +13,7 @@ import objax.functional as F
 from functools import partial
 import objax
 from functools import lru_cache as cache
+from emlp.solver.utils import export
 
 def gated(sumrep):
     return sumrep+sum([Scalar(rep.G) for rep in sumrep if rep!=Scalar and not rep.is_regular])
@@ -55,7 +56,7 @@ def regular_mask(sumrep):
         i+=rep.size()
     return mask
 
-
+@export
 class TensorBN(nn.BatchNorm0D):
     """ Equivariant Batchnorm for tensor representations.
         Applies BN on Scalar channels and Mean only BN on others """
@@ -63,7 +64,7 @@ class TensorBN(nn.BatchNorm0D):
         super().__init__(rep.size(),momentum=0.9)
         self.rep=rep
     def __call__(self,x,training): #TODO: support elementwise for regular reps
-        return x #DISABLE BN, harms performance!! !!
+        #return x #DISABLE BN, harms performance!! !!
         smask = jax.device_put(scalar_mask(self.rep))
         if training:
             m = x.mean(self.redux, keepdims=True)

@@ -1,6 +1,6 @@
 EMLP
 ====
 
-.. automodule:: emlp.models.mlp
+.. automodule:: emlp.models
     :members:
     :show-inheritance:

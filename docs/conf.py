@@ -38,10 +38,14 @@ extensions = [
     'myst_nb',
 ]
 autosummary_generate = True
+autodoc_default_options = {'autosummary': True}
+autodoc_member_order = 'bysource'
+
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
+    'objax': ('https://objax.readthedocs.io/en/latest/', None),
 }
 
 suppress_warnings = [

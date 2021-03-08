@@ -22,14 +22,14 @@ __all__ = ["V", "Scalar"]
 
 @export
 class Rep(object):
-    """ The base Representation class. Representation objects formalize the vector space V
+    r""" The base Representation class. Representation objects formalize the vector space V
         on which the group acts, the group representation matrix ρ(g), and the Lie Algebra
         representation dρ(A) in a single object. Representations act as types for vectors coming
         from V. These types can be manipulated and transformed with the built in operators
         ⊕,⊗,dual, as well as incorporating custom representations. Rep objects should
         be immutable.
 
-        At minimum, new representations need to implement size,rho,__eq__, and __hash__."""
+        At minimum, new representations need to implement ``size``, ``rho``, ``__eq__``, and ``__hash__``."""
     concrete=True
     
     def size(self): 
@@ -67,11 +67,11 @@ class Rep(object):
         return self, np.arange(self.size()) # return canonicalized rep
     
     def rho_dense(self,M):
-        """ Returns rho as a dense matrix. """
+        """ A convenience function which returns rho(M) as a dense matrix."""
         rho = self.rho(M)
         return rho.to_dense() if isinstance(rho,LinearOperator) else rho
     def drho_dense(self,A):
-        """ Returns drho as a dense matrix. """
+        """ A convenience function which returns drho(A) as a dense matrix."""
         rho = self.drho(M)
         return drho.to_dense() if isinstance(drho,LinearOperator) else drho
     

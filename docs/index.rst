@@ -51,8 +51,8 @@ A type system for the automated construction of equivariant layers.
    :maxdepth: 1
    :caption: Package Reference
 
-   package/emlp.solver.representation
    package/emlp.solver.groups
+   package/emlp.solver.representation
    package/emlp.models.mlp
 
 Indices and tables

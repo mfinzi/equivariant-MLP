@@ -27,6 +27,7 @@ def Sequential(*args):
     """ Wrapped to mimic pytorch syntax"""
     return nn.Sequential(args)
 
+@export
 class LieLinear(nn.Linear):  #
     def __init__(self, repin, repout):
         nin,nout = repin.size(),repout.size()
@@ -48,6 +49,7 @@ class LieLinear(nn.Linear):  #
         logging.debug(f"linear out shape:{out.shape}")
         return out
 
+@export
 class BiLinear(Module):
     def __init__(self, repin, repout):
         super().__init__()
@@ -61,7 +63,7 @@ class BiLinear(Module):
         out= .1*(W@x[...,None])[...,0]
         return out
 
-
+@export
 class GatedNonlinearity(Module): #TODO: support elementwise swish for regular reps
     def __init__(self,rep):
         super().__init__()
@@ -71,6 +73,7 @@ class GatedNonlinearity(Module): #TODO: support elementwise swish for regular re
         activations = jax.nn.sigmoid(gate_scalars) * values[..., :self.rep.size()]
         return activations
 
+@export
 class EMLPBlock(Module):
     def __init__(self,rep_in,rep_out):
         super().__init__()
@@ -87,32 +90,7 @@ class EMLPBlock(Module):
         preact =self.bilinear(lin)+lin
         return self.nonlinearity(preact)
 
-# class EResBlock(Module):
-#     def __init__(self,rep_in,rep_out):
-#         super().__init__()
-#         grep_in = gated(rep_in)
-#         grep_out = gated(rep_out)
-
-#         self.bn1 = TensorBN(grep_in)
-#         self.nonlinearity1 = GatedNonlinearity(rep_in)
-#         self.linear1 = LieLinear(rep_in,grep_out)
-
-#         self.bn2 = TensorBN(grep_out)
-#         self.nonlinearity2 = GatedNonlinearity(rep_out)
-#         self.linear2 = LieLinear(rep_out,grep_out)
-        
-
-#         self.bilinear1 = BiLinear(grep_in,grep_out)
-#         #self.bilinear2 = BiLinear(gated(rep_out),gated(rep_out))
-#         self.shortcut = LieLinear(grep_in,grep_out) if rep_in!=rep_out else Sequential()
-#     def __call__(self,x,training=True):
-
-#         z = self.nonlinearity1(self.bn1(x,training=training))
-#         z = self.linear1(z)
-#         z = self.nonlinearity2(self.bn2(x,training=training))
-#         z = self.linear2(z)
-#         return (z+self.shortcut(x)+self.bilinear1(x))/3
-
+@export
 def uniform_rep(ch,group):
     """ A heuristic method for allocating a given number of channels (ch)
         into tensor types. Attempts to distribute the channels evenly across
@@ -181,28 +159,6 @@ class EMLP(Module,metaclass=Named):
         #self.network = LieLinear(self.rep_in,self.rep_out)
     def __call__(self,x,training=True):
         return self.network(x)
-
-# @export
-# class EMLP2(Module):
-#     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
-#         super().__init__()
-#         logging.info("Initing EMLP")
-#         self.rep_in =rep_in(group)
-#         self.rep_out = rep_out(group)
-#         repmiddle = uniform_rep(ch,group)
-#         #reps = [self.rep_in]+
-#         reps = num_layers*[repmiddle]# + [self.rep_out]
-#         logging.debug(reps)
-#         self.network = Sequential(
-#             LieLinear(self.rep_in,gated(repmiddle)),
-#             *[EResBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-#             TensorBN(gated(repmiddle)),
-#             GatedNonlinearity(repmiddle),
-#             LieLinear(repmiddle,self.rep_out)
-#         )
-#     def __call__(self,x,training=True):
-#         y = self.network(x,training=training)
-#         return y
 
 def swish(x):
     return jax.nn.sigmoid(x)*x

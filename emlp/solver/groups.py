@@ -17,15 +17,17 @@ from .product_sum_reps import rep_permutation
 def rel_err(A,B):
     return jnp.mean(jnp.abs(A-B))/(jnp.mean(jnp.abs(A)) + jnp.mean(jnp.abs(B))+1e-6)
 
+@export
 class Group(object,metaclass=Named):
-    lie_algebra = NotImplemented
+    """ Abstract Group Object which new groups should inherit from. """
+    lie_algebra = NotImplemented  #: The continuous generators
     #lie_algebra_lazy = NotImplemented
-    discrete_generators = NotImplemented
+    discrete_generators = NotImplemented  #: The discrete generators
     #discrete_generators_lazy = NotImplemented
     z_scale=None # For scale noise for sampling elements
     is_orthogonal=None
     is_regular = None
-    d = None
+    d = None  #: The dimension of the base representation
     def __init__(self,*args,**kwargs):
         # # Set dense lie_algebra using lie_algebra_lazy if applicable
         # if self.lie_algebra is NotImplemented and self.lie_algebra_lazy is not NotImplemented:
@@ -73,14 +75,17 @@ class Group(object,metaclass=Named):
 
 
     def exp(self,A):
+        """ Matrix exponential """
         return expm(A)
     def num_constraints(self):
         return len(self.lie_algebra)+len(self.discrete_generators)
 
     def sample(self):
+        """Draw a sample from the group (not necessarily Haar measure)"""
         return self.samples(1)[0]
 
     def samples(self,N):
+        """ Draw N samples from the group (not necessarily Haar measure)"""
         A_dense = jnp.stack([Ai@jnp.eye(self.d) for Ai in self.lie_algebra]) if len(self.lie_algebra) else jnp.zeros((0,self.d,self.d))
         h_dense = jnp.stack([hi@jnp.eye(self.d) for hi in self.discrete_generators]) if len(self.discrete_generators) else jnp.zeros((0,self.d,self.d))
         z = np.random.randn(N,A_dense.shape[0])
@@ -170,13 +175,15 @@ class SemiDirectProduct(Group):
         raise NotImplementedError
 
 @export
-class Trivial(Group): #""" The trivial group G={I} in N dimensions """
+class Trivial(Group): 
+    """ The trivial group G={I} in N dimensions """
     def __init__(self,N):
         self.d = N
         super().__init__(N)
 
 @export
-class SO(Group): #""" The special orthogonal group SO(N) in N dimensions"""
+class SO(Group): 
+    """ The special orthogonal group SO(N) in N dimensions"""
     def __init__(self,N):
         self.lie_algebra = np.zeros(((N*(N-1))//2,N,N))
         k=0
@@ -187,25 +194,29 @@ class SO(Group): #""" The special orthogonal group SO(N) in N dimensions"""
                 k+=1
         super().__init__(N)
 @export
-class O(SO): #""" The Orthogonal group O(N) in N dimensions"""
+class O(SO): 
+    """ The Orthogonal group O(N) in N dimensions"""
     def __init__(self,N):
         self.discrete_generators = np.eye(N)[None]
         self.discrete_generators[0,0,0]=-1
         super().__init__(N)
 @export
-class C(Group): #""" The Cyclic group Ck in 2 dimensions"""
+class C(Group): 
+    """ The Cyclic group Ck in 2 dimensions"""
     def __init__(self,k):
         theta = 2*np.pi/k
         self.discrete_generators = np.zeros((1,2,2))
         self.discrete_generators[0,:,:] = np.array([[np.cos(theta),np.sin(theta)],[-np.sin(theta),np.cos(theta)]])
         super().__init__(k)
 @export
-class D(C): #""" The Dihedral group Dk in 2 dimensions"""
+class D(C): 
+    """ The Dihedral group Dk in 2 dimensions"""
     def __init__(self,k):
         super().__init__(k)
         self.discrete_generators = np.concatenate((self.discrete_generators,np.array([[[-1,0],[0,1]]])))
 @export
 class Scaling(Group):
+    """ The scaling group Dk in 2 dimensions"""
     def __init__(self,N):
         self.lie_algebra = np.eye(N)[None]
         super().__init__(N)
@@ -219,7 +230,8 @@ class TimeReversal(Group): #""" The time reversal group in 1+3 dimensions"""
     discrete_generators[0,0,0] = -1
 
 @export
-class SO13p(Group): #""" The component of Lorentz group connected to identity"""
+class SO13p(Group): 
+    """ The component of Lorentz group connected to identity"""
     lie_algebra = np.zeros((6,4,4))
     lie_algebra[3:,1:,1:] = SO(3).lie_algebra
     for i in range(3):
@@ -234,6 +246,7 @@ class SO13(SO13p):
 
 @export
 class O13(SO13p):
+    """ The full lorentz group (including Parity and Time reversal)"""
     discrete_generators = np.eye(4)[None] +np.zeros((2,1,1))
     discrete_generators[0] *= -1
     discrete_generators[1,0,0] = -1
@@ -252,6 +265,8 @@ class O11(SO11p):
 
 @export
 class Sp(Group):
+    """ Symplectic group Sp(m) in 2m dimensions (sometimes referred to 
+        instead as Sp(2m)"""
     def __init__(self,m):
         self.lie_algebra = np.zeros((m*(2*m+1),2*m,2*m))
         k=0
@@ -275,6 +290,8 @@ class Symplectic(Sp): pass
 
 @export
 class Z(Group):
+    r""" The cyclic group Z_n (discrete translation group) of order n.
+        Features a regular base representation."""
     def __init__(self,n):
         self.discrete_generators = [LazyShift(n)]
         super().__init__(n)
@@ -284,6 +301,7 @@ class DiscreteTranslation(Z): pass # Alias cyclic translations with Z
 
 @export
 class S(Group): #The permutation group
+    r""" The permutation group S_n with an n dimensional regular representation."""
     def __init__(self,n):
         #K=n//5
         # perms = np.arange(n)[None]+np.zeros((K,1)).astype(int)
@@ -311,6 +329,7 @@ class Permutation(S): pass #Alias permutation group with Sn.
 @export
 class U(Group): # Of dimension n^2
     def __init__(self,n):
+        """ The unitary group U(n) in n dimensions (complex)"""
         lie_algebra_real = np.zeros((n**2,n,n))
         lie_algebra_imag = np.zeros((n**2,n,n))
         k=0
@@ -333,6 +352,7 @@ class U(Group): # Of dimension n^2
 @export
 class SU(Group): # Of dimension n^2-1
     def __init__(self,n):
+        """ The special unitary group SU(n) in n dimensions (complex)"""
         if n==1: return Trivial(1)
         lie_algebra_real = np.zeros((n**2-1,n,n))
         lie_algebra_imag = np.zeros((n**2-1,n,n))
@@ -359,8 +379,8 @@ class SU(Group): # Of dimension n^2-1
 
 @export
 class Cube(Group):
-    # A discrete version of SO(3) including all 90 degree rotations in 3d space
-    # Implements a 6 dimensional representation on the faces of a cube
+    """ A discrete version of SO(3) including all 90 degree rotations in 3d space
+    Implements a 6 dimensional representation on the faces of a cube"""
     def __init__(self):
         order = np.arange(6) # []
         Fperm = np.array([4,1,0,3,5,2])
@@ -382,10 +402,10 @@ def unpad(padded_perm):
 
 
 
-
-
 @export
 class RubiksCube(Group): #3x3 rubiks cube
+    r""" The Rubiks cube group G<S_48 consisting of all valid 3x3 Rubik's cube transformations.
+        Generated by the a quarter turn about each of the faces."""
     def __init__(self):
         #Faces are ordered U,F,R,B,L,D (the net of the cube) #    B
         order = np.arange(48)                                #  L U R
@@ -463,7 +483,13 @@ class ZksZnxZn(Group):
         self.discrete_generators = [LazyKron([Ik,nshift,In]),LazyKron([Ik,In,nshift]),LazyKron([kshift,Rot90(n,4//k)])]
         super().__init__(k,n)
 
+@export
 class Embed(Group):
+    """ A method to embed a given base group representation in larger vector space.
+    Inputs: 
+    G: the group (and base representation) to embed
+    d: the dimension in which to embed
+    slice: a slice object specifying which dimensions G acts on."""
     def __init__(self,G,d,slice):
         self.lie_algebra = np.zeros((G.lie_algebra.shape[0],d,d))
         self.discrete_generators = np.zeros((G.discrete_generators.shape[0],d,d))

@@ -12,11 +12,15 @@ import logging
 import matplotlib.pyplot as plt
 from functools import reduce
 import emlp.solver
+from oil.utils.utils import export
 
 #TODO: add rep,v = flatten({'Scalar':..., 'Vector':...,}), to_dict(rep,vector) returns {'Scalar':..., 'Vector':...,}
 #TODO and simpler rep = flatten({Scalar:2,Vector:10,...}),
 # Do we even want + operator to implement non canonical orderings?
 
+__all__ = ["V", "Scalar"]
+
+@export
 class Rep(object):
     """ The base Representation class. Representation objects formalize the vector space V
         on which the group acts, the group representation matrix ρ(g), and the Lie Algebra
@@ -214,6 +218,7 @@ class ScalarRep(Rep):
         return other
 
 class Base(Rep):
+    """ Base representation V of a group."""
     def __init__(self,G=None):
         self.G=G
         self.concrete = (G is not None)
@@ -245,6 +250,7 @@ class Base(Rep):
         return Dual(self.G)
 
 class Dual(Base):
+    """ The dual representation V* of the Base representation of a group."""
     def __new__(cls,G=None):
         if G is not None and G.is_orthogonal: return Base(G)
         else: return super(Dual,cls).__new__(cls)
@@ -290,13 +296,14 @@ class Dual(Base):
 #         return super().__lt__(other)
 #     def size(self):
 #         return self.rep.size()
+V=Vector= Base()  #: Alias V or Vector for an instance of the Base representation of a group
 
-V=Vector= Base()
-Scalar = ScalarRep()#V**0
+Scalar = ScalarRep()#: An instance of the Scalar representation, equivalent to V**0
+
+@export
 def T(p,q=0,G=None):
     """ A convenience function for creating rank (p,q) tensors."""
     return (V**p*V.T**q)(G)
-
 
 def orthogonal_complement(proj):
     """ Computes the orthogonal complement to a given matrix proj"""
@@ -453,7 +460,7 @@ def mul_part(bparams,x,bids):
     b = prod(x.shape[:-1])
     return (bparams@x[...,bids].T.reshape(bparams.shape[-1],-1)).reshape(-1,b).T
 
-
+@export
 def vis(repin,repout,cluster=True):
     """ A function to visualize the basis of equivariant maps repin>>repout
         as an image. Only use cluster=True if you know Pv will only have

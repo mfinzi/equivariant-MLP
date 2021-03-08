@@ -41,10 +41,19 @@ A type system for the automated construction of equivariant layers.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Developer documentation
+   :caption: Developer Documentation
 
    documentation.md
 
+
+.. toctree::
+   :glob:
+   :maxdepth: 1
+   :caption: Package Reference
+
+   package/emlp.solver.representation
+   package/emlp.solver.groups
+   package/emlp.models.mlp
 
 Indices and tables
 ==================

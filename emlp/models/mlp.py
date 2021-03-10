@@ -68,17 +68,17 @@ class BiLinear(Module):
         return out
 
 @export
-def gated(sumrep):
+def gated(sumrep): #TODO: generalize to mixed tensors?
     """ Returns the rep with an additional scalar 'gate' for each of the nonscalars and non regular
         reps in the input. To be used as the output for linear (and or bilinear) layers directly
         before a :func:`GatedNonlinearity` to produce its scalar gates. """
     return sumrep+sum([Scalar(rep.G) for rep in sumrep if rep!=Scalar and not rep.is_regular])
 
 @export
-class GatedNonlinearity(Module):
+class GatedNonlinearity(Module): #TODO: add support for mixed tensors and non sumreps
     """ Gated nonlinearity. Requires input to have the additional gate scalars
         for every non regular and non scalar rep. Applies swish to regular and
-        scalar reps. (Right now assumes rep is a SumRep. TODO: extend to non sumreps)"""
+        scalar reps. (Right now assumes rep is a SumRep)"""
     def __init__(self,rep):
         super().__init__()
         self.rep=rep
@@ -100,6 +100,12 @@ class EMLPBlock(Module):
         lin = self.linear(x)
         preact =self.bilinear(lin)+lin
         return self.nonlinearity(preact)
+
+def uniform_rep_general(ch,*rep_types):
+    """ adds all combinations of (powers of) rep_types up to
+        a total of ch channels."""
+    #TODO: write this function
+    raise NotImplementedError
 
 @export
 def uniform_rep(ch,group):

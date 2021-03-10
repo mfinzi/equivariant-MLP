@@ -15,11 +15,10 @@ import objax
 from functools import lru_cache as cache
 from emlp.solver.utils import export
 
-def gated(sumrep):
-    return sumrep+sum([Scalar(rep.G) for rep in sumrep if rep!=Scalar and not rep.is_regular])
+
 
 @cache(maxsize=None)
-def gate_indices(sumrep): #TODO: add regular
+def gate_indices(sumrep): #TODO: add support for mixed_tensors
     """ Indices for scalars, and also additional scalar gates
         added by gated(sumrep)"""
     assert isinstance(sumrep,SumRep), f"unexpected type for gate indices {type(sumrep)}"
@@ -57,7 +56,7 @@ def regular_mask(sumrep):
     return mask
 
 @export
-class TensorBN(nn.BatchNorm0D):
+class TensorBN(nn.BatchNorm0D): #TODO: add suport for mixed tensors.
     """ Equivariant Batchnorm for tensor representations.
         Applies BN on Scalar channels and Mean only BN on others """
     def __init__(self,rep):

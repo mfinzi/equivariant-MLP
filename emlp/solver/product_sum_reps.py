@@ -349,10 +349,12 @@ class DirectProduct(ProductRep):
         assert all(count==1 for count in self.reps.values())
 
     def symmetric_basis(self):
-        return LazyKron([rep.symmetric_basis() for rep,c in self.reps.items()])
+        canon_Q = LazyKron([rep.symmetric_basis() for rep,c in self.reps.items()])
+        return LazyPerm(self.invperm)@canon_Q
 
     def symmetric_projector(self):
-        return LazyKron([rep.symmetric_projector() for rep,c in self.reps.items()])
+        canon_P = LazyKron([rep.symmetric_projector() for rep,c in self.reps.items()])
+        return LazyPerm(self.invperm)@canon_P@LazyPerm(self.perm)
 
     def rho(self,Ms):
         canonical_lazy = LazyKron([rep.rho(Ms) for rep,c in self.reps.items() for _ in range(c)])

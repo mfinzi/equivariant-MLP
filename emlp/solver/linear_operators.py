@@ -11,6 +11,11 @@ def lazify(x):
     elif isinstance(x,(jnp.ndarray,np.ndarray)): return Lazy(x)
     else: raise NotImplementedError
 
+def densify(x):
+    if isinstance(x,LinearOperator): return x.to_dense()
+    elif isinstance(x,(jnp.ndarray,np.ndarray)): return x
+    else: raise NotImplementedError
+
 class I(LinearOperator):
     def __init__(self,d):
         shape = (d,d)
@@ -91,6 +96,21 @@ class LazyKronsum(LinearOperator):
 #     lprod = np.cumprod([1]+[mi.shape[-1] for mi in Ms])
 #     rprod = np.cumprod([1]+[mi.shape[-1] for mi in reversed(Ms)])[::-1]
 #     return reduce(lambda a,b: a+b,[lazy_kron([I(lprod[i]),Mi,I(rprod[i+1])]) for i,Mi in enumerate(Ms)])
+
+
+class LazyJVP(LinearOperator):
+    def __init__(self,operator_fn,X,TX):
+        self.shape = operator_fn(X).shape
+        self.vjp = lambda v: jax.jvp(lambda x: operator_fn(x)@v,[X],[TX])[1]
+        self.vjp_T = lambda v: jax.jvp(lambda x: operator_fn(x).T@v,[X],[TX])[1]
+        self.dtype=jnp.dtype('float32')
+    def _matmat(self,v):
+        return self.vjp(v)
+    def _matvec(self,v):
+        return self.vjp(v)
+    def _rmatmat(self,v):
+        return self.vjp_T(v)
+    
 
 class ConcatLazy(LinearOperator):
     """ Produces a linear operator equivalent to concatenating

@@ -7,7 +7,7 @@ from .utils import ltqdm, prod
 from sklearn.cluster import KMeans
 from tqdm.auto import tqdm
 from .linear_operator_jax import LinearOperator, Lazy
-from .linear_operators import ConcatLazy, I, lazify
+from .linear_operators import ConcatLazy, I, lazify, densify, LazyJVP
 import logging
 import matplotlib.pyplot as plt
 from functools import reduce
@@ -41,7 +41,9 @@ class Rep(object):
         raise NotImplementedError
     def drho(self,A): 
         """ Lie Algebra representation of the matrix A of shape (d,d)"""
-        raise NotImplementedError
+        In = jnp.eye(A.shape[0])
+        return LazyJVP(self.rho,In,A)
+
     def __eq__(self, other): 
         raise NotImplementedError
     def __hash__(self):
@@ -68,12 +70,10 @@ class Rep(object):
     
     def rho_dense(self,M):
         """ A convenience function which returns rho(M) as a dense matrix."""
-        rho = self.rho(M)
-        return rho.to_dense() if isinstance(rho,LinearOperator) else rho
+        return densify(self.rho(M))
     def drho_dense(self,A):
         """ A convenience function which returns drho(A) as a dense matrix."""
-        rho = self.drho(M)
-        return drho.to_dense() if isinstance(drho,LinearOperator) else drho
+        return densify(self.drho(A))
     
     def constraint_matrix(self):
         """ Constructs the equivariance constrant matrix (lazily) by concatenating

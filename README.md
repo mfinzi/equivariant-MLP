@@ -38,9 +38,9 @@ Q = (rep>>rep).symmetric_basis()
 
 You can visualize these equivariant bases with `vis(repin,repout)` (with `cluster=False` for non orthogonal representations), such as with the two examples above
 
-
-![basis B](https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png "title2")
-![basis A](https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png "title1")
+<img src="https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png" width="400"/> <img src="https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png" width="250"/>  
+<!-- ![basis B](https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png "title2")
+![basis A](https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png "title1") -->
 
 
 Checkout our [documentation](https://emlp.readthedocs.io/en/latest/) to see how this works and how to use our system.

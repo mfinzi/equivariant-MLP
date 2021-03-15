@@ -1,7 +1,11 @@
 # A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
 
+<!-- 
+.. image:: https://img.shields.io/pypi/v/<name-of-package>.svg
+   :target: https://pypi.python.org/pypi/<name-of-package>
+   :alt: PyPi version -->
 --------------------------------------------------------------------------------
-**[Documentation](https://emlp.readthedocs.io/en/latest/)** | **[Paper]()**| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/emlp.ipynb)
+[![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | **[Paper](https://www.youtube.com/watch?v=dQw4w9WgXcQ&ab_channel=RickAstleyVEVO)**| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/emlp.ipynb)
 
 
 *EMLP* is a jax library for the automated construction of equivariant layers in deep learning.
@@ -15,17 +19,31 @@ Our type system is centered on it making it easy to combine representations usin
 
 ```python
 from emlp.solver.representation import V
-from emlp.solver.groups import Sp
+from emlp.solver.groups import *
 
-W=V(Sp(3))
+W=V(O13())
 repin = (W+2*W**2)*(W.T+1*W).T + W.T
-repout = 3*W**0 + W*W.T
+repout = 3*W**0 + W + W*W.T
 Q = (repin>>repout).symmetric_basis()
 ```
 
-is code that will run and produce the basis for linear maps from repin to repout that are equivariant to the symplectic group Sp(3).
+is code that will run and produce the basis for linear maps from repin to repout that are equivariant to the Lorentz group O(1,3).
 
-Checkout our documentation at [Documentation](https://emlp.readthedocs.io/en/latest/) to see how this works and how to use our system.
+You can even mix and match representations from different groups. For example with the cyclic group Z, the permutation group S, and the orthogonal group O
+
+```python
+rep = 2*V(Z(3))*V(S(4))+V(O(3))**2
+Q = (rep>>rep).symmetric_basis()
+```
+
+You can visualize these equivariant bases with `vis(repin,repout)` (with `cluster=False` for non orthogonal representations), such as with the two examples above
+
+
+![basis B](https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png "title2")
+![basis A](https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png "title1")
+
+
+Checkout our [documentation](https://emlp.readthedocs.io/en/latest/) to see how this works and how to use our system.
 
 
 # Installation instructions
@@ -64,7 +82,7 @@ You can also train EMLP using other equivariance groups provided the dimensions 
 
 If you find our work helpful, please cite it with
 ```bibtex
-@article{finzi2021arbitrary,
+@article{finzi2021emlp,
   title={A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups},
   author={Finzi, Marc and Welling, Max and Wilson, Andrew Gordon},
   journal={Arxiv},

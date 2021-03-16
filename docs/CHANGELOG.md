@@ -7,7 +7,9 @@ Remember to align the itemized text with the first line of an item within a list
 
 ## EMLP 0.8.0 (Unreleased)
 
-<!-- * New features:
-  * {func}`jax.scipy.stats.chi2` is now available as a distribution with logpdf and pdf methods.
-  * {func}`jax.scipy.stats.betabinom` is now available as a distribution with logpmf and pmf methods.
-  * -->
+* New features:
+  * Fallback autograd jvp implementation of drho to make implementing new reps easier.
+  * Mixed group representations (now working and tested)
+  * Experimental support of complex groups and representations
+* Bug Fixes:
+  * Element ordering of mixed groups is now correctly maintained in the soln

@@ -22,8 +22,8 @@ A type system for the automated construction of equivariant layers.
    :maxdepth: 1
    :caption: Advanced Features
 
-   notebooks/mixed_tensors.md
    notebooks/new_representations.md
+   notebooks/mixed_tensors.md
    notebooks/multilinear_maps.md
 
 .. toctree::

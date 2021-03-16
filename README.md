@@ -15,7 +15,7 @@ Use at your own caution. But if you notice things behaving unexpectedly or get f
 
 --------------------------------------------------------------------------------
 
-Our type system is centered on it making it easy to combine representations using ρᵤ⊗ρᵥ, ρᵤ⊕ρᵥ, ρ*. For any given matrix group and representation formed in our type system, you can get the equivariant basis with `rep.symmetric_basis()` or a matrix which projects to that subspace with `rep.symmetric_projector()`. For example:
+Our type system is centered on it making it easy to combine representations using ρᵤ⊗ρᵥ, ρᵤ⊕ρᵥ, ρ*. For any given matrix group and representation formed in our type system, you can get the equivariant basis with [`rep.symmetric_basis()`](https://emlp.readthedocs.io/en/latest/package/emlp.solver.representation.html) or a matrix which projects to that subspace with [`rep.symmetric_projector()`](https://emlp.readthedocs.io/en/latest/package/emlp.solver.representation.html). For example:
 
 ```python
 from emlp.solver.representation import V
@@ -36,7 +36,7 @@ rep = 2*V(Z(3))*V(S(4))+V(O(3))**2
 Q = (rep>>rep).symmetric_basis()
 ```
 
-You can visualize these equivariant bases with `vis(repin,repout)`, such as with the two examples above
+You can visualize these equivariant bases with [`vis(repin,repout)`](https://emlp.readthedocs.io/en/latest/package/emlp.solver.representation.html#emlp.solver.representation.vis), such as with the two examples above
 
 <img src="https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png" width="400"/> <img src="https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png" width="250"/>  
 <!-- ![basis B](https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png "title2")
@@ -62,18 +62,18 @@ pip install -e .
 Assuming you have installed the repo locally, you can run the experiments we described in the paper. The relevant scripts are
 [`emlp/experiments/neuralode.py`](https://github.com/mfinzi/equivariant-MLP/blob/master/emlp/experiments/neuralode.py) to train (equivariant) Neural ODEs, [`emlp/experiments/hnn.py`](https://github.com/mfinzi/equivariant-MLP/blob/master/emlp/experiments/hnn.py) to train (equivariant) Hamiltonian Neural Networks, [`emlp/experiments/inertia.py`](https://github.com/mfinzi/equivariant-MLP/blob/master/emlp/experiments/inertia.py) to train (E)MLP on the inertia task, [`emlp/experiments/o5_synthetic.py`](https://github.com/mfinzi/equivariant-MLP/blob/master/emlp/experiments/o5_synthetic.py) for the O(5)-Invariant synthetic task, and [`emlp/experiments/scattering.py`](https://github.com/mfinzi/equivariant-MLP/blob/master/emlp/experiments/scattering.py) to train (E)MLP on the Lorentz invariant scattering task. If in doubt, you can see options for command line arguments for each of these scripts by running `python script.py -h`.
 
-For the three regression tasks, you can run EMLP or the baseline with `--network EMLP` or `--network MLP` to train the baseline. For example:
+For the three regression tasks, you can run [EMLP](https://emlp.readthedocs.io/en/latest/package/emlp.models.mlp.html#emlp.models.EMLP) or the baseline with `--network EMLP` or `--network MLP` to train the baseline. For example:
 
 ```
 python emlp/experiments/scattering.py --network EMLP
 ```
 
-For the dynamical system task, the Neural ODE and HNN models have special names. `EMLPode` and `MLPode` for the Neural ODEs in `neuralode.py` and `EMLPH` and `MLPH` for the HNNs in `hnn.py`. For example,
+For the dynamical system task, the Neural ODE and HNN models have special names. [`EMLPode`](https://emlp.readthedocs.io/en/latest/package/emlp.models.mlp.html#emlp.models.EMLPode) and [`MLPode`](https://emlp.readthedocs.io/en/latest/package/emlp.models.mlp.html#emlp.models.MLPode) for the Neural ODEs in `neuralode.py` and [`EMLPH`](https://emlp.readthedocs.io/en/latest/package/emlp.models.mlp.html#emlp.models.EMLPH) and [`MLPH`](https://emlp.readthedocs.io/en/latest/package/emlp.models.mlp.html#emlp.models.MLPH) for the HNNs in `hnn.py`. For example,
 ```
 python emlp/experiments/neuralode.py --network EMLPode
 ```
 
-You can also train EMLP using other equivariance groups provided the dimensions match the data. To do this, specify a group from [`groups.py`](https://github.com/mfinzi/equivariant-MLP/blob/master/emlp/solver/groups.py) in quotations, for example you could swap out SO(3) in `inertia.py` with the permutation group S(3) using the command line argument `--group "S(3)"`. However, other groups will likely be less relevant to these specific problems.
+You can also train EMLP using other equivariance groups provided the dimensions match the data. To do this, specify a group from [`groups.py`](https://github.com/mfinzi/equivariant-MLP/blob/master/emlp/solver/groups.py) in quotations, for example you could swap out [SO(3)](https://emlp.readthedocs.io/en/latest/package/emlp.solver.groups.html#emlp.solver.groups.SO) in `inertia.py` with the permutation group [S(3)](https://emlp.readthedocs.io/en/latest/package/emlp.solver.groups.html#emlp.solver.groups.S) using the command line argument `--group "S(3)"`. However, other groups will likely be less relevant to these specific problems.
 
 <!-- # 
 <p align="center">

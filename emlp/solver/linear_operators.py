@@ -33,9 +33,9 @@ class LazyKron(LinearOperator):
 
     def __init__(self,Ms):
         self.Ms = Ms
-        self.shape = product([Mi.shape[0] for Mi in Ms]), product([Mi.shape[1] for Mi in Ms])
+        shape = product([Mi.shape[0] for Mi in Ms]), product([Mi.shape[1] for Mi in Ms])
         #self.dtype=Ms[0].dtype
-        self.dtype=jnp.dtype('float32')
+        super().__init__(None,shape)
 
     def _matvec(self,v):
         return self._matmat(v).reshape(-1)
@@ -66,9 +66,10 @@ class LazyKronsum(LinearOperator):
     
     def __init__(self,Ms):
         self.Ms = Ms
-        self.shape = product([Mi.shape[0] for Mi in Ms]), product([Mi.shape[1] for Mi in Ms])
+        shape = product([Mi.shape[0] for Mi in Ms]), product([Mi.shape[1] for Mi in Ms])
         #self.dtype=Ms[0].dtype
-        self.dtype=jnp.dtype('float32')
+        dtype=jnp.dtype('float32')
+        super().__init__(dtype,shape)
 
     def _matvec(self,v):
         return self._matmat(v).reshape(-1)
@@ -119,7 +120,8 @@ class ConcatLazy(LinearOperator):
         self.Ms = Ms
         assert all(M.shape[0]==Ms[0].shape[0] for M in Ms),\
              f"Trying to concatenate matrices of different sizes {[M.shape for M in Ms]}"
-        self.shape = (sum(M.shape[0] for M in Ms),Ms[0].shape[1])
+        shape = (sum(M.shape[0] for M in Ms),Ms[0].shape[1])
+        super().__init__(None,shape)
 
     def _matmat(self,V):
         return jnp.concatenate([M@V for M in self.Ms],axis=0)
@@ -174,7 +176,8 @@ def lazy_direct_matmat(v,Ms,mults):
 class LazyPerm(LinearOperator):
     def __init__(self,perm):
         self.perm=perm
-        self.shape = (len(perm),len(perm))
+        shape = (len(perm),len(perm))
+        super().__init__(None,shape)
 
     def _matmat(self,V):
         return V[self.perm]
@@ -188,7 +191,8 @@ class LazyPerm(LinearOperator):
 class LazyShift(LinearOperator):
     def __init__(self,n,k=1):
         self.k=k
-        self.shape = (n,n)
+        shape = (n,n)
+        super().__init__(None,shape)
 
     def _matmat(self,V): #(c,k) #Still needs to be tested??
         return jnp.roll(V,self.k,axis=0)
@@ -202,7 +206,8 @@ class LazyShift(LinearOperator):
 class SwapMatrix(LinearOperator):
     def __init__(self,swaprows,n):
         self.swaprows=swaprows
-        self.shape = (n,n)
+        shape = (n,n)
+        super().__init__(None,shape)
     def _matmat(self,V): #(c,k)
         V = jax.ops.index_update(V, jax.ops.index[self.swaprows], V[self.swaprows[::-1]])
         return V
@@ -215,9 +220,10 @@ class SwapMatrix(LinearOperator):
 
 class Rot90(LinearOperator):
     def __init__(self,n,k):
-        self.shape = (n*n,n*n)
+        shape = (n*n,n*n)
         self.n=n
         self.k = k
+        super().__init__(None,shape)
     def _matmat(self,V): #(c,k)
         return jnp.rot90(V.reshape((self.n,self.n,-1)),self.k).reshape(V.shape)
     def _matvec(self,V):

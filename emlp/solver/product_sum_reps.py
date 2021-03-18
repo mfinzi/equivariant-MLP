@@ -70,8 +70,6 @@ class SumRep(Rep):
     def __call__(self,G):
         return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},perm=self.perm)
 
-
-
     def symmetric_basis(self):
         """ Overrides default implementation with a more efficient version which decomposes the constraints
             across the sum."""
@@ -89,17 +87,15 @@ class SumRep(Rep):
         Ps = {rep:rep.symmetric_projector() for rep in self.reps}
         multiplicities = self.reps.values()
         def lazy_P(array):
-            return lazy_direct_matmat(array,Ps.values(),multiplicities)[self.invperm]
+            return lazy_direct_matmat(array[self.perm],Ps.values(),multiplicities)[self.invperm]#[:,self.invperm]
         return LinearOperator(shape=(self.size(),self.size()),matvec=lazy_P,matmat=lazy_P)
 
-    # ##TODO: investigate why these more idiomatic definitions with Lazy Tensors end up slower
+    # ##TODO: investigate why these more idiomatic definitions with Lazy Operators end up slower
     # def symmetric_basis(self):
     #     Qs = [rep.symmetric_basis() for rep in self.reps]
     #     Qs = [(jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for Q in Qs]
     #     multiplicities  = self.reps.values()
-    #     Q = I(len(self.perm))
-    #     Q@jnp.zeros((Q.shape[-1],1))
-    #     return Q#LazyPerm(self.invperm)#LazyDirectSum(Qs,multiplicities)#LazyPerm(self.invperm)@LazyDirectSum(Qs,multiplicities)
+    #     return LazyPerm(self.invperm)@LazyDirectSum(Qs,multiplicities)
     # def symmetric_projector(self):
     #     Ps = [rep.symmetric_projector() for rep in self.reps]
     #     Ps = (jax.device_put(P.astype(np.float32)) if isinstance(P,(np.ndarray)) else P)

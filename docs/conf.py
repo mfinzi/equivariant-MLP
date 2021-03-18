@@ -82,9 +82,9 @@ exclude_patterns = [
     'build/html',
     'build/jupyter_execute',
     'notebooks/README.md',
+    'notebooks/colabs/*.ipynb'
     'README.md',
     # Ignore markdown source for notebooks; myst-nb builds from the ipynb
-    # These are kept in sync using the jupytext pre-commit hook.
     'notebooks/*.md'
 ]
 

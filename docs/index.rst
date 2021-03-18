@@ -7,24 +7,26 @@
 EMLP reference documentation
 ============================
 
-A type system for the automated construction of equivariant layers.
+A type system for the automated construction of equivariant layers. 
+EMLP is designed to make constructing equivariant layers with different matrix groups
+and representations an easy task, and one that does not require knowledge of analytic solutions.
 
 
 .. toctree::
    :maxdepth: 1
    :caption: Getting Started
 
-   notebooks/quickstart.md
-   notebooks/building_a_model.md
-   notebooks/new_groups.md
+   notebooks/1quickstart.ipynb
+   notebooks/2building_a_model.ipynb
+   notebooks/3new_groups.ipynb
 
 .. toctree::
    :maxdepth: 1
    :caption: Advanced Features
 
-   notebooks/new_representations.md
-   notebooks/mixed_tensors.md
-   notebooks/multilinear_maps.md
+   notebooks/4new_representations.ipynb
+   notebooks/5mixed_tensors.ipynb
+   notebooks/6multilinear_maps.ipynb
 
 .. toctree::
    :maxdepth: 1
@@ -60,4 +62,3 @@ Indices and tables
 
 * :ref:`genindex`
 * :ref:`modindex`
-* :ref:`search`

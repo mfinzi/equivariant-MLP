@@ -15,7 +15,7 @@ Use at your own caution. But if you notice things behaving unexpectedly or get f
 
 --------------------------------------------------------------------------------
 
-Our type system is centered on it making it easy to combine representations using ρᵤ⊗ρᵥ, ρᵤ⊕ρᵥ, ρ*. For any given matrix group and representation formed in our type system, you can get the equivariant basis with [`rep.symmetric_basis()`](https://emlp.readthedocs.io/en/latest/package/emlp.solver.representation.html) or a matrix which projects to that subspace with [`rep.symmetric_projector()`](https://emlp.readthedocs.io/en/latest/package/emlp.solver.representation.html). For example:
+Our type system is centered on it making it easy to combine representations using ρᵤ⊗ρᵥ, ρᵤ⊕ρᵥ, ρ*. For any given matrix group and representation formed in our type system, you can get the equivariant basis with [`rep.symmetric_basis()`](https://emlp.readthedocs.io/en/latest/package/emlp.solver.representation.html#emlp.solver.representation.symmetric_basis) or a matrix which projects to that subspace with [`rep.symmetric_projector()`](https://emlp.readthedocs.io/en/latest/package/emlp.solver.representation.html#emlp.solver.representation.symmetric_projector). For example:
 
 ```python
 from emlp.solver.representation import V
@@ -29,7 +29,7 @@ Q = (repin>>repout).symmetric_basis()
 
 is code that will run and produce the basis for linear maps from repin to repout that are equivariant to the Lorentz group O(1,3).
 
-You can even mix and match representations from different groups. For example with the cyclic group Z, the permutation group S, and the orthogonal group O
+You can even mix and match representations from different groups. For example with the cyclic group ℤ₃, the permutation group 𝕊₄, and the orthogonal group O(3)
 
 ```python
 rep = 2*V(Z(3))*V(S(4))+V(O(3))**2
@@ -38,12 +38,12 @@ Q = (rep>>rep).symmetric_basis()
 
 You can visualize these equivariant bases with [`vis(repin,repout)`](https://emlp.readthedocs.io/en/latest/package/emlp.solver.representation.html#emlp.solver.representation.vis), such as with the two examples above
 
-<img src="https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png" width="400"/> <img src="https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png" width="250"/>  
+<img src="https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png" width="350"/> <img src="https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png" width="230"/>  
 <!-- ![basis B](https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png "title2")
 ![basis A](https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png "title1") -->
 
 
-Checkout our [documentation](https://emlp.readthedocs.io/en/latest/) how to use our system and some worked examples.
+Checkout our [documentation](https://emlp.readthedocs.io/en/latest/) to see how to use our system and some worked examples.
 
 
 # Installation instructions

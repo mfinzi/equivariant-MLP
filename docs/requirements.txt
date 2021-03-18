@@ -4,7 +4,9 @@ sphinx >=3, <4
 sphinx_rtd_theme
 sphinx-autodoc-typehints
 myst-nb
-
+nbmerge
+nbsphinx
+recommonmark
 # Packages used for CI tests.
 pytest
 pytest-xdist

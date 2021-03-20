@@ -469,7 +469,7 @@ def vis(repin,repout,cluster=True):
     P = rep.symmetric_projector() # compute the equivariant basis
     Q = rep.symmetric_basis()
     v = np.random.randn(P.shape[1])  # sample random vector
-    v = P@v                         # project onto equivariant subspace
+    v = np.round(P@v,decimals=4)  # project onto equivariant subspace (and round)
     if cluster: # cluster nearby values for better color separation in plot
         v = KMeans(n_clusters=Q.shape[-1]).fit(v.reshape(-1,1)).labels_
     plt.imshow(v.reshape(repout.size(),repin.size()))

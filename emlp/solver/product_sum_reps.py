@@ -42,8 +42,7 @@ class SumRep(Rep):
 
     
     def __eq__(self, other):
-        assert self.canonical
-        return self.reps==other.reps# and self.perm == other.perm
+        return self.reps==other.reps and (self.perm==other.perm).all()
     
     def __hash__(self):
         assert self.canonical
@@ -257,7 +256,7 @@ class ProductRep(Rep):
         assert self.canonical, f"Not canonical {repr(self)}? perm {self.perm}"
         return hash(tuple(self.reps.items()))
     def __eq__(self, other): #TODO: worry about non canonical?
-        return isinstance(other,ProductRep) and self.reps==other.reps# and self.perm == other.perm
+        return isinstance(other,ProductRep) and self.reps==other.reps and (self.perm==other.perm).all()
     
     @property
     def T(self):

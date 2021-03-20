@@ -35,7 +35,6 @@ class LieLinear(nn.Linear):
         super().__init__(nin,nout)
         self.b = TrainVar(objax.random.uniform((nout,))/jnp.sqrt(nout))
         self.w = TrainVar(orthogonal((nout, nin)))
-        #print("Linear sizes:",repin.size(),repout.size())
         self.rep_W = rep_W = repout*repin.T
         
         rep_bias = repout
@@ -163,13 +162,17 @@ def uniform_allocation(N,rank):
 
 @export
 class EMLP(Module,metaclass=Named):
-    """ Equivariant MultiLayer Perceptron.
+    """ Equivariant MultiLayer Perceptron. 
+        If the input ch argument is an int, uses the hands off uniform_rep heuristic.
+        If the ch argument is a representation, uses this representation for the hidden layers.
+        Individual layer representations can be set explicitly by using a list of ints or a list of
+        representations, rather than use the same for each hidden layer.
 
         Args:
             rep_in (Rep): input representation
             rep_out (Rep): output representation
             group (Group): symmetry group
-            ch (int): number of channels in the hidden layers
+            ch (int or List[int] or Rep or List[Rep]): number of channels in the hidden layers
             num_layers (int): number of hidden layers
 
         Returns:

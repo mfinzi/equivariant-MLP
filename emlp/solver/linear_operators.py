@@ -161,13 +161,13 @@ class LazyDirectSum(LinearOperator):
         
 def lazy_direct_matmat(v,Ms,mults):
     n = v.shape[0]
+    k = v.shape[1] if len(v.shape)>1 else 1
     i=0
     y = []
     for M, multiplicity in zip(Ms,mults):
-        if not M.shape[-1]: continue
         i_end = i+multiplicity*M.shape[-1]
-        elems = M@v[i:i_end].T.reshape(-1,M.shape[-1]).T
-        y.append(elems.T.reshape(-1,multiplicity*M.shape[0]).T)
+        elems = M@v[i:i_end].T.reshape(k*multiplicity,M.shape[-1]).T
+        y.append(elems.T.reshape(k,multiplicity*M.shape[0]).T)
         i = i_end
     y = jnp.concatenate(y,axis=0) #concatenate over rep axis
     return  y

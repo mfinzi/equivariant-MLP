@@ -3,7 +3,7 @@
 dir_path=$(dirname $(realpath $0))
 PREAMBLE=$dir_path/_colab_preamble.ipynb
 NOTEBOOKS=$dir_path/[^_]*.ipynb
-mkdir  $dir_path/colabs
+mkdir -p $dir_path/colabs
 cp -r $dir_path/imgs  $dir_path/colabs/imgs
 for nb in $NOTEBOOKS
 do

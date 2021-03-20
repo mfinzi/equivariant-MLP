@@ -27,11 +27,20 @@ and representations an easy task, and one that does not require knowledge of ana
    notebooks/4new_representations.ipynb
    notebooks/5mixed_tensors.ipynb
    notebooks/6multilinear_maps.ipynb
+   notebooks/7pytorch_support.ipynb
 
 .. toctree::
    :maxdepth: 1
    :caption: Examples
 
+.. toctree::
+   :glob:
+   :maxdepth: 1
+   :caption: Package Reference
+
+   package/emlp.solver.groups
+   package/emlp.solver.representation
+   package/emlp.models.mlp
 
 .. toctree::
    :maxdepth: 1
@@ -46,16 +55,6 @@ and representations an easy task, and one that does not require knowledge of ana
    :caption: Developer Documentation
 
    documentation.md
-
-
-.. toctree::
-   :glob:
-   :maxdepth: 1
-   :caption: Package Reference
-
-   package/emlp.solver.groups
-   package/emlp.solver.representation
-   package/emlp.models.mlp
 
 Indices and tables
 ==================

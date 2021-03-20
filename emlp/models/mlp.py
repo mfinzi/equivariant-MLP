@@ -172,7 +172,7 @@ class EMLP(Module,metaclass=Named):
             rep_in (Rep): input representation
             rep_out (Rep): output representation
             group (Group): symmetry group
-            ch (int or List[int] or Rep or List[Rep]): number of channels in the hidden layers
+            ch (int or list[int] or Rep or list[Rep]): number of channels in the hidden layers
             num_layers (int): number of hidden layers
 
         Returns:

@@ -1,5 +1,5 @@
 Groups
 ======
 
-.. automodule:: emlp.solver.groups
+.. automodule:: emlp.groups
     :members:

@@ -6,14 +6,13 @@ import objax.nn as nn
 import jax
 from jax import jit
 import jax.numpy as jnp
-from emlp.solver.representation import Scalar
-from emlp.solver.product_sum_reps import SumRep
+from emlp.reps import Scalar
+from emlp.reps.product_sum_reps import SumRep
 import logging
 import objax.functional as F
 from functools import partial
 import objax
 from functools import lru_cache as cache
-from emlp.solver.utils import export
 
 
 

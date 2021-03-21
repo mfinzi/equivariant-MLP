@@ -14,5 +14,13 @@ Remember to align the itemized text with the first line of an item within a list
 * Bug Fixes:
   * Element ordering of mixed groups is now correctly maintained in the solution
   * Fixed edge case of {func}`lazy_direct_matmat` when concatenating matrices of size 0 
-    affecting {func}`emlp.solver.representation.Rep.symmetric_basis` but not 
-    {func}`emlp.solver.representation.Rep.symmetric_projector`
+    affecting {func}`emlp.reps.Rep.equivariant_basis` but not 
+    {func}`emlp.reps.Rep.equivariant_projector`
+* API Changes:
+  * `emlp.solver.representation` -> `emlp.reps`
+  * `emlp.solver.groups` -> `emlp.groups`
+  * `emlp.models.mlp` -> `emlp.nn`
+  * `rep.symmetric_basis()` -> `rep.equivariant_basis()`
+  * `rep.symmetric_projector()` -> `rep.equivariant_projector()`
+  * Tests and experiments separated from package and api
+

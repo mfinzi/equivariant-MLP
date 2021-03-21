@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import jax.numpy as jnp
-from emlp.solver.representation import Scalar,Vector,T
+from emlp.reps import Scalar,Vector,T
 from torch.utils.data import Dataset
 from oil.utils.utils import export,Named,Expression,FixedNumpySeed
-from emlp.solver.groups import SO,O,Trivial,Lorentz,RubiksCube,Cube
+from emlp.groups import SO,O,Trivial,Lorentz,RubiksCube,Cube
 from functools import partial
 import itertools
 from jax import vmap,jit

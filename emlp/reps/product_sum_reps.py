@@ -3,10 +3,9 @@ import jax
 from jax import jit
 import collections,itertools
 from functools import lru_cache as cache
-from .utils import prod as product
 from .representation import Rep
-from .linear_operator_jax import LinearOperator
-from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify
+from .linear_operator_base import LinearOperator
+from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify,product
 from functools import reduce
 from collections import defaultdict
 
@@ -69,10 +68,10 @@ class SumRep(Rep):
     def __call__(self,G):
         return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},perm=self.perm)
 
-    def symmetric_basis(self):
+    def equivariant_basis(self):
         """ Overrides default implementation with a more efficient version which decomposes the constraints
             across the sum."""
-        Qs = {rep: rep.symmetric_basis() for rep in self.reps}
+        Qs = {rep: rep.equivariant_basis() for rep in self.reps}
         Qs = {rep: (jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for rep,Q in Qs.items()}
         active_dims = sum([self.reps[rep]*Qs[rep].shape[-1] for rep in Qs.keys()])
         multiplicities = self.reps.values()
@@ -80,23 +79,23 @@ class SumRep(Rep):
             return lazy_direct_matmat(array,Qs.values(),multiplicities)[self.invperm]
         return LinearOperator(shape=(self.size(),active_dims),matvec=lazy_Q,matmat=lazy_Q)
 
-    def symmetric_projector(self):
+    def equivariant_projector(self):
         """ Overrides default implementation with a more efficient version which decomposes the constraints
             across the sum."""
-        Ps = {rep:rep.symmetric_projector() for rep in self.reps}
+        Ps = {rep:rep.equivariant_projector() for rep in self.reps}
         multiplicities = self.reps.values()
         def lazy_P(array):
             return lazy_direct_matmat(array[self.perm],Ps.values(),multiplicities)[self.invperm]#[:,self.invperm]
         return LinearOperator(shape=(self.size(),self.size()),matvec=lazy_P,matmat=lazy_P)
 
     # ##TODO: investigate why these more idiomatic definitions with Lazy Operators end up slower
-    # def symmetric_basis(self):
-    #     Qs = [rep.symmetric_basis() for rep in self.reps]
+    # def equivariant_basis(self):
+    #     Qs = [rep.equivariant_basis() for rep in self.reps]
     #     Qs = [(jax.device_put(Q.astype(np.float32)) if isinstance(Q,(np.ndarray)) else Q) for Q in Qs]
     #     multiplicities  = self.reps.values()
     #     return LazyPerm(self.invperm)@LazyDirectSum(Qs,multiplicities)
-    # def symmetric_projector(self):
-    #     Ps = [rep.symmetric_projector() for rep in self.reps]
+    # def equivariant_projector(self):
+    #     Ps = [rep.equivariant_projector() for rep in self.reps]
     #     Ps = (jax.device_put(P.astype(np.float32)) if isinstance(P,(np.ndarray)) else P)
     #     multiplicities  = self.reps.values()
     #     return LazyPerm(self.invperm)@LazyDirectSum(Ps,multiplicities)@LazyPerm(self.perm)
@@ -343,12 +342,12 @@ class DirectProduct(ProductRep):
         self.is_regular = all(rep.is_regular for rep in self.reps.keys())
         assert all(count==1 for count in self.reps.values())
 
-    def symmetric_basis(self):
-        canon_Q = LazyKron([rep.symmetric_basis() for rep,c in self.reps.items()])
+    def equivariant_basis(self):
+        canon_Q = LazyKron([rep.equivariant_basis() for rep,c in self.reps.items()])
         return LazyPerm(self.invperm)@canon_Q
 
-    def symmetric_projector(self):
-        canon_P = LazyKron([rep.symmetric_projector() for rep,c in self.reps.items()])
+    def equivariant_projector(self):
+        canon_P = LazyKron([rep.equivariant_projector() for rep,c in self.reps.items()])
         return LazyPerm(self.invperm)@canon_P@LazyPerm(self.perm)
 
     def rho(self,Ms):

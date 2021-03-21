@@ -6,7 +6,7 @@ from jax import vmap
 import jax.numpy as jnp
 import numpy as np
 import objax
-from emlp.slax.model_trainers.classifier import Regressor,Classifier
+from .classifier import Regressor,Classifier
 from functools import partial
 from itertools import islice
 

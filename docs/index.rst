@@ -38,9 +38,9 @@ and representations an easy task, and one that does not require knowledge of ana
    :maxdepth: 1
    :caption: API Reference
 
-   package/emlp.solver.groups
-   package/emlp.solver.representation
-   package/emlp.models.mlp
+   package/emlp.groups
+   package/emlp.reps
+   package/emlp.nn
 
 .. toctree::
    :maxdepth: 1

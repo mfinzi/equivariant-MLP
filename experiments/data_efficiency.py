@@ -1,5 +1,5 @@
 from emlp.nn import MLP,EMLP#,LinearBNSwish
-from datasets import O5Synthetic, ParticleInteraction, Inertia
+from emlp.datasets import O5Synthetic, ParticleInteraction, Inertia
 from emlp.reps import T,Scalar
 from emlp.groups import SO, O, Trivial, O13, SO13, SO13p
 from oil.tuning.study import train_trial, Study
@@ -7,7 +7,7 @@ from oil.tuning.study import train_trial, Study
 from oil.tuning.args import argupdated_config
 from emlp.experiments.train_basic import makeTrainer
 import copy
-import datasets.regression
+import emlp.datasets
 
 if __name__=="__main__":
     Trial = train_trial(makeTrainer)

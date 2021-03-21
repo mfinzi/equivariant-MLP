@@ -11,8 +11,8 @@ import emlp.nn
 import emlp.reps
 import emlp.groups
 import objax
-import datasets.regression
-from datasets.regression import Inertia,O5Synthetic,ParticleInteraction
+import emlp.datasets
+from emlp.datasets import Inertia,O5Synthetic,ParticleInteraction
 
 log_levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
                         'warn': logging.WARNING,'warning': logging.WARNING,
@@ -42,6 +42,6 @@ def makeTrainer(*,dataset=Inertia,network=EMLP,num_epochs=300,ndata=1000+2000,se
 
 if __name__ == "__main__":
     cfg = argupdated_config(makeTrainer.__kwdefaults__,
-                    namespace=(emlp.groups,datasets.regression,emlp.nn))
+                    namespace=(emlp.groups,emlp.datasets,emlp.nn))
     trainer = makeTrainer(**cfg)
     trainer.train(cfg['num_epochs'])

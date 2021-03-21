@@ -26,7 +26,7 @@ def Sequential(*args):
     return nn.Sequential(args)
 
 @export
-class LieLinear(nn.Linear):
+class Linear(nn.Linear):
     """ Basic equivariant Linear layer from repin to repout."""
     def __init__(self, repin, repout):
         nin,nout = repin.size(),repout.size()
@@ -90,7 +90,7 @@ class EMLPBlock(Module):
         and gated nonlinearity. """
     def __init__(self,rep_in,rep_out):
         super().__init__()
-        self.linear = LieLinear(rep_in,gated(rep_out))
+        self.linear = Linear(rep_in,gated(rep_out))
         self.bilinear = BiLinear(gated(rep_out),gated(rep_out))
         self.nonlinearity = GatedNonlinearity(rep_out)
     def __call__(self,x):
@@ -191,9 +191,8 @@ class EMLP(Module,metaclass=Named):
         #logging.info(f"Reps: {reps}")
         self.network = Sequential(
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            LieLinear(reps[-1],self.rep_out)
+            Linear(reps[-1],self.rep_out)
         )
-        #self.network = LieLinear(self.rep_in,self.rep_out)
     def __call__(self,x,training=True):
         return self.network(x)
 
@@ -287,7 +286,7 @@ class EMLPode(EMLP):
         logging.info(f"Reps: {reps}")
         self.network = Sequential(
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            LieLinear(reps[-1],self.rep_out)
+            Linear(reps[-1],self.rep_out)
         )
     def __call__(self,z,t):
         return self.network(z)

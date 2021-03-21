@@ -1,7 +1,7 @@
 Representation
 ==============
 
-.. automodule:: emlp.solver.representation
+.. automodule:: emlp.reps
     :members:
     :exclude-members: Rep
     

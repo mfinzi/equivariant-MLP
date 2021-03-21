@@ -10,8 +10,6 @@ import objax
 from emlp.reps.linear_operators import LazyShift,SwapMatrix,Rot90,LazyKron,LazyKronsum,LazyPerm,I
 from jax import jit,vmap
 import logging
-# this line needs to be here or imports break???
-#from emlp.reps.product_sum_reps import rep_permutation 
 
 def rel_err(A,B):
     return jnp.mean(jnp.abs(A-B))/(jnp.mean(jnp.abs(A)) + jnp.mean(jnp.abs(B))+1e-6)

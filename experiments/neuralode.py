@@ -1,6 +1,6 @@
 from emlp.nn import MLP,EMLP,MLPH,EMLPH,EMLPode,MLPode#,LinearBNSwish
 from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from datasets.hamiltonian_dynamics import IntegratedODETrainer,DoubleSpringPendulum,ode_trial
+from trainer.hamiltonian_dynamics import IntegratedODETrainer,DoubleSpringPendulum,ode_trial
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr, islice, FixedNumpySeed,FixedPytorchSeed
 from trainer.utils import LoaderTo
@@ -16,7 +16,7 @@ levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
                     'warn': logging.WARNING,'warning': logging.WARNING,
                     'info': logging.INFO,'debug': logging.DEBUG}
 
-def makeTrainer(*,dataset=DoubleSpringPendulum,network=MLPode,num_epochs=2000,ndata=5000,seed=2021,aug=False,
+def makeTrainer(*,dataset=DoubleSpringPendulum,network=EMLPode,num_epochs=2000,ndata=5000,seed=2021,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':500,'val':.1,'test':.1},
                 net_config={'num_layers':3,'ch':128,'group':O2eR3()},log_level='warn',
                 trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},},#'early_stop_metric':'val_MSE'},

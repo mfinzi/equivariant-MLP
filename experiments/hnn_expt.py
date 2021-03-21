@@ -3,7 +3,7 @@ from emlp.nn import MLP,EMLP,MLPH,EMLPH
 from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
 
 import copy
-from hamiltonian_dynamics import hnn_trial
+from trainer.hamiltonian_dynamics import hnn_trial
 from hnn import makeTrainer
 
 if __name__=="__main__":

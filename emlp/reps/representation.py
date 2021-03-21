@@ -1,7 +1,7 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
-from jax import jit, device_put
+from jax import jit, device_put,vmap
 import optax
 from sklearn.cluster import KMeans
 from tqdm.auto import tqdm
@@ -381,6 +381,7 @@ def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
 
 class ConvergenceError(Exception): pass
 
+@export
 def sparsify_basis(Q,lr=1e-2): #(n,r)
     """ Convenience function to attempt to sparsify a given basis by applying an orthogonal transformation
         W, Q' = QW where Q' has only 1s, 0s and -1s. Notably this method does not have the same convergence
@@ -475,5 +476,26 @@ def vis(repin,repout,cluster=True):
     plt.imshow(v.reshape(repout.size(),repin.size()))
     plt.axis('off')
 
+
+def scale_adjusted_rel_error(t1,t2,g):
+    error = jnp.sqrt(jnp.mean(jnp.abs(t1-t2)**2))
+    tscale = jnp.sqrt(jnp.mean(jnp.abs(t1)**2)) + jnp.sqrt(jnp.mean(jnp.abs(t2)**2))
+    gscale = jnp.sqrt(jnp.mean(jnp.abs(g-jnp.eye(g.shape[-1]))**2))
+    scale = jnp.maximum(tscale,gscale)
+    return error/jnp.maximum(scale,1e-7)
+
+@export
+def equivariance_error(W,repin,repout,G):
+    """ Computes the equivariance relative error rel_err(Wρ₁(g),ρ₂(g)W)
+        of the matrix W (dim(repout),dim(repin)) [or basis Q: (dim(repout)xdim(repin), r)]
+        according to the input and output representations and group G. """
+    W = W.reshape(repout.size(),repin.size(),-1).transpose((2,0,1))[None]
+
+    # Sample 5 group elements and verify the equivariance for each
+    gs = G.samples(5)
+    ring = vmap(repin.rho_dense)(gs)[:,None]
+    routg = vmap(repout.rho_dense)(gs)[:,None]
+    equiv_err = scale_adjusted_rel_error(W@ring,routg@W,gs)
+    return equiv_err
 
 import emlp.groups # Why is this necessary to avoid circular import?

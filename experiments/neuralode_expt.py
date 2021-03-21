@@ -3,7 +3,7 @@ from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
 from oil.tuning.study import Study
 
 import copy
-from datasets.hamiltonian_dynamics import ode_trial
+from trainer.hamiltonian_dynamics import ode_trial
 from neuralode import makeTrainer
 
 if __name__ == "__main__":

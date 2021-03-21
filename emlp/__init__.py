@@ -8,3 +8,6 @@
 #         __all__ += module.__all__
 #     except AttributeError: continue
 # # concatenate the __all__ from each of the submodules (expose to user)
+from .nn import *
+from .groups import *
+from .reps import *

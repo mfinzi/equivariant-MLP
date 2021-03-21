@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from jax.experimental.ode import odeint
 from torch.utils.data import Dataset
 from emlp.groups import SO2eR3,O2eR3,DkeR3,Trivial
-from emlp.reps import T
+from emlp.reps import T,Scalar
 from oil.utils.utils import Named
 from oil.tuning.configGenerator import flatten_dict
 import os
@@ -19,7 +19,7 @@ from jax import vmap
 import jax.numpy as jnp
 import numpy as np
 import objax
-from ..trainer.trainer import Regressor,Classifier
+from .classifier import Regressor,Classifier
 #from emlp_jax.model_trainer import RegressorPlus
 from functools import partial
 from itertools import islice

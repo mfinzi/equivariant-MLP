@@ -36,7 +36,7 @@ and representations an easy task, and one that does not require knowledge of ana
 .. toctree::
    :glob:
    :maxdepth: 1
-   :caption: Package Reference
+   :caption: API Reference
 
    package/emlp.solver.groups
    package/emlp.solver.representation

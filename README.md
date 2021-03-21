@@ -81,12 +81,12 @@ For the dynamical systems modeling experiments you can use the scripts
 For the dynamical system task, the Neural ODE and HNN models have special names. [`EMLPode`](https://emlp.readthedocs.io/en/latest/package/emlp.nn.html#emlp.nn.EMLPode) and [`MLPode`](https://emlp.readthedocs.io/en/latest/package/emlp.nn.html#emlp.nn.MLPode) for the Neural ODEs in `neuralode.py` and [`EMLPH`](https://emlp.readthedocs.io/en/latest/package/emlp.nn.html#emlp.nn.EMLPH) and [`MLPH`](https://emlp.readthedocs.io/en/latest/package/emlp.nn.html#emlp.nn.MLPH) for the HNNs in `hnn.py`. For example,
 
 ```
-python emlp/experiments/neuralode.py --network EMLPode --group="O2eR3()"
+python experiments/neuralode.py --network EMLPode --group="O2eR3()"
 ```
 or 
 
 ```
-python emlp/experiments/hnn.py --network EMLPH --group="DkeR3(6)"
+python experiments/hnn.py --network EMLPH --group="DkeR3(6)"
 ```
 
 <!-- # 

@@ -4,7 +4,7 @@ import copy
 from emlp.reps import *
 from emlp.groups import *
 from emlp.nn import uniform_rep
-from emlp.tests.equivariance_tests import parametrize,rel_error,scale_adjusted_rel_error
+from equivariance_tests import parametrize,rel_error,scale_adjusted_rel_error
 import unittest
 from jax import vmap
 import jax.numpy as jnp

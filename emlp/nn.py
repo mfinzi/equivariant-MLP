@@ -36,8 +36,8 @@ class Linear(nn.Linear):
         self.rep_W = rep_W = repout*repin.T
         
         rep_bias = repout
-        self.Pw = rep_W.symmetric_projector()
-        self.Pb = rep_bias.symmetric_projector()
+        self.Pw = rep_W.equivariant_projector()
+        self.Pb = rep_bias.equivariant_projector()
         logging.info(f"Linear W components:{rep_W.size()} rep:{rep_W}")
     def __call__(self, x): # (cin) -> (cout)
         logging.debug(f"linear in shape: {x.shape}")

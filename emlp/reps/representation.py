@@ -85,7 +85,7 @@ class Rep(object):
         return ConcatLazy(constraints) if constraints else lazify(jnp.zeros(1,n))
 
     solcache = {}
-    def symmetric_basis(self):  
+    def equivariant_basis(self):  
         """ Computes the equivariant solution basis for the given representation of size N.
             Canonicalizes problems and caches solutions for reuse. Output [Q (N,r)] """
         if self==Scalar: return jnp.ones((1,1))
@@ -104,9 +104,9 @@ class Rep(object):
             self.solcache[canon_rep]=result
         return self.solcache[canon_rep][invperm]
     
-    def symmetric_projector(self):
+    def equivariant_projector(self):
         """ Computes the (lazy) projection matrix P=QQᵀ that projects to the equivariant basis."""
-        Q = self.symmetric_basis()
+        Q = self.equivariant_basis()
         Q_lazy = lazify(Q)
         P = Q_lazy@Q_lazy.H
         return P
@@ -467,8 +467,8 @@ def vis(repin,repout,cluster=True):
         as an image. Only use cluster=True if you know Pv will only have
         r distinct values (true for G<S(n) but not true for many continuous groups)."""
     rep = (repin>>repout)
-    P = rep.symmetric_projector() # compute the equivariant basis
-    Q = rep.symmetric_basis()
+    P = rep.equivariant_projector() # compute the equivariant basis
+    Q = rep.equivariant_basis()
     v = np.random.randn(P.shape[1])  # sample random vector
     v = np.round(P@v,decimals=4)  # project onto equivariant subspace (and round)
     if cluster: # cluster nearby values for better color separation in plot

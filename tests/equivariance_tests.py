@@ -76,7 +76,7 @@ def test_sum(G):
     N=5
     rep = T(0,2)+3*(T(0,0)+T(1,0))+T(0,0)+T(1,1)+2*T(1,0)+T(0,2)+T(0,1)+3*T(0,2)+T(2,0)
     rep = rep(G)
-    P = rep.symmetric_projector()
+    P = rep.equivariant_projector()
     v = np.random.rand(rep.size())
     v = P@v
     gs = G.samples(N)
@@ -90,10 +90,10 @@ def test_prod(G):
     N=5
     rep = T(0,1)*T(0,0)*T(2,0)*T(1,0)*T(0,0)**3*T(0,1)**2
     rep = rep(G)
-    # P = rep.symmetric_projector()
+    # P = rep.equivariant_projector()
     # v = np.random.rand(rep.size())
     # v = P@v
-    Q = rep.symmetric_basis()
+    Q = rep.equivariant_basis()
     v = Q@np.random.rand(Q.shape[-1])
     gs = G.samples(N)
     gv = (vmap(rep.rho_dense)(gs)*v).sum(-1)
@@ -114,7 +114,7 @@ def test_high_rank_representations(G):
             #try:
             #logging.info(f"{p},{q},{T(p,q)}")
             rep = T(p,q)(G)
-            P = rep.symmetric_projector()
+            P = rep.equivariant_projector()
             v = np.random.rand(rep.size())
             v = P@v
             g = vmap(rep.rho_dense)(G.samples(N))
@@ -142,7 +142,7 @@ def test_equivariant_matrix(G,repin,repout):
     repout = repout(G)
     #repW = repout*repin.T
     repW = repin>>repout
-    P = repW.symmetric_projector()
+    P = repW.equivariant_projector()
     W = np.random.rand(repout.size(),repin.size())
     W = (P@W.reshape(-1)).reshape(*W.shape)
     
@@ -191,7 +191,7 @@ def test_large_representations(G):
     ch = 256
     rep =repin=repout= uniform_rep(ch,G)
     repW = rep>>rep
-    P = repW.symmetric_projector()
+    P = repW.equivariant_projector()
     W = np.random.rand(repout.size(),repin.size())
     W = (P@W.reshape(-1)).reshape(*W.shape)
     

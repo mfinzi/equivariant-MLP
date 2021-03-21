@@ -15,7 +15,7 @@ import logging
 def test_symmetric_mixed_tensor(G1,G2):
     N=5
     rep = T(2)(G1)*T(1)(G2)
-    P = rep.symmetric_projector()
+    P = rep.equivariant_projector()
     v = np.random.rand(rep.size())
     v = P@v
     samples = {G1:G1.samples(N),G2:G2.samples(N)}
@@ -28,7 +28,7 @@ def test_symmetric_mixed_tensor(G1,G2):
 def test_symmetric_mixed_tensor_sum(G1,G2):
     N=5
     rep = T(2)(G1)*T(1)(G2) + 2*T(0)(G1)*T(2)(G2)+T(1)(G1) +T(1)(G2)
-    P = rep.symmetric_projector()
+    P = rep.equivariant_projector()
     v = np.random.rand(rep.size())
     v = P@v
     samples = {G1:G1.samples(N),G2:G2.samples(N)}
@@ -43,7 +43,7 @@ def test_symmetric_mixed_products(G1,G2):
     rep1 = (T(0)+2*T(1)+T(2))(G1)
     rep2 = (T(0)+T(1))(G2)
     rep = rep2*rep1.T
-    P = rep.symmetric_projector()
+    P = rep.equivariant_projector()
     v = np.random.rand(rep.size())
     v = P@v
     W = v.reshape((rep2.size(),rep1.size()))
@@ -68,7 +68,7 @@ def test_equivariant_matrix(G1,G2):
     repin = T(2)(G2) + 3*T(0)(G1) + T(1)(G2)+2*T(2)(G1)*T(1)(G2)
     repout = (T(1)(G1) + T(2)(G1)*T(0)(G2) + T(1)(G1)*T(1)(G2) + T(0)(G1)+T(2)(G1)*T(1)(G2))
     repW = repout*repin.T
-    P = repW.symmetric_projector()
+    P = repW.equivariant_projector()
     W = np.random.rand(repout.size(),repin.size())
     W = (P@W.reshape(-1)).reshape(*W.shape)
     

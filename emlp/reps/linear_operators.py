@@ -1,10 +1,11 @@
-from .linear_operator_jax import LinearOperator,Lazy
+from .linear_operator_base import LinearOperator,Lazy
 import jax.numpy as jnp
 import numpy as np
 from jax import jit
 import jax
 from functools import reduce
-from .utils import prod as product
+
+product = lambda c: reduce(lambda a,b:a*b,c)
 
 def lazify(x):
     if isinstance(x,LinearOperator): return x

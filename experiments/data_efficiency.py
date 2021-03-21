@@ -1,14 +1,13 @@
-from emlp.models.mlp import MLP,EMLP#,LinearBNSwish
-from emlp.models.datasets import O5Synthetic, ParticleInteraction, Inertia
-from emlp.solver.representation import T,Scalar
-from emlp.solver.groups import SO, O, Trivial, O13, SO13, SO13p
+from emlp.nn import MLP,EMLP#,LinearBNSwish
+from datasets import O5Synthetic, ParticleInteraction, Inertia
+from emlp.reps import T,Scalar
+from emlp.groups import SO, O, Trivial, O13, SO13, SO13p
 from oil.tuning.study import train_trial, Study
 
 from oil.tuning.args import argupdated_config
 from emlp.experiments.train_basic import makeTrainer
-import emlp.models
 import copy
-
+import datasets.regression
 
 if __name__=="__main__":
     Trial = train_trial(makeTrainer)
@@ -23,7 +22,7 @@ if __name__=="__main__":
         'num_epochs':(lambda cfg: min(int(30*30000/cfg['split']['train']),1000)),
         'split':{'train':[30,100,300,1000,3000,10000,30000],'test':5000,'val':1000},
     })
-    config_spec = argupdated_config(config_spec,namespace=emlp.models.datasets)
+    config_spec = argupdated_config(config_spec,namespace=datasets.regression)
     name = f"{name}_{config_spec['dataset']}"
     thestudy = Study(Trial,{},study_name=name,base_log_dir=config_spec['trainer_config'].get('log_dir',None))
     thestudy.run(num_trials=-3,new_config_spec=config_spec,ordered=True)

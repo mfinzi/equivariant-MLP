@@ -25,6 +25,10 @@ project = 'EMLP'
 copyright = '2021, Marc Finzi'
 author = 'Marc Finzi'
 
+# import emlp
+# release = emlp.__version__
+
+
 sys.path.append(os.path.abspath('sphinxext'))
 extensions = [
     'nbsphinx',
@@ -37,6 +41,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'matplotlib.sphinxext.plot_directive',
     'sphinx_autodoc_typehints',
+    'sphinx.ext.autosectionlabel',
 ]
 autosummary_generate = True
 autodoc_default_options = {'autosummary': True}

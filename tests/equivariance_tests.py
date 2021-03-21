@@ -1,9 +1,9 @@
 
 import numpy as np#
 import copy
-from emlp.solver.representation import *
-from emlp.solver.groups import *
-from emlp.models.mlp import uniform_rep
+from emlp.reps import *
+from emlp.groups import *
+from emlp.nn import uniform_rep
 import pytest#import unittest
 from jax import vmap
 import jax.numpy as jnp

@@ -3,9 +3,9 @@ import jax.numpy as jnp
 import objax.nn as nn
 import objax.functional as F
 import numpy as np
-from emlp.solver.representation import T,Rep,Scalar
-from emlp.solver.representation import bilinear_weights
-from emlp.models.batchnorm import TensorBN,gate_indices
+from emlp.reps import T,Rep,Scalar
+from emlp.reps import bilinear_weights
+from emlp.reps.product_sum_reps import SumRep
 import collections
 from oil.utils.utils import Named,export
 import scipy as sp
@@ -19,9 +19,7 @@ import objax
 from objax.nn.init import orthogonal
 from scipy.special import binom
 from jax import jit,vmap
-from emlp.models.hamiltonian_dynamics import hamiltonian_dynamics
-from jax.experimental.ode import odeint
-from functools import partial
+from functools import lru_cache as cache
 
 def Sequential(*args):
     """ Wrapped to mimic pytorch syntax"""
@@ -324,3 +322,21 @@ class EMLPH(EMLP):
         return y.sum()
     def __call__(self,x):
         return self.H(x)
+
+
+@cache(maxsize=None)
+def gate_indices(sumrep): #TODO: add support for mixed_tensors
+    """ Indices for scalars, and also additional scalar gates
+        added by gated(sumrep)"""
+    assert isinstance(sumrep,SumRep), f"unexpected type for gate indices {type(sumrep)}"
+    channels = sumrep.size()
+    perm = sumrep.perm
+    indices = np.arange(channels)
+    num_nonscalars = 0
+    i=0
+    for rep in sumrep:
+        if rep!=Scalar and not rep.is_regular:
+            indices[perm[i:i+rep.size()]] = channels+num_nonscalars
+            num_nonscalars+=1
+        i+=rep.size()
+    return indices

@@ -3,10 +3,9 @@ import jax
 from jax import jit
 import collections,itertools
 from functools import lru_cache as cache
-from .utils import prod as product
 from .representation import Rep
-from .linear_operator_jax import LinearOperator
-from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify
+from .linear_operator_base import LinearOperator
+from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify,product
 from functools import reduce
 from collections import defaultdict
 

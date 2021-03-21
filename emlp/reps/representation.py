@@ -3,22 +3,21 @@ import jax
 import jax.numpy as jnp
 from jax import jit, device_put
 import optax
-from .utils import ltqdm, prod
 from sklearn.cluster import KMeans
 from tqdm.auto import tqdm
-from .linear_operator_jax import LinearOperator, Lazy
+from .linear_operator_base import LinearOperator, Lazy
 from .linear_operators import ConcatLazy, I, lazify, densify, LazyJVP
 import logging
 import matplotlib.pyplot as plt
 from functools import reduce
-import emlp.solver
-from .utils import export
+from oil.utils.utils import export
+import emlp.reps
 
 #TODO: add rep,v = flatten({'Scalar':..., 'Vector':...,}), to_dict(rep,vector) returns {'Scalar':..., 'Vector':...,}
 #TODO and simpler rep = flatten({Scalar:2,Vector:10,...}),
 # Do we even want + operator to implement non canonical orderings?
 
-__all__ = ["V", "Scalar"]
+__all__ = ["V","Vector", "Scalar"]
 
 @export
 class Rep(object):
@@ -97,7 +96,7 @@ class Rep(object):
             logging.info(f"Solving basis for {self}"+(f", for G={self.G}" if hasattr(self,"G") else ""))
             #if isinstance(group,Trivial): return np.eye(size(rank,group.d))
             C_lazy = canon_rep.constraint_matrix()
-            if prod(C_lazy.shape)>3e7: #Too large to use SVD
+            if C_lazy.shape[0]*C_lazy.shape[1]>3e7: #Too large to use SVD
                 result = krylov_constraint_solve(C_lazy)
             else:
                 C_dense = C_lazy.to_dense()
@@ -118,9 +117,9 @@ class Rep(object):
         if isinstance(other,int):
             if other==0: return self
         elif all(rep.concrete for rep in (self,other) if hasattr(rep,'concrete')):
-            return emlp.solver.product_sum_reps.SumRep(self,other)
+            return emlp.reps.product_sum_reps.SumRep(self,other)
         else:
-            return emlp.solver.product_sum_reps.DeferredSumRep(self,other)
+            return emlp.reps.product_sum_reps.DeferredSumRep(self,other)
     def __radd__(self,other):
         if isinstance(other,int): 
             if other==0: return self
@@ -132,28 +131,28 @@ class Rep(object):
             if other==1 or other==Scalar: return self
             if other==0: return 0
             if (not hasattr(self,'concrete')) or self.concrete:
-                return emlp.solver.product_sum_reps.SumRep(*(other*[self]))
+                return emlp.reps.product_sum_reps.SumRep(*(other*[self]))
             else:
-                return emlp.solver.product_sum_reps.DeferredSumRep(*(other*[self]))
+                return emlp.reps.product_sum_reps.DeferredSumRep(*(other*[self]))
             return sum(other*[self])
         elif all(rep.concrete for rep in (self,other) if hasattr(rep,'concrete')):
-            if any(isinstance(rep,emlp.solver.product_sum_reps.SumRep) for rep in [self,other]):
-                return emlp.solver.product_sum_reps.distribute_product([self,other])
+            if any(isinstance(rep,emlp.reps.product_sum_reps.SumRep) for rep in [self,other]):
+                return emlp.reps.product_sum_reps.distribute_product([self,other])
             elif (hasattr(self,'G') and hasattr(other,'G') and self.G!=other.G) or not (hasattr(self,'G') and hasattr(other,'G')):
-                return emlp.solver.product_sum_reps.DirectProduct(self,other)
+                return emlp.reps.product_sum_reps.DirectProduct(self,other)
             else: 
-                return emlp.solver.product_sum_reps.ProductRep(self,other)
+                return emlp.reps.product_sum_reps.ProductRep(self,other)
         else:
-            return emlp.solver.product_sum_reps.DeferredProductRep(self,other)
+            return emlp.reps.product_sum_reps.DeferredProductRep(self,other)
             
     def __rmul__(self,other):
         if isinstance(other,(int,ScalarRep)): 
             if other==1 or other==Scalar: return self
             if other==0: return 0
             if (not hasattr(self,'concrete')) or self.concrete:
-                return emlp.solver.product_sum_reps.SumRep(*(other*[self]))
+                return emlp.reps.product_sum_reps.SumRep(*(other*[self]))
             else:
-                return emlp.solver.product_sum_reps.DeferredSumRep(*(other*[self]))
+                return emlp.reps.product_sum_reps.DeferredSumRep(*(other*[self]))
         else: return NotImplemented
 
     def __pow__(self,other):
@@ -399,7 +398,7 @@ def sparsify_basis(Q,lr=1e-2): #(n,r)
 
     loss_and_grad = jit(jax.value_and_grad(loss))
 
-    for i in ltqdm(range(3000),desc=f'sparsifying basis',level='info'):
+    for i in tqdm(range(3000),desc=f'sparsifying basis'):
         lossval, grad = loss_and_grad(W)
         updates, opt_state = opt_update(grad, opt_state, W)
         W = optax.apply_updates(W, updates)
@@ -417,6 +416,7 @@ def sparsify_basis(Q,lr=1e-2): #(n,r)
     return Q
 
 #@partial(jit,static_argnums=(0,1))
+@export
 def bilinear_weights(out_rep,in_rep):
     #TODO: replace lazy_projection function with LazyDirectSum LinearOperator
     W_rep,W_perm = (in_rep>>out_rep).canonicalize()
@@ -455,10 +455,10 @@ def bilinear_weights(out_rep,in_rep):
         return Ws[...,inv_perm].reshape(*bshape,*mat_shape) # reorder to original rank ordering
     return active_dims,lazy_projection
         
-@jit
-def mul_part(bparams,x,bids):
-    b = prod(x.shape[:-1])
-    return (bparams@x[...,bids].T.reshape(bparams.shape[-1],-1)).reshape(-1,b).T
+# @jit
+# def mul_part(bparams,x,bids):
+#     b = prod(x.shape[:-1])
+#     return (bparams@x[...,bids].T.reshape(bparams.shape[-1],-1)).reshape(-1,b).T
 
 @export
 def vis(repin,repout,cluster=True):
@@ -476,4 +476,4 @@ def vis(repin,repout,cluster=True):
     plt.axis('off')
 
 
-import emlp.solver.groups # Why is this necessary to avoid circular import?
+import emlp.groups # Why is this necessary to avoid circular import?

@@ -1,25 +1,28 @@
-from emlp.models.mlp import MLP, EMLP, Standardize
-from emlp.models.model_trainer import RegressorPlus
+from emlp.nn import MLP, EMLP, Standardize
+from trainer.model_trainer import RegressorPlus
 from torch.utils.data import DataLoader
 from oil.utils.utils import cosLr, FixedNumpySeed, FixedPytorchSeed
-from emlp.slax.utils import LoaderTo
+from trainer.utils import LoaderTo
 from oil.tuning.study import train_trial
 from oil.datasetup.datasets import split_dataset
 from oil.tuning.args import argupdated_config
 import logging
-import emlp.models
-import emlp.solver
+import emlp.nn
+import emlp.reps
+import emlp.groups
 import objax
+import datasets.regression
+from datasets.regression import Inertia,O5Synthetic,ParticleInteraction
 
 log_levels = {'critical': logging.CRITICAL,'error': logging.ERROR,
                         'warn': logging.WARNING,'warning': logging.WARNING,
                         'info': logging.INFO,'debug': logging.DEBUG}
 
-def makeTrainer(*,dataset=None,network=EMLP,num_epochs=300,ndata=1000+2000,seed=2021,aug=False,
+def makeTrainer(*,dataset=Inertia,network=EMLP,num_epochs=300,ndata=1000+2000,seed=2021,aug=False,
                 bs=500,lr=3e-3,device='cuda',split={'train':-1,'val':1000,'test':1000},
                 net_config={'num_layers':3,'ch':384,'group':None},log_level='info',
-                trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},'early_stop_metric':'val_MSE'},
-                save=False,):
+                trainer_config={'log_dir':None,'log_args':{'minPeriod':.02,'timeFrac':.75},
+                'early_stop_metric':'val_MSE'},save=False,):
     
     logging.getLogger().setLevel(log_levels[log_level])
     # Prep the datasets splits, model, and dataloaders
@@ -39,6 +42,6 @@ def makeTrainer(*,dataset=None,network=EMLP,num_epochs=300,ndata=1000+2000,seed=
 
 if __name__ == "__main__":
     cfg = argupdated_config(makeTrainer.__kwdefaults__,
-                    namespace=(emlp.solver.groups,emlp.models.datasets,emlp.models.mlp))
+                    namespace=(emlp.groups,datasets.regression,emlp.nn))
     trainer = makeTrainer(**cfg)
     trainer.train(cfg['num_epochs'])

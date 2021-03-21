@@ -1,4 +1,4 @@
-Representation
+Representations
 ==============
 
 .. automodule:: emlp.reps

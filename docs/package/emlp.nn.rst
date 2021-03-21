@@ -1,4 +1,4 @@
-EMLP
+Layers and Models
 ====
 
 .. automodule:: emlp.nn

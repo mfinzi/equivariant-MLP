@@ -16,3 +16,9 @@ Remember to align the itemized text with the first line of an item within a list
   * Fixed edge case of {func}`lazy_direct_matmat` when concatenating matrices of size 0 
     affecting {func}`emlp.solver.representation.Rep.symmetric_basis` but not 
     {func}`emlp.solver.representation.Rep.symmetric_projector`
+* API Changes:
+  * `emlp.solver.representation` -> `emlp.reps`
+  * `emlp.solver.groups` -> `emlp.groups`
+  * `emlp.models.mlp` -> `emlp.nn`
+  * Tests and experiments separated from package and api
+

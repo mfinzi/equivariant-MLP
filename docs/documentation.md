@@ -15,13 +15,10 @@ sphinx-build -b html -D jupyter_execute_notebooks=off docs docs/build/html
 ```
 You can then see the generated documentation in `docs/build/html/index.html`.
 
-### Update notebooks
-We follow the approach of [Jax](https://jax.readthedocs.io/) in how the documentation is setup and how to contribute.
 
 ### Editing ipynb
 
-For making large changes that substantially modify code and outputs, it is easiest to
-edit the notebooks in Jupyter or in Colab. To edit notebooks in the Colab interface,
+To edit notebooks in the Colab interface,
 open <http://colab.research.google.com> and `Upload` from your local repo.
 Update it as needed, `Run all cells` then `Download ipynb` (for editing and running in Colab you will need to add 
 `!pip install git+https://github.com/mfinzi/equivariant-MLP.git`).

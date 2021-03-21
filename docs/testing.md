@@ -6,11 +6,11 @@ We use pytest and some of the tests are automatically generated. Because there i
 you can run a subset using pytests built in features to filter by the matches on the name of the testcase using the `-k` argument.
 
 For example to run `test_prod` with all the groups you can run
-```pytest emlp/tests/equivariance_tests.py -k "test_prod"```
+```pytest tests/equivariance_tests.py -k "test_prod"```
 
 To run the test case for a specific group could use the filter `-k "test_prod and SO3"` and to run all tests with that group
 you could run
-```pytest emlp/tests/equivariance_tests.py -k "SO3"```
+```pytest tests/equivariance_tests.py -k "SO3"```
 
 Due to pytest parsing limitations, all parenthesis in the test names are stripped.
 To list all available tests, (or those that match certain `-k` arguments) use `--co` (for collect only).

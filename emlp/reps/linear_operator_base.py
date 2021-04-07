@@ -36,9 +36,6 @@ import warnings
 
 import jax.numpy as np
 
-from scipy.sparse import isspmatrix
-from scipy.sparse.sputils import isshape, isintlike, asmatrix, is_pydata_spmatrix
-
 __all__ = ['LinearOperator', 'aslinearoperator']
 
 
@@ -638,7 +635,7 @@ class _PowerLinearOperator(LinearOperator):
             raise ValueError('LinearOperator expected as A')
         if A.shape[0] != A.shape[1]:
             raise ValueError('square LinearOperator expected, got %r' % A)
-        if not isintlike(p) or p < 0:
+        if not isinstance(p,int) or p < 0:
             raise ValueError('non-negative integer expected as p')
 
         super(_PowerLinearOperator, self).__init__(_get_dtype([A]), A.shape)
@@ -785,3 +782,24 @@ class Lazy(LinearOperator):
 
 #         else:
 #             raise TypeError('type not understood')
+
+
+def isintlike(x):
+    return isinstance(x,int)
+
+
+def isshape(x, nonneg=False):
+    """Is x a valid 2-tuple of dimensions?
+    If nonneg, also checks that the dimensions are non-negative.
+    """
+    try:
+        # Assume it's a tuple of matrix dimensions (M, N)
+        (M, N) = x
+    except Exception:
+        return False
+    else:
+        if isintlike(M) and isintlike(N):
+            if np.ndim(M) == 0 and np.ndim(N) == 0:
+                if not nonneg or (M >= 0 and N >= 0):
+                    return True
+        return False

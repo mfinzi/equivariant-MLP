@@ -48,7 +48,7 @@ Checkout our [documentation](https://emlp.readthedocs.io/en/latest/) to see how 
 
 # Installation instructions
 
-To install as a package, run `pip install git+https://github.com/mfinzi/equivariant-MLP.git`.
+To install as a package, run `pip install emlp`.
 
 To run the scripts you will instead need to clone the repo and install it locally which you can do with
 ```bash

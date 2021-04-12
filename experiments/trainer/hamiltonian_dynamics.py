@@ -56,7 +56,7 @@ def BOdeFlow(dynamics,z0,T,tol=1e-4):
     return odeint(dynamics, z0, T, rtol=tol).transpose((1,0,2))
 #BHamiltonianFlow = jit(vmap(HamiltonianFlow,(None,0,None)),static_argnums=(0,))
 
-class HamiltonianDataset(Dataset,metaclass=Named):
+class HamiltonianDataset(Dataset):
 
     def __init__(self,n_systems=100,chunk_len=5,dt=0.2,integration_time=30,regen=False):
         super().__init__()

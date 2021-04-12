@@ -13,7 +13,7 @@ from jax import vmap,jit
 from objax import Module
 
 @export
-class Inertia(Dataset,metaclass=Named):
+class Inertia(Dataset):
     def __init__(self,N=1024,k=5):
         super().__init__()
         self.dim = (1+3)*k
@@ -51,7 +51,7 @@ class Inertia(Dataset,metaclass=Named):
         return GroupAugmentation(model,self.rep_in,self.rep_out,self.symmetry)
 
 @export
-class O5Synthetic(Dataset,metaclass=Named):
+class O5Synthetic(Dataset):
     def __init__(self,N=1024):
         super().__init__()
         d=5
@@ -79,7 +79,7 @@ class O5Synthetic(Dataset,metaclass=Named):
         return GroupAugmentation(model,self.rep_in,self.rep_out,self.symmetry)
 
 @export
-class ParticleInteraction(Dataset,metaclass=Named):
+class ParticleInteraction(Dataset):
     """ Electron muon e^4 interaction"""
     def __init__(self,N=1024):
         super().__init__()
@@ -128,7 +128,7 @@ class GroupAugmentation(Module):
             return self.model(x,False)
 
 @export
-class InvertedCube(Dataset,metaclass=Named):
+class InvertedCube(Dataset):
     def __init__(self,train=True):
         pass #TODO: finish implementing this simple dataset
         solved_state = np.eye(6)
@@ -186,7 +186,7 @@ def LBface_swap(state):
 
 
 @export
-class BrokenRubiksCube(Dataset,metaclass=Named):
+class BrokenRubiksCube(Dataset):
     """ Binary classification problem of predicting whether a Rubik's cube configuration
         is solvable or 'broken' and not able to be solved by transformations from the group
         e.g. by removing and twisting a corner before replacing.
@@ -235,7 +235,7 @@ class BrokenRubiksCube(Dataset,metaclass=Named):
         return self.X.shape[0]
 
 # @export
-# class BrokenRubiksCube2x2(Dataset,metaclass=Named):
+# class BrokenRubiksCube2x2(Dataset):
 #     """ Binary classification problem of predicting whether a Rubik's cube configuration
 #         is solvable or 'broken' and not able to be solved by transformations from the group
 #         e.g. by removing and twisting a corner before replacing.

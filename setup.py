@@ -1,7 +1,7 @@
 from setuptools import setup,find_packages
 import sys, os
 
-setup(name="Equivariant-MLP",
+setup(name="emlp",
       description="A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups",
       version='0.8',
       author='Marc Finzi',

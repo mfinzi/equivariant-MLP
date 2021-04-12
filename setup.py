@@ -5,7 +5,7 @@ README_FILE = 'README.md'
 
 setup(name="emlp",
       description="A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups",
-      version='0.8',
+      version='0.8.1',
       author='Marc Finzi',
       author_email='maf820@nyu.edu',
       license='MIT',

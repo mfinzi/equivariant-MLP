@@ -89,7 +89,9 @@ or
 python experiments/hnn.py --network EMLPH --group="DkeR3(6)"
 ```
 
-![v](https://user-images.githubusercontent.com/12687085/114929977-7bdaeb80-9e02-11eb-88e9-3e14262d5392.mp4)
+<video width="320" height="240" controls>
+  <source src="https://user-images.githubusercontent.com/12687085/114929977-7bdaeb80-9e02-11eb-88e9-3e14262d5392.mp4" type="video/mp4">
+</video>
 
 <!-- # 
 <p align="center">

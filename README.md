@@ -89,6 +89,8 @@ or
 python experiments/hnn.py --network EMLPH --group="DkeR3(6)"
 ```
 
+![](https://user-images.githubusercontent.com/12687085/114929977-7bdaeb80-9e02-11eb-88e9-3e14262d5392.mp4)
+
 <!-- # 
 <p align="center">
   <img src="https://user-images.githubusercontent.com/12687085/94081992-e75d5d00-fdcd-11ea-9df0-576af6909944.PNG" width=1000>

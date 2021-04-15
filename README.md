@@ -90,7 +90,8 @@ python experiments/hnn.py --network EMLPH --group="DkeR3(6)"
 ```
 
 These models are trained to fit a double spring dynamical system. 30s rollouts of the dataset, along with rollout error on these trajectories, and conservation of angular momentum are shown below.
-<img src="https://user-images.githubusercontent.com/12687085/114937183-759d3d00-9e0b-11eb-9310-bbfc606e6bda.gif" width="270"/> <img src="https://user-images.githubusercontent.com/12687085/114937167-703ff280-9e0b-11eb-8421-d8408b31908a.PNG" width="270"/>  <img src="https://user-images.githubusercontent.com/12687085/114937171-71711f80-9e0b-11eb-885e-a541ae1d28cc.PNG" width="270"/> 
+
+<img src="https://user-images.githubusercontent.com/12687085/114937183-759d3d00-9e0b-11eb-9310-bbfc606e6bda.gif" width="270"/> <img src="https://user-images.githubusercontent.com/12687085/114937167-703ff280-9e0b-11eb-8421-d8408b31908a.PNG" width="270"/> <img src="https://user-images.githubusercontent.com/12687085/114937171-71711f80-9e0b-11eb-885e-a541ae1d28cc.PNG" width="270"/> 
 
 <!-- # 
 <p align="center">

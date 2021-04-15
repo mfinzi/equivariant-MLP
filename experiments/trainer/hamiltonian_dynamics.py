@@ -111,7 +111,7 @@ class HamiltonianDataset(Dataset):
         raise NotImplementedError
     def animate(self, zt=None):
         if zt is None:
-            zt = np.asarray(self.integrate(self.sample_initial_conditions(10),self.T_long))
+            zt = np.asarray(self.integrate(self.sample_initial_conditions(10)[0],self.T_long))
         # bs, T, 2nd
         if len(zt.shape) == 3:
             j = np.random.randint(zt.shape[0])

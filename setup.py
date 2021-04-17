@@ -1,11 +1,16 @@
 from setuptools import setup,find_packages
-import sys, os
+import sys, os, re
 
 README_FILE = 'README.md'
 
-setup(name="emlp",
+def get_property(prop, project):
+    result = re.search(r'{}\s*=\s*[\'"]([^\'"]*)[\'"]'.format(prop), open(project + '/__init__.py').read())
+    return result.group(1)
+
+project_name = "emlp"
+setup(name=project_name,
       description="A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups",
-      version='0.8.1',
+      version= get_property('__version__',project_name),
       author='Marc Finzi',
       author_email='maf820@nyu.edu',
       license='MIT',

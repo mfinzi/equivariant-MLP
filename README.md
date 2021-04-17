@@ -3,7 +3,7 @@
 </div>
 
 # A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
-[![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | **[Paper]()**| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/docs/notebooks/colabs/all.ipynb) | ![PyPI version](https://img.shields.io/pypi/v/emlp)
+[![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | **[Paper]()** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/docs/notebooks/colabs/all.ipynb) | [![PyPI version](https://img.shields.io/pypi/v/emlp)](https://pypi.org/project/emlp/)
 
 
 *EMLP* is a jax library for the automated construction of equivariant layers in deep learning. You can read the documentation [here](https://emlp.readthedocs.io/en/latest/).
@@ -46,9 +46,13 @@ Checkout our [documentation](https://emlp.readthedocs.io/en/latest/) to see how 
 
 # Installation instructions
 
-To install as a package, run `pip install emlp`.
+To install as a package, run 
+```bash
+pip install emlp
+```
 
 To run the scripts you will instead need to clone the repo and install it locally which you can do with
+
 ```bash
 git clone https://github.com/mfinzi/equivariant-MLP.git
 cd equivariant-MLP

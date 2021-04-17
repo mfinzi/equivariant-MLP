@@ -8,6 +8,8 @@
 #         __all__ += module.__all__
 #     except AttributeError: continue
 # # concatenate the __all__ from each of the submodules (expose to user)
+
+__version__ = '0.8.1'
 from .nn import *
 from .groups import *
 from .reps import *

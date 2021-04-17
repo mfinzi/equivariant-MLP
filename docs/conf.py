@@ -16,8 +16,17 @@
 
 import os
 import sys
-
+import re
 sys.path.insert(0, os.path.abspath('..'))
+
+RE_VERSION = re.compile(r'^__version__ \= \'(\d+\.\d+\.\d+(?:\w+\d+)?)\'$', re.MULTILINE)
+PROJECTDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECTDIR)
+def get_release():
+    with open(os.path.join(PROJECTDIR, 'emlp', '__init__.py')) as f:
+        version = re.search(RE_VERSION, f.read())
+    assert version is not None, "can't parse __version__ from __init__.py"
+    return version.group(1)
 
 # -- Project information -----------------------------------------------------
 
@@ -26,7 +35,7 @@ copyright = '2021, Marc Finzi'
 author = 'Marc Finzi'
 
 # import emlp
-# release = emlp.__version__
+release = get_release()
 
 
 sys.path.append(os.path.abspath('sphinxext'))
@@ -113,6 +122,13 @@ napolean_use_rtype = False
 # a list of builtin themes.
 #
 html_theme = 'sphinx_rtd_theme'
+
+# html_theme_options = {
+#     'logo_only': False,
+#     'display_version': True,
+#     'prev_next_buttons_location': 'bottom',
+#     'style_external_links': False,
+# }
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the

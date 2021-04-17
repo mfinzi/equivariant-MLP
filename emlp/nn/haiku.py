@@ -135,20 +135,3 @@ def MLP(rep_in,rep_out,group,ch=384,num_layers=3):
         hk.Linear(cout)
     )
     return mlp
-
-@cache(maxsize=None)
-def gate_indices(sumrep): #TODO: add support for mixed_tensors
-    """ Indices for scalars, and also additional scalar gates
-        added by gated(sumrep)"""
-    assert isinstance(sumrep,SumRep), f"unexpected type for gate indices {type(sumrep)}"
-    channels = sumrep.size()
-    perm = sumrep.perm
-    indices = np.arange(channels)
-    num_nonscalars = 0
-    i=0
-    for rep in sumrep:
-        if rep!=Scalar and not rep.is_regular:
-            indices[perm[i:i+rep.size()]] = channels+num_nonscalars
-            num_nonscalars+=1
-        i+=rep.size()
-    return indices

@@ -1,16 +1,12 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-from emlp.reps import T,Rep,Scalar
+from emlp.reps import Rep
 from emlp.reps import bilinear_weights
-from emlp.reps.product_sum_reps import SumRep
-import collections
-from oil.utils.utils import Named,export
+from oil.utils.utils import export
 import logging
 import haiku as hk
-from nn_objax import gated,gate_indices,uniform_rep
-from jax import jit,vmap
-from functools import lru_cache as cache
+from emlp.nn import gated,gate_indices,uniform_rep
 
 def Sequential(*args):
     """ Wrapped to mimic pytorch syntax"""
@@ -18,14 +14,12 @@ def Sequential(*args):
 
 @export
 def Linear(repin,repout):
-    rep_W = repout<<repin
+    rep_W = repout << repin
     logging.info(f"Linear W components:{rep_W.size()} rep:{rep_W}")
     rep_bias = repout
     Pw = rep_W.equivariant_projector()
     Pb = rep_bias.equivariant_projector()
     return _hkLinear(Pw,Pb,(repout.size(),repin.size()))
-
-
 
 class _hkLinear(hk.Module):
     """ Basic equivariant Linear layer from repin to repout."""
@@ -35,7 +29,7 @@ class _hkLinear(hk.Module):
         self.Pb = Pb
         self.shape=shape
         
-    def __call__(self, x): # (cin) -> (cout)
+    def __call__(self, x):  # (cin) -> (cout)
         i,j = self.shape
         w_init = hk.initializers.TruncatedNormal(1. / np.sqrt(j))
         w = hk.get_parameter("w", shape=self.shape, dtype=x.dtype, init=w_init)
@@ -66,7 +60,7 @@ class _hkBiLinear(hk.Module):
         return .1*(W@x[...,None])[...,0]
 
 @export
-class GatedNonlinearity(hk.Module): #TODO: add support for mixed tensors and non sumreps
+class GatedNonlinearity(hk.Module):  #  TODO: add support for mixed tensors and non sumreps
     """ Gated nonlinearity. Requires input to have the additional gate scalars
         for every non regular and non scalar rep. Applies swish to regular and
         scalar reps. (Right now assumes rep is a SumRep)"""
@@ -83,9 +77,9 @@ class GatedNonlinearity(hk.Module): #TODO: add support for mixed tensors and non
 def EMLPBlock(repin,repout):
     """ Basic building block of EMLP consisting of G-Linear, biLinear,
         and gated nonlinearity. """
-    linear = Linear(rep_in,gated(rep_out))
-    bilinear = BiLinear(gated(rep_out),gated(rep_out))
-    nonlinearity = GatedNonlinearity(rep_out)
+    linear = Linear(repin,gated(repout))
+    bilinear = BiLinear(gated(repout),gated(repout))
+    nonlinearity = GatedNonlinearity(repout)
     def block(x):
         lin = linear(x)
         preact =bilinear(lin)+lin

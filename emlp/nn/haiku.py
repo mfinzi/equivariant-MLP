@@ -10,7 +10,7 @@ from emlp.nn import gated,gate_indices,uniform_rep
 
 def Sequential(*args):
     """ Wrapped to mimic pytorch syntax"""
-    return hk.Sequential(args)
+    return lambda x: hk.Sequential(args)(x)
 
 @export
 def Linear(repin,repout):
@@ -19,7 +19,7 @@ def Linear(repin,repout):
     rep_bias = repout
     Pw = rep_W.equivariant_projector()
     Pb = rep_bias.equivariant_projector()
-    return _hkLinear(Pw,Pb,(repout.size(),repin.size()))
+    return lambda x: _hkLinear(Pw,Pb,(repout.size(),repin.size()))(x)
 
 class _hkLinear(hk.Module):
     """ Basic equivariant Linear layer from repin to repout."""
@@ -43,7 +43,7 @@ def BiLinear(repin,repout):
     """ Cheap bilinear layer (adds parameters for each part of the input which can be
         interpreted as a linear map from a part of the input to the output representation)."""
     Wdim, weight_proj = bilinear_weights(repout,repin)
-    return _hkBiLinear(weight_proj,Wdim)
+    return lambda x: _hkBiLinear(weight_proj,Wdim)(x)
 
 
 class _hkBiLinear(hk.Module):
@@ -60,12 +60,12 @@ class _hkBiLinear(hk.Module):
         return .1*(W@x[...,None])[...,0]
 
 @export
-class GatedNonlinearity(hk.Module):  # TODO: add support for mixed tensors and non sumreps
+class GatedNonlinearity(object):  # TODO: add support for mixed tensors and non sumreps
     """ Gated nonlinearity. Requires input to have the additional gate scalars
         for every non regular and non scalar rep. Applies swish to regular and
         scalar reps. (Right now assumes rep is a SumRep)"""
     def __init__(self,rep,name=None):
-        super().__init__(name=name)
+        super().__init__()
         self.rep=rep
 
     def __call__(self,values):
@@ -115,13 +115,14 @@ def EMLP(rep_in,rep_out,group,ch=384,num_layers=3):
     # assert all((not rep.G is None) for rep in middle_layers[0].reps)
     reps = [rep_in]+middle_layers
     # logging.info(f"Reps: {reps}")
-    def model(x):
-        network = Sequential(
-            *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            Linear(reps[-1],rep_out)
-        )
-        return network(x)
-    return model
+    network = Sequential(
+        *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+        Linear(reps[-1],rep_out)
+    )
+    # def model(x):
+        
+    #     return network(x)
+    return network
 
 @export
 def MLP(rep_in,rep_out,group,ch=384,num_layers=3):

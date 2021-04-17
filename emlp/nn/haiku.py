@@ -28,7 +28,7 @@ class _hkLinear(hk.Module):
         self.Pw = Pw
         self.Pb = Pb
         self.shape=shape
-        
+
     def __call__(self, x):  # (cin) -> (cout)
         i,j = self.shape
         w_init = hk.initializers.TruncatedNormal(1. / np.sqrt(j))
@@ -60,13 +60,14 @@ class _hkBiLinear(hk.Module):
         return .1*(W@x[...,None])[...,0]
 
 @export
-class GatedNonlinearity(hk.Module):  #  TODO: add support for mixed tensors and non sumreps
+class GatedNonlinearity(hk.Module):  # TODO: add support for mixed tensors and non sumreps
     """ Gated nonlinearity. Requires input to have the additional gate scalars
         for every non regular and non scalar rep. Applies swish to regular and
         scalar reps. (Right now assumes rep is a SumRep)"""
     def __init__(self,rep,name=None):
         super().__init__(name=name)
         self.rep=rep
+
     def __call__(self,values):
         gate_scalars = values[..., gate_indices(self.rep)]
         activations = jax.nn.sigmoid(gate_scalars) * values[..., :self.rep.size()]
@@ -108,12 +109,12 @@ def EMLP(rep_in,rep_out,group,ch=384,num_layers=3):
     rep_in =rep_in(group)
     rep_out = rep_out(group)
     # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
-    if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]#[uniform_rep(ch,group) for _ in range(num_layers)]
+    if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]
     elif isinstance(ch,Rep): middle_layers = num_layers*[ch(group)]
     else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
-    #assert all((not rep.G is None) for rep in middle_layers[0].reps)
+    # assert all((not rep.G is None) for rep in middle_layers[0].reps)
     reps = [rep_in]+middle_layers
-    #logging.info(f"Reps: {reps}")
+    # logging.info(f"Reps: {reps}")
     network = Sequential(
         *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
         Linear(reps[-1],rep_out)

@@ -90,7 +90,7 @@ def EMLPBlock(repin,repout):
 
 @export
 def EMLP(rep_in,rep_out,group,ch=384,num_layers=3):
-    """ Equivariant MultiLayer Perceptron. 
+    """ Equivariant MultiLayer Perceptron.
         If the input ch argument is an int, uses the hands off uniform_rep heuristic.
         If the ch argument is a representation, uses this representation for the hidden layers.
         Individual layer representations can be set explicitly by using a list of ints or a list of
@@ -115,11 +115,13 @@ def EMLP(rep_in,rep_out,group,ch=384,num_layers=3):
     # assert all((not rep.G is None) for rep in middle_layers[0].reps)
     reps = [rep_in]+middle_layers
     # logging.info(f"Reps: {reps}")
-    network = Sequential(
-        *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-        Linear(reps[-1],rep_out)
-    )
-    return network
+    def model(x):
+        network = Sequential(
+            *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
+            Linear(reps[-1],rep_out)
+        )
+        return network(x)
+    return model
 
 @export
 def MLP(rep_in,rep_out,group,ch=384,num_layers=3):

@@ -322,7 +322,7 @@ class EMLPH(EMLP):
     def __call__(self,x):
         return self.H(x)
 
-
+@export
 @cache(maxsize=None)
 def gate_indices(sumrep): #TODO: add support for mixed_tensors
     """ Indices for scalars, and also additional scalar gates

@@ -1,11 +1,9 @@
-# A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
+<div align="center">
+<img src="docs/_static/emlp_logo4x.png" width="350" alt="logo"/>
+</div>
 
-<!-- 
-.. image:: https://img.shields.io/pypi/v/<name-of-package>.svg
-   :target: https://pypi.python.org/pypi/<name-of-package>
-   :alt: PyPi version -->
---------------------------------------------------------------------------------
-[![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | **[Paper]()**| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/docs/notebooks/colabs/all.ipynb)
+# A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
+[![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | **[Paper]()**| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/docs/notebooks/colabs/all.ipynb) | ![PyPI version](https://img.shields.io/pypi/v/emlp)
 
 
 *EMLP* is a jax library for the automated construction of equivariant layers in deep learning. You can read the documentation [here](https://emlp.readthedocs.io/en/latest/).

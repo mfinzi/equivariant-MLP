@@ -65,8 +65,7 @@ Outside of these tensor representations, our type system works with any finite d
 
 You can visualize these equivariant bases with [`vis(repin,repout)`](https://emlp.readthedocs.io/en/latest/package/emlp.reps.html#emlp.reps.vis), such as with the three examples above
 
-<img src="https://user-images.githubusercontent.com/12687085/115313228-e19be000-a140-11eb-994f-d4eae4057eba.png" width="200"/> 
-<img src="https://user-images.githubusercontent.com/12687085/115312972-6afee280-a140-11eb-82f0-603748694645.png" width="360"/> <img src="https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png" width="200"/>  
+<img src="https://user-images.githubusercontent.com/12687085/115313228-e19be000-a140-11eb-994f-d4eae4057eba.png" width="200"/> <img src="https://user-images.githubusercontent.com/12687085/115312972-6afee280-a140-11eb-82f0-603748694645.png" width="360"/> <img src="https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png" width="200"/> 
 <!-- ![basis B](https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png "title2")
 ![basis A](https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png "title1") -->
 

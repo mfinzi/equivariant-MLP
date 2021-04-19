@@ -177,7 +177,7 @@ class EMLP(Module,metaclass=Named):
             Module: the EMLP objax module."""
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
         super().__init__()
-        logging.info("Initing EMLP")
+        logging.info("Initing EMLP (objax)")
         self.rep_in =rep_in(group)
         self.rep_out = rep_out(group)
         
@@ -322,7 +322,7 @@ class EMLPH(EMLP):
     def __call__(self,x):
         return self.H(x)
 
-
+@export
 @cache(maxsize=None)
 def gate_indices(sumrep): #TODO: add support for mixed_tensors
     """ Indices for scalars, and also additional scalar gates

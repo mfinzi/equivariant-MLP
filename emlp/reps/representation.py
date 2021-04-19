@@ -82,7 +82,7 @@ class Rep(object):
         constraints = []
         constraints.extend([lazify(self.rho(h))-I(n) for h in self.G.discrete_generators])
         constraints.extend([lazify(self.drho(A)) for A in self.G.lie_algebra])
-        return ConcatLazy(constraints) if constraints else lazify(jnp.zeros(1,n))
+        return ConcatLazy(constraints) if constraints else lazify(jnp.zeros((1,n)))
 
     solcache = {}
     def equivariant_basis(self):  

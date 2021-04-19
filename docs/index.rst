@@ -27,7 +27,13 @@ and representations an easy task, and one that does not require knowledge of ana
    notebooks/4new_representations.ipynb
    notebooks/5mixed_tensors.ipynb
    notebooks/6multilinear_maps.ipynb
-   notebooks/7pytorch_support.ipynb
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Cross Platform Support
+
+   notebooks/pytorch_support.ipynb
+   notebooks/haiku_support.ipynb
 
 .. toctree::
    :maxdepth: 1

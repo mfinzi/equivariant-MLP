@@ -5,6 +5,14 @@ This is a comment.
 Remember to align the itemized text with the first line of an item within a list.
 -->
 
+## EMLP 0.9.0
+* Cross Platform Support:
+  * You can now use EMLP in PyTorch, check out `Using EMLP in PyTorch`
+  * You can also use EMLP with Haiku in jax, check out `Using EMLP with Haiku`
+
+* Bug Fixes
+  * Fixed broken constraints with Trivial group
+
 ## EMLP 0.8.0 (Unreleased)
 
 * New features:

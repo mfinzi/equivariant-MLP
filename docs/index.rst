@@ -32,9 +32,8 @@ and representations an easy task, and one that does not require knowledge of ana
    :maxdepth: 1
    :caption: Cross Platform Support
 
-   notebooks/haiku_support.ipynb
    notebooks/pytorch_support.ipynb
-   
+   notebooks/haiku_support.ipynb
 
 .. toctree::
    :maxdepth: 1

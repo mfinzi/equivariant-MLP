@@ -13,19 +13,46 @@ Use at your own caution. But if you notice things behaving unexpectedly or get f
 
 --------------------------------------------------------------------------------
 
-Our type system is centered on it making it easy to combine representations using ρᵤ⊗ρᵥ, ρᵤ⊕ρᵥ, ρ*. For any given matrix group and representation formed in our type system, you can get the equivariant basis with [`rep.equivariant_basis()`](https://emlp.readthedocs.io/en/latest/package/emlp.reps.html#emlp.reps.equivariant_basis) or a matrix which projects to that subspace with [`rep.equivariant_projector()`](https://emlp.readthedocs.io/en/latest/package/emlp.reps.html#emlp.reps.equivariant_projector). For example:
+We provide a type system for representations. With the operators ρᵤ⊗ρᵥ, ρᵤ⊕ρᵥ, ρ* implemented as `*`,`+` and `.T` build up different representations. The basic building blocks for representations are the base vector representation `V` and tensor representations `T(p,q) = V**p*V.T**q`. 
+
+For any given matrix group and representation formed in our type system, you can get the equivariant basis with [`rep.equivariant_basis()`](https://emlp.readthedocs.io/en/latest/package/emlp.reps.html#emlp.reps.equivariant_basis) or a matrix which projects to that subspace with [`rep.equivariant_projector()`](https://emlp.readthedocs.io/en/latest/package/emlp.reps.html#emlp.reps.equivariant_projector). 
+
+
+For example to find all O(1,3) (Lorentz) equivariant linear maps from from a 4-Vector Xᶜ to a rank (2,1) tensor Mᵇᵈₐ, you can run
 
 ```python
-from emlp.reps import V
+from emlp.reps import V,T
 from emlp.groups import *
 
+G = O13()
+Q = (T(1,0)>>T(1,2))(G).equivariant_basis()
+```
+
+or how about equivariant maps from one Rubik's cube to another?
+```python
+G = RubiksCube()
+
+Q = (V(G)>>V(G)).equivariant_basis()
+```
+
+Using `+` and `*` you can put together composite representations (where multiple representations are concatenated together). For example lets find all equivariant linear maps from 5 node features and 2 edge features to 3 global invariants and 1 edge feature of a graph of size n=5:
+```python
+G=S(5)
+
+repin = 10*T(1)+5*T(2)
+repout = 3*T(0)+T(2)
+Q = (repin(G)>>repout(G)).equivariant_basis()
+```
+
+From the examples above, there are many different ways of writing a representation like `10*T(1)+5*T(2)` which are all equivalent.
+`10*T(1)+5*T(2)` = `10*V+5*V**2` = `5*V*(2+V)` 
+<!-- Feel free to go wild:
+```python
 W=V(O13())
 repin = (W+2*W**2)*(W.T+1*W).T + W.T
 repout = 3*W**0 + W + W*W.T
 Q = (repin>>repout).equivariant_basis()
-```
-
-is code that will run and produce the basis for linear maps from repin to repout that are equivariant to the Lorentz group O(1,3).
+``` -->
 
 You can even mix and match representations from different groups. For example with the cyclic group ℤ₃, the permutation group 𝕊₄, and the orthogonal group O(3)
 
@@ -34,9 +61,12 @@ rep = 2*V(Z(3))*V(S(4))+V(O(3))**2
 Q = (rep>>rep).equivariant_basis()
 ```
 
-You can visualize these equivariant bases with [`vis(repin,repout)`](https://emlp.readthedocs.io/en/latest/package/emlp.reps.html#emlp.reps.vis), such as with the two examples above
+Outside of these tensor representations, our type system works with any finite dimensional linear representation and you can even build your own bespoke representations following the instructions [here](https://emlp.readthedocs.io/en/latest/notebooks/4new_representations.html).
 
-<img src="https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png" width="350"/> <img src="https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png" width="230"/>  
+You can visualize these equivariant bases with [`vis(repin,repout)`](https://emlp.readthedocs.io/en/latest/package/emlp.reps.html#emlp.reps.vis), such as with the three examples above
+
+<img src=" https://user-images.githubusercontent.com/12687085/115313228-e19be000-a140-11eb-994f-d4eae4057eba.png" width="205"/>
+<img src="https://user-images.githubusercontent.com/12687085/115312972-6afee280-a140-11eb-82f0-603748694645.png" width="375"/> <img src="https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png" width="205"/>  
 <!-- ![basis B](https://user-images.githubusercontent.com/12687085/111226517-a2192b80-85b7-11eb-8dba-c01399fb7105.png "title2")
 ![basis A](https://user-images.githubusercontent.com/12687085/111226510-a0e7fe80-85b7-11eb-913b-09776cdaa92e.png "title1") -->
 

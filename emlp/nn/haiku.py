@@ -19,9 +19,9 @@ def Linear(repin,repout):
     rep_bias = repout
     Pw = rep_W.equivariant_projector()
     Pb = rep_bias.equivariant_projector()
-    return lambda x: _hkLinear(Pw,Pb,(repout.size(),repin.size()))(x)
+    return lambda x: hkLinear(Pw,Pb,(repout.size(),repin.size()))(x)
 
-class _hkLinear(hk.Module):
+class hkLinear(hk.Module):
     """ Basic equivariant Linear layer from repin to repout."""
     def __init__(self, Pw,Pb,shape,name=None):
         super().__init__(name=name)
@@ -31,9 +31,9 @@ class _hkLinear(hk.Module):
 
     def __call__(self, x):  # (cin) -> (cout)
         i,j = self.shape
-        w_init = hk.initializers.TruncatedNormal(1. / np.sqrt(j))
+        w_init = hk.initializers.TruncatedNormal(1. / np.sqrt(i))
         w = hk.get_parameter("w", shape=self.shape, dtype=x.dtype, init=w_init)
-        b = hk.get_parameter("b", shape=[i], dtype=x.dtype, init=jnp.ones)
+        b = hk.get_parameter("b", shape=[i], dtype=x.dtype, init=w_init)
         W = (self.Pw@w.reshape(-1)).reshape(*self.shape)
         b = self.Pb@b
         return x@W.T+b
@@ -43,10 +43,10 @@ def BiLinear(repin,repout):
     """ Cheap bilinear layer (adds parameters for each part of the input which can be
         interpreted as a linear map from a part of the input to the output representation)."""
     Wdim, weight_proj = bilinear_weights(repout,repin)
-    return lambda x: _hkBiLinear(weight_proj,Wdim)(x)
+    return lambda x: hkBiLinear(weight_proj,Wdim)(x)
 
 
-class _hkBiLinear(hk.Module):
+class hkBiLinear(hk.Module):
     def __init__(self, weight_proj,Wdim,name=None):
         super().__init__(name=name)
         self.weight_proj=weight_proj
@@ -105,7 +105,7 @@ def EMLP(rep_in,rep_out,group,ch=384,num_layers=3):
 
         Returns:
             Module: the EMLP objax module."""
-    logging.info("Initing EMLP")
+    logging.info("Initing EMLP (Haiku)")
     rep_in =rep_in(group)
     rep_out = rep_out(group)
     # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
@@ -119,9 +119,6 @@ def EMLP(rep_in,rep_out,group,ch=384,num_layers=3):
         *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
         Linear(reps[-1],rep_out)
     )
-    # def model(x):
-        
-    #     return network(x)
     return network
 
 @export

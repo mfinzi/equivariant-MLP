@@ -177,7 +177,7 @@ class EMLP(Module,metaclass=Named):
             Module: the EMLP objax module."""
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
         super().__init__()
-        logging.info("Initing EMLP")
+        logging.info("Initing EMLP (objax)")
         self.rep_in =rep_in(group)
         self.rep_out = rep_out(group)
         

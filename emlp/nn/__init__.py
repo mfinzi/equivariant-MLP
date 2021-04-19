@@ -1,2 +1,2 @@
 
-from .nn_objax import *
+from .objax import *

@@ -4,12 +4,8 @@ from scipy.linalg import expm
 from oil.utils.utils import Named,export
 import jax
 import jax.numpy as jnp
-from objax.nn.init import kaiming_normal, xavier_normal
-from objax.module import Module
-import objax
 from emlp.reps.linear_operators import LazyShift,SwapMatrix,Rot90,LazyKron,LazyKronsum,LazyPerm,I
 from jax import jit,vmap
-import logging
 
 def rel_err(A,B):
     return jnp.mean(jnp.abs(A-B))/(jnp.mean(jnp.abs(A)) + jnp.mean(jnp.abs(B))+1e-6)
@@ -18,9 +14,7 @@ def rel_err(A,B):
 class Group(object,metaclass=Named):
     """ Abstract Group Object which new groups should inherit from. """
     lie_algebra = NotImplemented  #: The continuous generators
-    #lie_algebra_lazy = NotImplemented
     discrete_generators = NotImplemented  #: The discrete generators
-    #discrete_generators_lazy = NotImplemented
     z_scale=None # For scale noise for sampling elements
     is_orthogonal=None
     is_regular = None
@@ -37,7 +31,7 @@ class Group(object,metaclass=Named):
             self.lie_algebra = np.zeros((0,self.d,self.d))
         if self.discrete_generators is NotImplemented:
             self.discrete_generators = np.zeros((0,self.d,self.d))
-    
+
         self.args = args
         if isinstance(self.lie_algebra,np.ndarray): self.lie_algebra = jax.device_put(self.lie_algebra)
         if isinstance(self.discrete_generators,np.ndarray): self.discrete_generators = jax.device_put(self.discrete_generators)
@@ -56,15 +50,15 @@ class Group(object,metaclass=Named):
         # Set regular flag automatically if not specified
         if self.is_orthogonal and (self.is_regular is None):
             self.is_regular=True
-            self.is_regular &= (len(self.lie_algebra)==0) # no infinitesmal generators and all rows have one 1
+            self.is_regular &= (len(self.lie_algebra)==0)  # no infinitesmal generators and all rows have one 1
             if len(self.discrete_generators)!=0:
                 h_dense = jnp.stack([hi@jnp.eye(self.d) for hi in self.discrete_generators])
                 self.is_regular &= ((h_dense==1).astype(np.int).sum(-1)==1).all()
 
-
     def exp(self,A):
         """ Matrix exponential """
         return expm(A)
+
     def num_constraints(self):
         return len(self.lie_algebra)+len(self.discrete_generators)
 
@@ -86,23 +80,24 @@ class Group(object,metaclass=Named):
     def check_valid_group_elems(self,g):
         return True
 
-    def __and__(self,G2):
-        return CombinedGenerators(self,G2)
     def __str__(self):
         return repr(self)
+
     def __repr__(self):
         outstr = f"{self.__class__}"
         if self.args:
             outstr += '('+''.join(repr(arg) for arg in self.args)+')'
         return outstr
-    def __eq__(self,G2): #TODO: check that spans are equal?
+
+    def __eq__(self,G2):  # TODO: more permissive by checking that spans are equal?
         return repr(self)==repr(G2)
         
     def __hash__(self):
         return hash(repr(self))
 
     def __lt__(self, other):
-        return hash(self) < hash(other) #For sorting purposes only
+        """ For sorting purposes only """
+        return hash(self) < hash(other)
 
     def __mul__(self,other):
         return DirectProduct(self,other)
@@ -135,56 +130,37 @@ def noise2sample(z,ks,lie_algebra,discrete_generators,seed=0):
 def noise2samples(zs,ks,lie_algebra,discrete_generators,seed=0):
     return vmap(noise2sample,(0,0,None,None,None),0)(zs,ks,lie_algebra,discrete_generators,seed)
 
-
-class DirectProduct(Group):
-    def __init__(self,G1,G2):
-        I1,I2 = I(G1.d),I(G2.d)
-        self.lie_algebra = [LazyKronsum([A1,0*I2]) for A1 in G1.lie_algebra]+[LazyKronsum([0*I1,A2]) for A2 in G2.lie_algebra]
-        self.discrete_generators = [LazyKron([M1,I2]) for M1 in G1.discrete_generators]+[LazyKron([I1,M2]) for M2 in G2.discrete_generators]
-        self.names = (repr(G1),repr(G2))
-        super().__init__()
-        
-    def __repr__(self):
-        return f"{self.names[0]}x{self.names[1]}"
-
-class WreathProduct(Group):
-    def __init__(self,G1,G2):
-        raise NotImplementedError
-
-class SemiDirectProduct(Group):
-    def __init__(self,G1,G2):
-        raise NotImplementedError
+@export
+class Trivial(Group):
+    """ The trivial group G={I} in n dimensions. If you want to see how the
+        inductive biases of EMLP perform without any symmetry, use Trivial(n)"""
+    def __init__(self,n):
+        self.d = n
+        super().__init__(n)
 
 @export
-class Trivial(Group): 
-    """ The trivial group G={I} in N dimensions """
-    def __init__(self,N):
-        self.d = N
-        super().__init__(N)
-
-@export
-class SO(Group): 
-    """ The special orthogonal group SO(N) in N dimensions"""
-    def __init__(self,N):
-        self.lie_algebra = np.zeros(((N*(N-1))//2,N,N))
+class SO(Group):
+    """ The special orthogonal group SO(n) in n dimensions"""
+    def __init__(self,n):
+        self.lie_algebra = np.zeros(((n*(n-1))//2,n,n))
         k=0
-        for i in range(N):
+        for i in range(n):
             for j in range(i):
                 self.lie_algebra[k,i,j] = 1
                 self.lie_algebra[k,j,i] = -1
                 k+=1
-        super().__init__(N)
+        super().__init__(n)
 
 @export
-class O(SO): 
-    """ The Orthogonal group O(N) in N dimensions"""
-    def __init__(self,N):
-        self.discrete_generators = np.eye(N)[None]
+class O(SO):
+    """ The Orthogonal group O(n) in n dimensions"""
+    def __init__(self,n):
+        self.discrete_generators = np.eye(n)[None]
         self.discrete_generators[0,0,0]=-1
-        super().__init__(N)
+        super().__init__(n)
 
 @export
-class C(Group): 
+class C(Group):
     """ The Cyclic group Ck in 2 dimensions"""
     def __init__(self,k):
         theta = 2*np.pi/k
@@ -192,28 +168,28 @@ class C(Group):
         self.discrete_generators[0,:,:] = np.array([[np.cos(theta),np.sin(theta)],[-np.sin(theta),np.cos(theta)]])
         super().__init__(k)
 @export
-class D(C): 
+class D(C):
     """ The Dihedral group Dk in 2 dimensions"""
     def __init__(self,k):
         super().__init__(k)
         self.discrete_generators = np.concatenate((self.discrete_generators,np.array([[[-1,0],[0,1]]])))
 @export
 class Scaling(Group):
-    """ The scaling group Dk in 2 dimensions"""
-    def __init__(self,N):
-        self.lie_algebra = np.eye(N)[None]
-        super().__init__(N)
+    """ The scaling group in n dimensions"""
+    def __init__(self,n):
+        self.lie_algebra = np.eye(n)[None]
+        super().__init__(n)
 
-class Parity(Group): #""" The spacial parity group in 1+3 dimensions"""
+class Parity(Group):  # """ The spacial parity group in 1+3 dimensions"""
     discrete_generators = -np.eye(4)[None]
     discrete_generators[0,0,0] = 1
 
-class TimeReversal(Group): #""" The time reversal group in 1+3 dimensions"""
+class TimeReversal(Group):  # """ The time reversal group in 1+3 dimensions"""
     discrete_generators = np.eye(4)[None]
     discrete_generators[0,0,0] = -1
 
 @export
-class SO13p(Group): 
+class SO13p(Group):
     """ The component of Lorentz group connected to identity"""
     lie_algebra = np.zeros((6,4,4))
     lie_algebra[3:,1:,1:] = SO(3).lie_algebra
@@ -223,6 +199,7 @@ class SO13p(Group):
     # Adjust variance for samples along boost generators. For equivariance checks
     # the exps for high order tensors can get very large numbers
     z_scale = np.array([.3,.3,.3,1,1,1]) # can get rid of now
+
 @export
 class SO13(SO13p):
     discrete_generators = -np.eye(4)[None]
@@ -250,7 +227,7 @@ class O11(SO11p):
 
 @export
 class Sp(Group):
-    """ Symplectic group Sp(m) in 2m dimensions (sometimes referred to 
+    """ Symplectic group Sp(m) in 2m dimensions (sometimes referred to
         instead as Sp(2m) )"""
     def __init__(self,m):
         self.lie_algebra = np.zeros((m*(2*m+1),2*m,2*m))
@@ -269,7 +246,7 @@ class Sp(Group):
                 self.lie_algebra[k,j,m+i] = 1
                 k+=1
         super().__init__(m)
-        
+   
 @export
 class Z(Group):
     r""" The cyclic group Z_n (discrete translation group) of order n.
@@ -282,17 +259,21 @@ class Z(Group):
 class S(Group): #The permutation group
     r""" The permutation group S_n with an n dimensional regular representation."""
     def __init__(self,n):
+        # Here we choose n-1 generators consisting of swaps between the first element
+        # and every other element
         perms = np.arange(n)[None]+np.zeros((n-1,1)).astype(int)
         perms[:,0] = np.arange(1,n)
         perms[np.arange(n-1),np.arange(1,n)[None]]=0
         self.discrete_generators = [LazyPerm(perm) for perm in perms]
-        # Adding superflous extra generators surprisingly can sometimes actually *decrease* 
+        super().__init__(n)
+        # We can also have chosen the 2 generator soln described in the paper, but
+        # adding superflous extra generators surprisingly can sometimes actually *decrease* 
         # the runtime of the iterative krylov solver by improving the conditioning 
         # of the constraint matrix
-        super().__init__(n)
+        
 
 @export
-class U(Group): # Of dimension n^2
+class U(Group):  # Of dimension n^2
     """ The unitary group U(n) in n dimensions (complex)"""
     def __init__(self,n):
         lie_algebra_real = np.zeros((n**2,n,n))
@@ -315,7 +296,7 @@ class U(Group): # Of dimension n^2
         self.lie_algebra = lie_algebra_real + lie_algebra_imag*1j
         super().__init__(n)
 @export
-class SU(Group): # Of dimension n^2-1
+class SU(Group):  # Of dimension n^2-1
     """ The special unitary group SU(n) in n dimensions (complex)"""
     def __init__(self,n):
         if n==1: return Trivial(1)
@@ -347,7 +328,7 @@ class Cube(Group):
     """ A discrete version of SO(3) including all 90 degree rotations in 3d space
     Implements a 6 dimensional representation on the faces of a cube"""
     def __init__(self):
-        order = np.arange(6) # []
+        #order = np.arange(6) # []
         Fperm = np.array([4,1,0,3,5,2])
         Lperm = np.array([3,0,2,5,4,1])
         self.discrete_generators = [LazyPerm(perm) for perm in [Fperm,Lperm]]
@@ -372,10 +353,10 @@ class RubiksCube(Group): #3x3 rubiks cube
     r""" The Rubiks cube group G<S_48 consisting of all valid 3x3 Rubik's cube transformations.
         Generated by the a quarter turn about each of the faces."""
     def __init__(self):
-        #Faces are ordered U,F,R,B,L,D (the net of the cube) #    B
-        order = np.arange(48)                                #  L U R
-        order_padded = pad(order) #include a center element  #    F
-        # Compute permutation for Up quarter turn            #    D
+        # Faces are ordered U,F,R,B,L,D (the net of the cube) #    B
+        order = np.arange(48)                                 #  L U R
+        order_padded = pad(order) # include a center element  #    F
+        # Compute permutation for Up quarter turn             #    D
         order_padded[0,:] = np.rot90(order_padded[0].reshape(3,3),1).reshape(9) # Rotate top face
         FRBL = np.array([1,2,3,4])
         order_padded[FRBL,:3] = order_padded[np.roll(FRBL,1),:3] # F <- L,R <- F,B <- R,L <- B
@@ -392,47 +373,13 @@ class RubiksCube(Group): #3x3 rubiks cube
         RotLeft = unpad(RotLeft)
         RotRight = np.argsort(RotLeft)
 
-        Fperm = RotRight[Uperm[RotLeft]] # Fperm = RotLeft<-Uperm<-RotRight
-        Rperm = RotBack[Uperm[RotFront]] # Rperm = RotFront<-Uperm<-RotBack
-        Bperm = RotLeft[Uperm[RotRight]]# Bperm = RotRight<-Uperm<-RotLeft
-        Lperm = RotFront[Uperm[RotBack]] # Lperm = RotBack<-Uperm<-RotFront
-        Dperm = RotRight[RotRight[Uperm[RotLeft[RotLeft]]]] # Dperm = RotLeft<-RotLeft<-Uperm<-RotRight<-RotRight
+        Fperm = RotRight[Uperm[RotLeft]]  # Fperm = RotLeft<-Uperm<-RotRight
+        Rperm = RotBack[Uperm[RotFront]]  # Rperm = RotFront<-Uperm<-RotBack
+        Bperm = RotLeft[Uperm[RotRight]]  # Bperm = RotRight<-Uperm<-RotLeft
+        Lperm = RotFront[Uperm[RotBack]]  # Lperm = RotBack<-Uperm<-RotFront
+        Dperm = RotRight[RotRight[Uperm[RotLeft[RotLeft]]]]  # Dperm = RotLeft<-RotLeft<-Uperm<-RotRight<-RotRight
         self.discrete_generators = [LazyPerm(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
         super().__init__()
-
-
-# @export
-# class RubiksCube2x2(Group):
-#     def __init__(self):
-#         #Faces are ordered U,F,R,B,L,D (the net of the cube) #    B
-#         Uperm = np.arange(24).reshape(6,4)                   #  L U R
-#                                   #include a center element  #    F
-#         # Compute permutation for Up quarter turn            #    D
-#         Uperm[0,:] = np.rot90(Uperm[0].reshape(2,2),-1).reshape(4) # Rotate top face clockwise
-#         FRBL = np.array([1,2,3,4])
-#         Uperm[FRBL,:2] = Uperm[np.roll(FRBL,-1),:2] # F <- L,R <- F,B <- R,L <- B, but only 1st 2 elems
-#         Uperm = Uperm.reshape(-1)
-#         # Now form all other generators by using full rotations of the cube by 90 clockwise about a given face
-#         RotFront =np.arange(24).reshape(6,4)# rotate full cube so that Left face becomes Up, Up becomes Right, Right becomes Down, Down becomes Left
-#         URDL = np.array([0,2,5,4])
-#         RotFront[URDL,:] = RotFront[np.roll(URDL,1),:] #clockwise about F
-#         RotFront = RotFront.reshape(-1)
-#         RotBack = np.argsort(RotFront)
-#         RotLeft = np.arange(24).reshape(6,4)
-#         UFDB = np.array([0,1,5,3])
-#         RotLeft[UFDB,:] = RotLeft[np.roll(UFDB,1),:]
-#         RotLeft = RotLeft.reshape(-1)
-#         RotRight = np.argsort(RotLeft)
-
-#         Fperm = RotRight[Uperm[RotLeft]] # Fperm = RotLeft<-Uperm<-RotRight
-#         Rperm = RotBack[Uperm[RotFront]] # Rperm = RotFront<-Uperm<-RotBack
-#         Bperm = RotLeft[Uperm[RotRight]]# Bperm = RotRight<-Uperm<-RotLeft
-#         Lperm = RotFront[Uperm[RotBack]] # Lperm = RotBack<-Uperm<-RotFront
-#         Dperm = RotRight[RotRight[Uperm[RotLeft[RotLeft]]]] # Dperm = RotLeft<-RotLeft<-Uperm<-RotRight<-RotRight
-#         I = np.eye(24)
-#         self.perms = [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]
-#         self.discrete_generators = [LazyPerm(perm) for perm in [Uperm,Fperm,Rperm,Bperm,Lperm,Dperm]]
-#         super().__init__()
 
 @export
 class ZksZnxZn(Group):
@@ -445,7 +392,6 @@ class ZksZnxZn(Group):
         kshift = Zk.discrete_generators[0]
         In = I(n)
         Ik = I(k)
-        Idense = np.eye(k*n*n)
         assert k in [2,4]
         self.discrete_generators = [LazyKron([Ik,nshift,In]),LazyKron([Ik,In,nshift]),LazyKron([kshift,Rot90(n,4//k)])]
         super().__init__(k,n)
@@ -465,7 +411,7 @@ class Embed(Group):
         self.discrete_generators[:,slice,slice]  =G.discrete_generators
         self.name = f"{G}_R{d}"
         super().__init__()
-        
+   
     def __repr__(self):
         return self.name
 
@@ -483,3 +429,23 @@ def O2eR3():
 def DkeR3(k):
     """ Dihedral D(k) embedded in R^3 with rotations about z axis"""
     return Embed(D(k),3,slice(2))
+
+
+class DirectProduct(Group):
+    def __init__(self,G1,G2):
+        I1,I2 = I(G1.d),I(G2.d)
+        self.lie_algebra = [LazyKronsum([A1,0*I2]) for A1 in G1.lie_algebra]+[LazyKronsum([0*I1,A2]) for A2 in G2.lie_algebra]
+        self.discrete_generators = [LazyKron([M1,I2]) for M1 in G1.discrete_generators]+[LazyKron([I1,M2]) for M2 in G2.discrete_generators]
+        self.names = (repr(G1),repr(G2))
+        super().__init__()
+
+    def __repr__(self):
+        return f"{self.names[0]}x{self.names[1]}"
+
+class WreathProduct(Group):
+    def __init__(self,G1,G2):
+        raise NotImplementedError
+
+class SemiDirectProduct(Group):
+    def __init__(self,G1,G2,phi):
+        raise NotImplementedError

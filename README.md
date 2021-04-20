@@ -23,7 +23,7 @@ from emlp.reps import V,T
 from emlp.groups import *
 
 G = O13()
-Q = (T(1,0)>>T(1,2))(G).equivariant_basis()
+Q = (T(1,0)>>T(2,1))(G).equivariant_basis()
 ```
 
 or how about equivariant maps from one Rubik's cube to another?

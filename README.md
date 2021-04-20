@@ -3,7 +3,7 @@
 </div>
 
 # A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
-[![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | **[Paper]()** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/docs/notebooks/colabs/all.ipynb) | [![PyPI version](https://img.shields.io/pypi/v/emlp)](https://pypi.org/project/emlp/)
+[![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | **[Paper](https://arxiv.org/abs/2104.09459)** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/docs/notebooks/colabs/all.ipynb) | [![PyPI version](https://img.shields.io/pypi/v/emlp)](https://pypi.org/project/emlp/)
 
 
 *EMLP* is a jax library for the automated construction of equivariant layers in deep learning. You can read the documentation [here](https://emlp.readthedocs.io/en/latest/).
@@ -122,7 +122,7 @@ python experiments/hnn.py --network EMLPH --group="DkeR3(6)"
 
 These models are trained to fit a double spring dynamical system. 30s rollouts of the dataset, along with rollout error on these trajectories, and conservation of angular momentum are shown below.
 
-<img src="https://user-images.githubusercontent.com/12687085/114937183-759d3d00-9e0b-11eb-9310-bbfc606e6bda.gif" width="240"/> <img src="https://user-images.githubusercontent.com/12687085/114937167-703ff280-9e0b-11eb-8421-d8408b31908a.PNG" width="285"/> <img src="https://user-images.githubusercontent.com/12687085/114937171-71711f80-9e0b-11eb-885e-a541ae1d28cc.PNG" width="250"/> 
+<img src="https://user-images.githubusercontent.com/12687085/114937183-759d3d00-9e0b-11eb-9310-bbfc606e6bda.gif" width="230"/> <img src="https://user-images.githubusercontent.com/12687085/114937167-703ff280-9e0b-11eb-8421-d8408b31908a.PNG" width="280"/> <img src="https://user-images.githubusercontent.com/12687085/114937171-71711f80-9e0b-11eb-885e-a541ae1d28cc.PNG" width="240"/> 
 
 <!-- # 
 <p align="center">

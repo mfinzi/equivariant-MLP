@@ -8,7 +8,7 @@ from .linear_operator_base import LinearOperator
 from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify,product
 from functools import reduce
 from collections import defaultdict
-
+from plum import dispatch
 
 class SumRep(Rep):
     concrete=True
@@ -135,6 +135,27 @@ class SumRep(Rep):
             out_dict[rep] = v[...,self.perm[i:i+chunk]].reshape(v.shape[:-1]+(c,rep.size()))
             i+= chunk
         return out_dict
+
+
+
+def both_concrete(rep1,rep2):
+    return all(rep.concrete for rep in (rep1,rep2) if hasattr(rep,'concrete'))
+
+@dispatch.multi((SumRep,Rep),(Rep,SumRep))
+def mul_reps(ra,rb):
+    if not both_concrete(ra,rb):
+        return DeferredProductRep(ra,rb)
+    return distribute_product([ra,rb])
+
+@dispatch
+def mul_reps(ra,rb):  # base case
+    if not both_concrete(ra,rb):
+        return DeferredProductRep(ra,rb)
+    try:
+        if ra.G==rb.G: return ProductRep(ra,rb)
+    except AttributeError: pass
+    return DirectProduct(ra,rb)
+
 
     
 #TODO: consolidate with the __init__ method of the basic SumRep

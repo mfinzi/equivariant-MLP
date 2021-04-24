@@ -11,8 +11,9 @@ import logging
 import matplotlib.pyplot as plt
 from functools import reduce
 from oil.utils.utils import export
-import emlp.reps
 
+from plum import dispatch
+import emlp.reps
 #TODO: add rep,v = flatten({'Scalar':..., 'Vector':...,}), to_dict(rep,vector) returns {'Scalar':..., 'Vector':...,}
 #TODO and simpler rep = flatten({Scalar:2,Vector:10,...}),
 # Do we even want + operator to implement non canonical orderings?
@@ -111,49 +112,28 @@ class Rep(object):
         P = Q_lazy@Q_lazy.H
         return P
 
-    # This all would have been much less complicated with Julia style multiple dispatch
     def __add__(self, other):
         """ Direct sum (⊕) of representations. """
         if isinstance(other,int):
             if other==0: return self
-        elif all(rep.concrete for rep in (self,other) if hasattr(rep,'concrete')):
+            else: return self+other*Scalar
+        elif emlp.reps.product_sum_reps.both_concrete(self,other):
             return emlp.reps.product_sum_reps.SumRep(self,other)
         else:
             return emlp.reps.product_sum_reps.DeferredSumRep(self,other)
+
     def __radd__(self,other):
         if isinstance(other,int): 
             if other==0: return self
+            else: return other*Scalar+self
         else: return NotImplemented
         
     def __mul__(self,other):
         """ Tensor sum (⊗) of representations. """
-        if isinstance(other,(int,ScalarRep)):
-            if other==1 or other==Scalar: return self
-            if other==0: return 0
-            if (not hasattr(self,'concrete')) or self.concrete:
-                return emlp.reps.product_sum_reps.SumRep(*(other*[self]))
-            else:
-                return emlp.reps.product_sum_reps.DeferredSumRep(*(other*[self]))
-            return sum(other*[self])
-        elif all(rep.concrete for rep in (self,other) if hasattr(rep,'concrete')):
-            if any(isinstance(rep,emlp.reps.product_sum_reps.SumRep) for rep in [self,other]):
-                return emlp.reps.product_sum_reps.distribute_product([self,other])
-            elif (hasattr(self,'G') and hasattr(other,'G') and self.G!=other.G) or not (hasattr(self,'G') and hasattr(other,'G')):
-                return emlp.reps.product_sum_reps.DirectProduct(self,other)
-            else: 
-                return emlp.reps.product_sum_reps.ProductRep(self,other)
-        else:
-            return emlp.reps.product_sum_reps.DeferredProductRep(self,other)
+        return mul_reps(self,other)
             
     def __rmul__(self,other):
-        if isinstance(other,(int,ScalarRep)): 
-            if other==1 or other==Scalar: return self
-            if other==0: return 0
-            if (not hasattr(self,'concrete')) or self.concrete:
-                return emlp.reps.product_sum_reps.SumRep(*(other*[self]))
-            else:
-                return emlp.reps.product_sum_reps.DeferredSumRep(*(other*[self]))
-        else: return NotImplemented
+        return mul_reps(other,self)
 
     def __pow__(self,other):
         """ Iterated tensor product. """
@@ -180,10 +160,27 @@ class Rep(object):
     def __mod__(self,other): # Wreath product
         """ Wreath product of representations (Not yet implemented)"""
         raise NotImplementedError
-    # @property
-    # def T(self):
-    #     if hasattr(self,"G") and (self.G is not None) and self.G.is_orthogonal: return self
-    #     return Dual(self)
+    @property
+    def T(self):
+        if hasattr(self,"G") and (self.G is not None) and self.G.is_orthogonal: return self
+        return Dual(self)
+
+
+@dispatch
+def mul_reps(ra,rb:int):
+    if rb==1: return ra
+    if rb==0: return 0
+    if (not hasattr(ra,'concrete')) or ra.concrete:
+        return emlp.reps.product_sum_reps.SumRep(*(rb*[ra]))
+    else:
+        return emlp.reps.product_sum_reps.DeferredSumRep(*(rb*[ra]))
+
+@dispatch
+def mul_reps(ra:int,rb):
+    return mul_reps(rb,ra)
+
+# Continued with non int cases in product_sum_reps.py
+
 # A possible
 class ScalarRep(Rep):
     def __init__(self,G=None):
@@ -244,57 +241,40 @@ class Base(Rep):
     def __lt__(self,other):
         if isinstance(other,Dual): return True
         return super().__lt__(other)
-    @property
-    def T(self):
-        return Dual(self.G)
+    # @property
+    # def T(self):
+    #     return Dual(self.G)
 
-class Dual(Base):
-    """ The dual representation V* of the Base representation of a group."""
-    def __new__(cls,G=None):
-        if G is not None and G.is_orthogonal: return Base(G)
-        else: return super(Dual,cls).__new__(cls)
+class Dual(Rep):
+    def __init__(self,rep):
+        self.rep = rep
+        self.concrete = rep.concrete
+        self.G=rep.G
+        if hasattr(rep,"is_regular"): self.is_regular = rep.is_regular
+    def __call__(self,G):
+        return self.rep(G).T
     def rho(self,M):
-        MinvT = M.invT() if hasattr(M,'invT') else jnp.linalg.inv(M).T
-        return MinvT
+        rho = self.rep.rho(M)
+        rhoinvT = rho.invT() if isinstance(rho,LinearOperator) else jnp.linalg.inv(rho).T
+        return rhoinvT
     def drho(self,A):
-        return -A.T
+        return -self.rep.drho(A).T
     def __str__(self):
-        return "V*"#+(f"_{self.G}" if self.G is not None else "")
+        return str(self.rep)+"*"
+    def __repr__(self): return str(self)
     @property
     def T(self):
-        return Base(self.G)
+        return self.rep
+    def __eq__(self,other):
+        return type(other)==type(self) and self.rep==other.rep
+    def __hash__(self):
+        return hash((type(self),self.rep))
     def __lt__(self,other):
-        if isinstance(other,Base): return False
+        if other==self.rep: return False
         return super().__lt__(other)
-
-# class Dual(Rep):
-#     def __init__(self,rep):
-#         self.rep = rep
-#         self.concrete = rep.concrete
-#         if hasattr(rep,"is_regular"): self.is_regular = rep.is_regular
-#     def __call__(self,G):
-#         return self.rep(G).T
-#     def rho(self,M):
-#         rho = self.rep.rho(M)
-#         rhoinvT = rho.invT() if isinstance(rep,LinearOperator) else jnp.linalg.inv(rho).T
-#         return rhoinvT
-#     def drho(self,A):
-#         return -self.rep.drho(A).T
-#     def __str__(self):
-#         return str(self.rep)+"*"
-#     def __repr__(self): return str(self)
-#     @property
-#     def T(self):
-#         return self.rep
-#     def __eq__(self,other):
-#         return type(other)==type(self) and self.rep==other.rep
-#     def __hash__(self):
-#         return hash((type(self),self.rep))
-#     def __lt__(self,other):
-#         if other==self.rep: return False
-#         return super().__lt__(other)
-#     def size(self):
-#         return self.rep.size()
+    def size(self):
+        return self.rep.size()
+        
 V=Vector= Base()  #: Alias V or Vector for an instance of the Base representation of a group
 
 Scalar = ScalarRep()#: An instance of the Scalar representation, equivalent to V**0

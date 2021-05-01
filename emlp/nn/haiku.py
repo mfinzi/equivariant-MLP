@@ -124,9 +124,9 @@ def EMLP(rep_in,rep_out,group,ch=384,num_layers=3):
 @export
 def MLP(rep_in,rep_out,group,ch=384,num_layers=3):
     """ Standard baseline MLP. Representations and group are used for shapes only. """
-    cout = rep_out.size()
-    mlp = Sequential(
+    cout = rep_out(group).size()
+    mlp = lambda x: Sequential(
         *[Sequential(hk.Linear(ch),jax.nn.swish) for _ in range(num_layers)],
         hk.Linear(cout)
-    )
+    )(x)
     return mlp

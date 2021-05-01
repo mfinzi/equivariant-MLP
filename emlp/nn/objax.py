@@ -188,7 +188,7 @@ class EMLP(Module,metaclass=Named):
         else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
         #assert all((not rep.G is None) for rep in middle_layers[0].reps)
         reps = [self.rep_in]+middle_layers
-        #logging.info(f"Reps: {reps}")
+        logging.info(f"Reps: {reps}")
         self.network = Sequential(
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
             Linear(reps[-1],self.rep_out)

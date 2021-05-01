@@ -3,7 +3,7 @@ import jax
 from jax import jit
 import collections,itertools
 from functools import lru_cache as cache
-from .representation import Rep
+from .representation import Rep,ScalarRep
 from .linear_operator_base import LinearOperator
 from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify,product
 from functools import reduce
@@ -141,7 +141,7 @@ class SumRep(Rep):
 def both_concrete(rep1,rep2):
     return all(rep.concrete for rep in (rep1,rep2) if hasattr(rep,'concrete'))
 
-@dispatch.multi((SumRep,Rep),(Rep,SumRep))
+@dispatch.multi((SumRep,Rep),(Rep,SumRep),(SumRep,SumRep))
 def mul_reps(ra,rb):
     if not both_concrete(ra,rb):
         return DeferredProductRep(ra,rb)
@@ -149,6 +149,8 @@ def mul_reps(ra,rb):
 
 @dispatch
 def mul_reps(ra,rb):  # base case
+    if type(ra)==ScalarRep: return rb
+    if type(rb)==ScalarRep: return ra
     if not both_concrete(ra,rb):
         return DeferredProductRep(ra,rb)
     try:

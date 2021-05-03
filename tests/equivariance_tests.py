@@ -88,7 +88,7 @@ def test_sum(G):
 @parametrize([group for group in test_groups if group.d<5])
 def test_prod(G):
     N=5
-    rep = T(0,1)*T(0,0)*T(2,0)*T(1,0)*T(0,0)**3*T(0,1)**2
+    rep = T(0,1)*T(0,0)*T(1,0)**2*T(1,0)*T(0,0)**3*T(0,1)
     rep = rep(G)
     # P = rep.equivariant_projector()
     # v = np.random.rand(rep.size())
@@ -109,7 +109,7 @@ def test_high_rank_representations(G):
     r = 10
     for p in range(r+1):
         for q in range(r-p+1):
-            if G.num_constraints()*G.d**(3*(p+q))>1e12: continue
+            if G.num_constraints()*G.d**(3*(p+q))>1e11: continue
             if G.is_orthogonal and q>0: continue
             #try:
             #logging.info(f"{p},{q},{T(p,q)}")

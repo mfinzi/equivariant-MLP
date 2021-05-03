@@ -53,7 +53,7 @@ class Group(object,metaclass=Named):
             self.is_regular &= (len(self.lie_algebra)==0)  # no infinitesmal generators and all rows have one 1
             if len(self.discrete_generators)!=0:
                 h_dense = jnp.stack([hi@jnp.eye(self.d) for hi in self.discrete_generators])
-                self.is_regular &= ((h_dense==1).astype(np.int).sum(-1)==1).all()
+                self.is_regular &= ((h_dense==1).astype(int).sum(-1)==1).all()
 
     def exp(self,A):
         """ Matrix exponential """

@@ -226,7 +226,7 @@ def distribute_product(reps,extra_perm=None):
 def rep_permutation(repsizes_all):
     """Permutation from block ordering to flattened ordering"""
     size_cumsums = [np.cumsum([0] + [size for size in repsizes]) for repsizes in repsizes_all]
-    permutation = np.zeros([cumsum[-1] for cumsum in size_cumsums]).astype(np.int)
+    permutation = np.zeros([cumsum[-1] for cumsum in size_cumsums]).astype(int)
     arange = np.arange(permutation.size)
     indices_iter = itertools.product(*[range(len(repsizes)) for repsizes in repsizes_all])
     i = 0

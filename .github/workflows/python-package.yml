@@ -24,7 +24,7 @@ jobs:
         pip install -e .
     - name: Test coverage.
       run: |
-        pytest --cov emlp --cov-report xml:cov.xml tests/product_groups_tests.py
+        pytest --cov emlp --cov-report xml:cov.xml tests/*.py
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:

@@ -1,10 +1,10 @@
-from emlp.nn import uniform_rep,MLP,EMLP,Standardize
-from equivariance_tests import parametrize,rel_error,scale_adjusted_rel_error
+import jax
 from jax import vmap
 import numpy as np
 from torch.utils.data import DataLoader
+from emlp.nn import uniform_rep,MLP,EMLP,Standardize
+from equivariance_tests import parametrize,rel_error,scale_adjusted_rel_error
 from oil.utils.utils import FixedNumpySeed, FixedPytorchSeed
-from trainer.utils import LoaderTo
 from emlp.datasets import Inertia,O5Synthetic,ParticleInteraction
 
 # def rel_err(a,b):
@@ -32,6 +32,7 @@ def test_init_forward_and_equivariance(dataset):
         ds = dataset(100)
     model = network(ds.rep_in,ds.rep_out,group=ds.symmetry)
     model = Standardize(model,ds.stats)
-    dataloader = LoaderTo(DataLoader(ds,batch_size=min(bs,len(ds)),num_workers=0,pin_memory=False))
+    dataloader = DataLoader(ds,batch_size=min(bs,len(ds)),num_workers=0,pin_memory=False)
     mb = next(iter(dataloader))
+    mb = jax.device_put(mb[0].numpy()),jax.device_put(mb[1].numpy())
     assert equivariance_err(model,mb) < 1e-4, "EMLP failed equivariance test"

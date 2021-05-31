@@ -29,37 +29,44 @@ class Rep(object):
         ⊕,⊗,dual, as well as incorporating custom representations. Rep objects should
         be immutable.
 
-        At minimum, new representations need to implement ``size``, ``rho``, ``__eq__``, and ``__hash__``."""
-    concrete=True
-    
-    def size(self): 
-        """ Dimension dim(V) of the representation """
-        raise NotImplementedError
+        At minimum, new representations need to implement ``rho``, ``__str__``."""
     
     def rho(self,M):
         """ Group representation of the matrix M of shape (d,d)"""
         raise NotImplementedError
+        
     def drho(self,A): 
         """ Lie Algebra representation of the matrix A of shape (d,d)"""
         In = jnp.eye(A.shape[0])
         return LazyJVP(self.rho,In,A)
 
-    def __eq__(self, other): 
-        raise NotImplementedError
-    def __hash__(self):
-        raise NotImplementedError
-
-    @property
-    def T(self):
-        """ Dual representation V*, rho*, drho*."""
-        raise NotImplementedError
     def __call__(self,G):
         """ Instantiate (non concrete) representation with a given symmetry group"""
         raise NotImplementedError
+
+    def __str__(self): raise NotImplementedError 
     #TODO: separate __repr__ and __str__?
     def __repr__(self): return str(self)
-    def __str__(self): raise NotImplementedError 
     
+    
+    def __eq__(self,other):
+        if type(self)!=type(other): return False
+        d1 = tuple([(k,v) for k,v in self.__dict__.items() if (k not in ['_size','is_permutation','is_orthogonal'])])
+        d2 = tuple([(k,v) for k,v in other.__dict__.items() if (k not in ['_size','is_permutation','is_orthogonal'])])
+        return d1==d2
+    def __hash__(self):
+        d1 = tuple([(k,v) for k,v in self.__dict__.items() if (k not in ['_size','is_permutation','is_orthogonal'])])
+        return hash((type(self),d1))
+
+    def size(self): 
+        """ Dimension dim(V) of the representation """
+        if hasattr(self,'_size'):
+            return self._size
+        elif self.concrete and hasattr(self,"G"):
+            self._size = self.rho(self.G.sample()).shape[-1]
+            return self._size
+        else: raise NotImplementedError
+
     def canonicalize(self): 
         """ An optional method to convert the representation into a canonical form
             in order to reuse equivalent solutions in the solver. Should return
@@ -112,6 +119,13 @@ class Rep(object):
         P = Q_lazy@Q_lazy.H
         return P
 
+    @property
+    def concrete(self):
+        return hasattr(self,"G") and self.G is not None
+        # if hasattr(self,"_concrete"): return self._concrete
+        # else:
+        #     return hasattr(self,"G") and self.G is not None
+
     def __add__(self, other):
         """ Direct sum (⊕) of representations. """
         if isinstance(other,int):
@@ -162,6 +176,7 @@ class Rep(object):
         raise NotImplementedError
     @property
     def T(self):
+        """ Dual representation V*, rho*, drho*."""
         if hasattr(self,"G") and (self.G is not None) and self.G.is_orthogonal: return self
         return Dual(self)
 
@@ -185,8 +200,7 @@ def mul_reps(ra:int,rb):
 class ScalarRep(Rep):
     def __init__(self,G=None):
         self.G=G
-        self.concrete = True#(G is not None)
-        self.is_regular = True
+        self.is_permutation = True
     def __call__(self,G):
         self.G=G
         return self
@@ -212,13 +226,15 @@ class ScalarRep(Rep):
     def __rmul__(self,other):
         if isinstance(other,int): return super().__rmul__(other)
         return other
+    @property
+    def concrete(self):
+        return True
 
 class Base(Rep):
     """ Base representation V of a group."""
     def __init__(self,G=None):
         self.G=G
-        self.concrete = (G is not None)
-        if G is not None: self.is_regular = G.is_regular
+        if G is not None: self.is_permutation = G.is_permutation
     def __call__(self,G):
         return self.__class__(G)
     def rho(self,M):
@@ -248,9 +264,8 @@ class Base(Rep):
 class Dual(Rep):
     def __init__(self,rep):
         self.rep = rep
-        self.concrete = rep.concrete
         self.G=rep.G
-        if hasattr(rep,"is_regular"): self.is_regular = rep.is_regular
+        if hasattr(rep,"is_permutation"): self.is_permutation = rep.is_permutation
     def __call__(self,G):
         return self.rep(G).T
     def rho(self,M):

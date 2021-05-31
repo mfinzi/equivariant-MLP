@@ -17,7 +17,7 @@ class Group(object,metaclass=Named):
     discrete_generators = NotImplemented  #: The discrete generators
     z_scale=None # For scale noise for sampling elements
     is_orthogonal=None
-    is_regular = None
+    is_permutation = None
     d = NotImplemented  #: The dimension of the base representation
     def __init__(self,*args,**kwargs):
         # get the dimension of the base group representation
@@ -37,7 +37,7 @@ class Group(object,metaclass=Named):
         if isinstance(self.discrete_generators,np.ndarray): self.discrete_generators = jax.device_put(self.discrete_generators)
 
         # Set orthogonal flag automatically if not specified
-        if self.is_regular: self.is_orthogonal=True
+        if self.is_permutation: self.is_orthogonal=True
         if self.is_orthogonal is None:
             self.is_orthogonal = True
             if len(self.lie_algebra)!=0:
@@ -48,12 +48,12 @@ class Group(object,metaclass=Named):
                 self.is_orthogonal &= rel_err(h_dense.transpose((0,2,1))@h_dense,jnp.eye(self.d))<1e-6
 
         # Set regular flag automatically if not specified
-        if self.is_orthogonal and (self.is_regular is None):
-            self.is_regular=True
-            self.is_regular &= (len(self.lie_algebra)==0)  # no infinitesmal generators and all rows have one 1
+        if self.is_orthogonal and (self.is_permutation is None):
+            self.is_permutation=True
+            self.is_permutation &= (len(self.lie_algebra)==0)  # no infinitesmal generators and all rows have one 1
             if len(self.discrete_generators)!=0:
                 h_dense = jnp.stack([hi@jnp.eye(self.d) for hi in self.discrete_generators])
-                self.is_regular &= ((h_dense==1).astype(int).sum(-1)==1).all()
+                self.is_permutation &= ((h_dense==1).astype(int).sum(-1)==1).all()
 
     def exp(self,A):
         """ Matrix exponential """
@@ -270,7 +270,35 @@ class S(Group): #The permutation group
         # adding superflous extra generators surprisingly can sometimes actually *decrease* 
         # the runtime of the iterative krylov solver by improving the conditioning 
         # of the constraint matrix
-        
+
+@export
+class SL(Group):
+    """ The special linear group SL(n) in n dimensions"""
+    def __init__(self,n):
+        self.lie_algebra = np.zeros((n*n-1,n,n))
+        k=0
+        for i in range(n):
+            for j in range(n):
+                if i==j: continue #handle diag elements separately
+                self.lie_algebra[k,i,j] = 1
+                k+=1
+        for l in range(n-1):
+            self.lie_algebra[k,l,l] = 1
+            self.lie_algebra[k,-1,-1] = -1
+            k+=1
+        super().__init__(n)
+
+@export
+class GL(Group):
+    """ The general linear group GL(n) in n dimensions"""
+    def __init__(self,n):
+        self.lie_algebra = np.zeros((n*n,n,n))
+        k=0
+        for i in range(n):
+            for j in range(n):
+                self.lie_algebra[k,i,j] = 1
+                k+=1
+        super().__init__(n)
 
 @export
 class U(Group):  # Of dimension n^2

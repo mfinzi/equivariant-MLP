@@ -36,11 +36,11 @@ class _Linear(nn.Module):
     cout:int
     @nn.compact
     def __call__(self,x):
-        w = self.param('w',nn.initializers.lecun_normal(),(x.shape[-1],self.cout))
+        w = self.param('w',nn.initializers.lecun_normal(),(self.cout,x.shape[-1]))
         b = self.param('b',nn.initializers.zeros,(self.cout,))
         W = (self.Pw@w.reshape(-1)).reshape(*w.shape)
         B = self.Pb@b
-        return x@W+B
+        return x@W.T+B
 
 @export
 def BiLinear(repin,repout):

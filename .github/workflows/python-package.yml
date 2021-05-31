@@ -21,6 +21,8 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install pytest
         python -m pip install pytest-cov
+        python -m pip install haiku
+        python -m pip install flax
         pip install -e .
     - name: Test coverage.
       run: |
@@ -29,5 +31,6 @@ jobs:
       uses: codecov/codecov-action@v1
       with:
         files: ./cov.xml
+        name: codecov-umbrella
         path_to_write_report: ./coverage/codecov_report.txt
         verbose: true

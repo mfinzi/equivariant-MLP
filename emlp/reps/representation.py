@@ -367,7 +367,7 @@ def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
     Q = device_put(U[:,:rank])
     # final_L
     final_L = loss_and_grad(Q)[0]
-    assert final_L <tol, f"Normalized basis has too high error {final_L:.2e} for tol {tol:.2e}"
+    if final_L >tol: logging.warning(f"Normalized basis has too high error {final_L:.2e} for tol {tol:.2e}")
     scutoff = (S[rank] if r>rank else 0)
     assert rank==0 or scutoff < S[rank-1]/100, f"Singular value gap too small: {S[rank-1]:.2e} \
         above cutoff {scutoff:.2e} below cutoff. Final L {final_L:.2e}, earlier {S[rank-5:rank]}"

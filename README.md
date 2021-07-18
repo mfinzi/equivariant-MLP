@@ -103,15 +103,17 @@ as belonging to 3 distinct classes of collisions. Since the outputs are simple l
 Lorentz transformation, and similarly with the charges.
 
 ```python
-import numpy as np
 import emlp
 from emlp.reps import T
 from emlp.groups import Lorentz
+import numpy as np
+
 repin = 4*T(1)+2*T(0) # 4 four vectors and 2 scalars for the charges
 repout = 3*T(0) # 3 output logits for the 3 classes of collisions
-model = emlp.nn.EMLP(repin,repout,group=Lorentz(),num_layers=3,ch=384)
+group = Lorentz()
+model = emlp.nn.EMLP(repin,repout,group=group,num_layers=3,ch=384)
 
-x = np.random.randn(repin.size())
+x = np.random.randn(32,repin(group).size()) # Create a minibatch of data
 y = model(x) # Outputs the 3 class logits
 ```
 

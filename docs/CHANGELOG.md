@@ -13,6 +13,7 @@ Remember to align the itemized text with the first line of an item within a list
 * Codebase improvements
   * Streamlined product_sum_reps direct sum and product rules, now with plumb dispatch
   * More general `Dual(Rep)` implementation that now works with any kind of Rep, not just `V`
+  * CI setup and with more tests
 
 ## EMLP 0.9.0
 * Cross Platform Support:

@@ -3,7 +3,7 @@ import jax
 from jax import jit
 import collections,itertools
 from functools import lru_cache as cache
-from .representation import Rep,ScalarRep
+from .representation import Rep,ScalarRep,Scalar
 from .linear_operator_base import LinearOperator
 from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify,product
 from functools import reduce
@@ -29,19 +29,20 @@ class SumRep(Rep):
 
     def size(self):
         return sum(rep.size()*count for rep,count in self.reps.items())
+
     def rho(self,M):
         rhos = [rep.rho(M) for rep in self.reps]
         multiplicities = self.reps.values()
         return LazyPerm(self.invperm)@LazyDirectSum(rhos,multiplicities)@LazyPerm(self.perm)
+
     def drho(self,A):
         drhos = [rep.drho(A) for rep in self.reps]
         multiplicities = self.reps.values()
         return LazyPerm(self.invperm)@LazyDirectSum(drhos,multiplicities)@LazyPerm(self.perm)
 
-    
     def __eq__(self, other):
         return self.reps==other.reps and (self.perm==other.perm).all()
-    
+
     def __hash__(self):
         assert self.canonical
         return hash(tuple(self.reps.items()))
@@ -126,7 +127,7 @@ class SumRep(Rep):
                 ids[i]+=+c*rep.size()
                 merged_cnt[rep]+=c
         return dict(merged_cnt),np.concatenate(permlist)
-    def __iter__(self): # not a great idea to use this method (ignores permutation ordering)
+    def __iter__(self):  # not a great idea to use this method (ignores permutation ordering)
         return (rep for rep,c in self.reps.items() for _ in range(c))
     def __len__(self):
         return sum(multiplicity for multiplicity in self.reps.values())
@@ -156,9 +157,8 @@ def mul_reps(ra,rb):  # base case
     if type(rb)==ScalarRep: return ra
     if not both_concrete(ra,rb):
         return DeferredProductRep(ra,rb)
-    try:
-        if ra.G==rb.G: return ProductRep(ra,rb)
-    except AttributeError: pass
+    if hasattr(ra,"G") and hasattr(rb,"G") and ra.G==rb.G:
+        return ProductRep(ra,rb)
     return DirectProduct(ra,rb)
 
 

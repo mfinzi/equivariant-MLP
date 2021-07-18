@@ -30,7 +30,9 @@ class Rep(object):
         be immutable.
 
         At minimum, new representations need to implement ``rho``, ``__str__``."""
-    
+        
+    is_permutation=False
+
     def rho(self,M):
         """ Group representation of the matrix M of shape (d,d)"""
         raise NotImplementedError

@@ -5,9 +5,18 @@ This is a comment.
 Remember to align the itemized text with the first line of an item within a list.
 -->
 
+## EMLP 1.0.0
+* New Features
+  * Flax support (see `using EMLP with Flax`)
+  * Auto generated `size()`, `__eq__`, `__hash__`, and `.T` methods for new representations
+  * You can now use ints in place of `Scalars` for direct sum, e.g. add `3+V`
+* Codebase improvements
+  * Streamlined product_sum_reps direct sum and product rules, now with plumb dispatch
+  * More general `Dual(Rep)` implementation that now works with any kind of Rep, not just `V`
+
 ## EMLP 0.9.0
 * Cross Platform Support:
-  * You can now use EMLP in PyTorch, check out `Using EMLP in PyTorch`
+  * You can now use EMLP in PyTorch, check out `Using EMLP with PyTorch`
   * You can also use EMLP with Haiku in jax, check out `Using EMLP with Haiku`
 
 * Bug Fixes

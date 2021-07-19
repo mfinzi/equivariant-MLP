@@ -5,7 +5,7 @@ from emlp.groups import SO, O, Trivial, O13, SO13, SO13p
 from oil.tuning.study import train_trial, Study
 
 from oil.tuning.args import argupdated_config
-from emlp.experiments.train_basic import makeTrainer
+from emlp.experiments.train_regression import makeTrainer
 import copy
 import emlp.datasets
 

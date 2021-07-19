@@ -52,11 +52,12 @@ def torchify_fn(function):
         the inputs to jax, runs through the jax function, and converts the output
         back to torch but preserving the gradients of the operation to be called
         with pytorch autograd. """
+    vjp = jit(lambda *args: jax.vjp(function,*args))
     class torched_fn(Function):
         @staticmethod
         def forward(ctx,*args):
             if any(ctx.needs_input_grad):
-                y,ctx.vjp_fn = jax.vjp(function,*to_jax(args))
+                y,ctx.vjp_fn = vjp(*to_jax(args))#jax.vjp(function,*to_jax(args))
                 return to_pytorch(y)
             return to_pytorch(function(*to_jax(args)))
         @staticmethod

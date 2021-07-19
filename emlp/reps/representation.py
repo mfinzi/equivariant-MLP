@@ -11,8 +11,9 @@ import logging
 import matplotlib.pyplot as plt
 from functools import reduce
 from oil.utils.utils import export
-import emlp.reps
 
+from plum import dispatch
+import emlp.reps
 #TODO: add rep,v = flatten({'Scalar':..., 'Vector':...,}), to_dict(rep,vector) returns {'Scalar':..., 'Vector':...,}
 #TODO and simpler rep = flatten({Scalar:2,Vector:10,...}),
 # Do we even want + operator to implement non canonical orderings?
@@ -28,37 +29,46 @@ class Rep(object):
         ⊕,⊗,dual, as well as incorporating custom representations. Rep objects should
         be immutable.
 
-        At minimum, new representations need to implement ``size``, ``rho``, ``__eq__``, and ``__hash__``."""
-    concrete=True
-    
-    def size(self): 
-        """ Dimension dim(V) of the representation """
-        raise NotImplementedError
-    
+        At minimum, new representations need to implement ``rho``, ``__str__``."""
+        
+    is_permutation=False
+
     def rho(self,M):
         """ Group representation of the matrix M of shape (d,d)"""
         raise NotImplementedError
+        
     def drho(self,A): 
         """ Lie Algebra representation of the matrix A of shape (d,d)"""
         In = jnp.eye(A.shape[0])
         return LazyJVP(self.rho,In,A)
 
-    def __eq__(self, other): 
-        raise NotImplementedError
-    def __hash__(self):
-        raise NotImplementedError
-
-    @property
-    def T(self):
-        """ Dual representation V*, rho*, drho*."""
-        raise NotImplementedError
     def __call__(self,G):
         """ Instantiate (non concrete) representation with a given symmetry group"""
         raise NotImplementedError
+
+    def __str__(self): raise NotImplementedError 
     #TODO: separate __repr__ and __str__?
     def __repr__(self): return str(self)
-    def __str__(self): raise NotImplementedError 
     
+    
+    def __eq__(self,other):
+        if type(self)!=type(other): return False
+        d1 = tuple([(k,v) for k,v in self.__dict__.items() if (k not in ['_size','is_permutation','is_orthogonal'])])
+        d2 = tuple([(k,v) for k,v in other.__dict__.items() if (k not in ['_size','is_permutation','is_orthogonal'])])
+        return d1==d2
+    def __hash__(self):
+        d1 = tuple([(k,v) for k,v in self.__dict__.items() if (k not in ['_size','is_permutation','is_orthogonal'])])
+        return hash((type(self),d1))
+
+    def size(self): 
+        """ Dimension dim(V) of the representation """
+        if hasattr(self,'_size'):
+            return self._size
+        elif self.concrete and hasattr(self,"G"):
+            self._size = self.rho(self.G.sample()).shape[-1]
+            return self._size
+        else: raise NotImplementedError
+
     def canonicalize(self): 
         """ An optional method to convert the representation into a canonical form
             in order to reuse equivalent solutions in the solver. Should return
@@ -111,49 +121,35 @@ class Rep(object):
         P = Q_lazy@Q_lazy.H
         return P
 
-    # This all would have been much less complicated with Julia style multiple dispatch
+    @property
+    def concrete(self):
+        return hasattr(self,"G") and self.G is not None
+        # if hasattr(self,"_concrete"): return self._concrete
+        # else:
+        #     return hasattr(self,"G") and self.G is not None
+
     def __add__(self, other):
         """ Direct sum (⊕) of representations. """
         if isinstance(other,int):
             if other==0: return self
-        elif all(rep.concrete for rep in (self,other) if hasattr(rep,'concrete')):
+            else: return self+other*Scalar
+        elif emlp.reps.product_sum_reps.both_concrete(self,other):
             return emlp.reps.product_sum_reps.SumRep(self,other)
         else:
             return emlp.reps.product_sum_reps.DeferredSumRep(self,other)
+
     def __radd__(self,other):
         if isinstance(other,int): 
             if other==0: return self
+            else: return other*Scalar+self
         else: return NotImplemented
         
     def __mul__(self,other):
         """ Tensor sum (⊗) of representations. """
-        if isinstance(other,(int,ScalarRep)):
-            if other==1 or other==Scalar: return self
-            if other==0: return 0
-            if (not hasattr(self,'concrete')) or self.concrete:
-                return emlp.reps.product_sum_reps.SumRep(*(other*[self]))
-            else:
-                return emlp.reps.product_sum_reps.DeferredSumRep(*(other*[self]))
-            return sum(other*[self])
-        elif all(rep.concrete for rep in (self,other) if hasattr(rep,'concrete')):
-            if any(isinstance(rep,emlp.reps.product_sum_reps.SumRep) for rep in [self,other]):
-                return emlp.reps.product_sum_reps.distribute_product([self,other])
-            elif (hasattr(self,'G') and hasattr(other,'G') and self.G!=other.G) or not (hasattr(self,'G') and hasattr(other,'G')):
-                return emlp.reps.product_sum_reps.DirectProduct(self,other)
-            else: 
-                return emlp.reps.product_sum_reps.ProductRep(self,other)
-        else:
-            return emlp.reps.product_sum_reps.DeferredProductRep(self,other)
+        return mul_reps(self,other)
             
     def __rmul__(self,other):
-        if isinstance(other,(int,ScalarRep)): 
-            if other==1 or other==Scalar: return self
-            if other==0: return 0
-            if (not hasattr(self,'concrete')) or self.concrete:
-                return emlp.reps.product_sum_reps.SumRep(*(other*[self]))
-            else:
-                return emlp.reps.product_sum_reps.DeferredSumRep(*(other*[self]))
-        else: return NotImplemented
+        return mul_reps(other,self)
 
     def __pow__(self,other):
         """ Iterated tensor product. """
@@ -180,16 +176,33 @@ class Rep(object):
     def __mod__(self,other): # Wreath product
         """ Wreath product of representations (Not yet implemented)"""
         raise NotImplementedError
-    # @property
-    # def T(self):
-    #     if hasattr(self,"G") and (self.G is not None) and self.G.is_orthogonal: return self
-    #     return Dual(self)
+    @property
+    def T(self):
+        """ Dual representation V*, rho*, drho*."""
+        if hasattr(self,"G") and (self.G is not None) and self.G.is_orthogonal: return self
+        return Dual(self)
+
+
+@dispatch
+def mul_reps(ra,rb:int):
+    if rb==1: return ra
+    if rb==0: return 0
+    if (not hasattr(ra,'concrete')) or ra.concrete:
+        return emlp.reps.product_sum_reps.SumRep(*(rb*[ra]))
+    else:
+        return emlp.reps.product_sum_reps.DeferredSumRep(*(rb*[ra]))
+
+@dispatch
+def mul_reps(ra:int,rb):
+    return mul_reps(rb,ra)
+
+# Continued with non int cases in product_sum_reps.py
+
 # A possible
 class ScalarRep(Rep):
     def __init__(self,G=None):
         self.G=G
-        self.concrete = True#(G is not None)
-        self.is_regular = True
+        self.is_permutation = True
     def __call__(self,G):
         self.G=G
         return self
@@ -215,13 +228,15 @@ class ScalarRep(Rep):
     def __rmul__(self,other):
         if isinstance(other,int): return super().__rmul__(other)
         return other
+    @property
+    def concrete(self):
+        return True
 
 class Base(Rep):
     """ Base representation V of a group."""
     def __init__(self,G=None):
         self.G=G
-        self.concrete = (G is not None)
-        if G is not None: self.is_regular = G.is_regular
+        if G is not None: self.is_permutation = G.is_permutation
     def __call__(self,G):
         return self.__class__(G)
     def rho(self,M):
@@ -244,57 +259,39 @@ class Base(Rep):
     def __lt__(self,other):
         if isinstance(other,Dual): return True
         return super().__lt__(other)
-    @property
-    def T(self):
-        return Dual(self.G)
+    # @property
+    # def T(self):
+    #     return Dual(self.G)
 
-class Dual(Base):
-    """ The dual representation V* of the Base representation of a group."""
-    def __new__(cls,G=None):
-        if G is not None and G.is_orthogonal: return Base(G)
-        else: return super(Dual,cls).__new__(cls)
+class Dual(Rep):
+    def __init__(self,rep):
+        self.rep = rep
+        self.G=rep.G
+        if hasattr(rep,"is_permutation"): self.is_permutation = rep.is_permutation
+    def __call__(self,G):
+        return self.rep(G).T
     def rho(self,M):
-        MinvT = M.invT() if hasattr(M,'invT') else jnp.linalg.inv(M).T
-        return MinvT
+        rho = self.rep.rho(M)
+        rhoinvT = rho.invT() if isinstance(rho,LinearOperator) else jnp.linalg.inv(rho).T
+        return rhoinvT
     def drho(self,A):
-        return -A.T
+        return -self.rep.drho(A).T
     def __str__(self):
-        return "V*"#+(f"_{self.G}" if self.G is not None else "")
+        return str(self.rep)+"*"
+    def __repr__(self): return str(self)
     @property
     def T(self):
-        return Base(self.G)
+        return self.rep
+    def __eq__(self,other):
+        return type(other)==type(self) and self.rep==other.rep
+    def __hash__(self):
+        return hash((type(self),self.rep))
     def __lt__(self,other):
-        if isinstance(other,Base): return False
+        if other==self.rep: return False
         return super().__lt__(other)
-
-# class Dual(Rep):
-#     def __init__(self,rep):
-#         self.rep = rep
-#         self.concrete = rep.concrete
-#         if hasattr(rep,"is_regular"): self.is_regular = rep.is_regular
-#     def __call__(self,G):
-#         return self.rep(G).T
-#     def rho(self,M):
-#         rho = self.rep.rho(M)
-#         rhoinvT = rho.invT() if isinstance(rep,LinearOperator) else jnp.linalg.inv(rho).T
-#         return rhoinvT
-#     def drho(self,A):
-#         return -self.rep.drho(A).T
-#     def __str__(self):
-#         return str(self.rep)+"*"
-#     def __repr__(self): return str(self)
-#     @property
-#     def T(self):
-#         return self.rep
-#     def __eq__(self,other):
-#         return type(other)==type(self) and self.rep==other.rep
-#     def __hash__(self):
-#         return hash((type(self),self.rep))
-#     def __lt__(self,other):
-#         if other==self.rep: return False
-#         return super().__lt__(other)
-#     def size(self):
-#         return self.rep.size()
+    def size(self):
+        return self.rep.size()
+        
 V=Vector= Base()  #: Alias V or Vector for an instance of the Base representation of a group
 
 Scalar = ScalarRep()#: An instance of the Scalar representation, equivalent to V**0
@@ -372,7 +369,7 @@ def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
     Q = device_put(U[:,:rank])
     # final_L
     final_L = loss_and_grad(Q)[0]
-    assert final_L <tol, f"Normalized basis has too high error {final_L:.2e} for tol {tol:.2e}"
+    if final_L >tol: logging.warning(f"Normalized basis has too high error {final_L:.2e} for tol {tol:.2e}")
     scutoff = (S[rank] if r>rank else 0)
     assert rank==0 or scutoff < S[rank-1]/100, f"Singular value gap too small: {S[rank-1]:.2e} \
         above cutoff {scutoff:.2e} below cutoff. Final L {final_L:.2e}, earlier {S[rank-5:rank]}"

@@ -3,15 +3,14 @@ import jax
 from jax import jit
 import collections,itertools
 from functools import lru_cache as cache
-from .representation import Rep
+from .representation import Rep,ScalarRep,Scalar
 from .linear_operator_base import LinearOperator
 from .linear_operators import LazyPerm,LazyDirectSum,LazyKron,LazyKronsum,I,lazy_direct_matmat,lazify,product
 from functools import reduce
 from collections import defaultdict
-
+from plum import dispatch
 
 class SumRep(Rep):
-    concrete=True
     def __init__(self,*reps,extra_perm=None):#repcounter,repperm=None):
         """ Constructs a tensor type based on a list of tensor ranks
             and possibly the symmetry generators gen."""
@@ -26,23 +25,24 @@ class SumRep(Rep):
         self.perm = extra_perm[perm] if extra_perm is not None else perm
         self.invperm = np.argsort(self.perm)
         self.canonical=(self.perm==np.arange(len(self.perm))).all()
-        self.is_regular = all(rep.is_regular for rep in self.reps.keys())
+        self.is_permutation = all(rep.is_permutation for rep in self.reps.keys())
 
     def size(self):
         return sum(rep.size()*count for rep,count in self.reps.items())
+
     def rho(self,M):
         rhos = [rep.rho(M) for rep in self.reps]
         multiplicities = self.reps.values()
         return LazyPerm(self.invperm)@LazyDirectSum(rhos,multiplicities)@LazyPerm(self.perm)
+
     def drho(self,A):
         drhos = [rep.drho(A) for rep in self.reps]
         multiplicities = self.reps.values()
         return LazyPerm(self.invperm)@LazyDirectSum(drhos,multiplicities)@LazyPerm(self.perm)
 
-    
     def __eq__(self, other):
         return self.reps==other.reps and (self.perm==other.perm).all()
-    
+
     def __hash__(self):
         assert self.canonical
         return hash(tuple(self.reps.items()))
@@ -67,6 +67,10 @@ class SumRep(Rep):
 
     def __call__(self,G):
         return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},perm=self.perm)
+
+    @property
+    def concrete(self):
+        return True
 
     def equivariant_basis(self):
         """ Overrides default implementation with a more efficient version which decomposes the constraints
@@ -123,7 +127,7 @@ class SumRep(Rep):
                 ids[i]+=+c*rep.size()
                 merged_cnt[rep]+=c
         return dict(merged_cnt),np.concatenate(permlist)
-    def __iter__(self): # not a great idea to use this method (ignores permutation ordering)
+    def __iter__(self):  # not a great idea to use this method (ignores permutation ordering)
         return (rep for rep,c in self.reps.items() for _ in range(c))
     def __len__(self):
         return sum(multiplicity for multiplicity in self.reps.values())
@@ -136,6 +140,28 @@ class SumRep(Rep):
             i+= chunk
         return out_dict
 
+
+
+def both_concrete(rep1,rep2):
+    return all(rep.concrete for rep in (rep1,rep2) if hasattr(rep,'concrete'))
+
+@dispatch.multi((SumRep,Rep),(Rep,SumRep),(SumRep,SumRep))
+def mul_reps(ra,rb):
+    if not both_concrete(ra,rb):
+        return DeferredProductRep(ra,rb)
+    return distribute_product([ra,rb])
+
+@dispatch
+def mul_reps(ra,rb):  # base case
+    if type(ra) is ScalarRep: return rb
+    if type(rb) is ScalarRep: return ra
+    if not both_concrete(ra,rb):
+        return DeferredProductRep(ra,rb)
+    if hasattr(ra,"G") and hasattr(rb,"G") and ra.G==rb.G:
+        return ProductRep(ra,rb)
+    return DirectProduct(ra,rb)
+
+
     
 #TODO: consolidate with the __init__ method of the basic SumRep
 class SumRepFromCollection(SumRep): # a different constructor for SumRep
@@ -145,7 +171,7 @@ class SumRepFromCollection(SumRep): # a different constructor for SumRep
         self.reps,self.perm = self.compute_canonical([counter],[self.perm])
         self.invperm = np.argsort(self.perm)
         self.canonical=(self.perm==np.arange(len(self.perm))).all()
-        self.is_regular = all(rep.is_regular for rep in self.reps.keys())
+        self.is_permutation = all(rep.is_permutation for rep in self.reps.keys())
         # if not self.canonical:
         #     print(self,self.perm,self.invperm)
 
@@ -203,7 +229,7 @@ def distribute_product(reps,extra_perm=None):
 def rep_permutation(repsizes_all):
     """Permutation from block ordering to flattened ordering"""
     size_cumsums = [np.cumsum([0] + [size for size in repsizes]) for repsizes in repsizes_all]
-    permutation = np.zeros([cumsum[-1] for cumsum in size_cumsums]).astype(np.int)
+    permutation = np.zeros([cumsum[-1] for cumsum in size_cumsums]).astype(int)
     arange = np.arange(permutation.size)
     indices_iter = itertools.product(*[range(len(repsizes)) for repsizes in repsizes_all])
     i = 0
@@ -216,7 +242,6 @@ def rep_permutation(repsizes_all):
     return np.argsort(permutation.reshape(-1))
 
 class ProductRep(Rep):
-    concrete=True
     def __init__(self,*reps,extra_perm=None,counter=None):
         #Two variants of the constructor:
         if counter is not None: #one with counter specified directly
@@ -236,7 +261,7 @@ class ProductRep(Rep):
         Gs = tuple(set(rep.G for rep in self.reps.keys()))
         assert len(Gs)==1, f"Multiple different groups {Gs} in product rep {self}"
         self.G= Gs[0]
-        self.is_regular = all(rep.is_regular for rep in self.reps.keys())
+        self.is_permutation = all(rep.is_permutation for rep in self.reps.keys())
 
     def size(self):
         return product([rep.size()**count for rep,count in self.reps.items()])
@@ -257,6 +282,10 @@ class ProductRep(Rep):
     def __eq__(self, other): #TODO: worry about non canonical?
         return isinstance(other,ProductRep) and self.reps==other.reps and (self.perm==other.perm).all()
     
+    @property
+    def concrete(self):
+        return True
+
     @property
     def T(self):
         """ only swaps to adjoint representation, does not reorder elems"""
@@ -339,7 +368,7 @@ class DirectProduct(ProductRep):
         self.canonical=(self.perm==self.invperm).all()
         # self.G = tuple(set(rep.G for rep in self.reps.keys()))
         # if len(self.G)==1: self.G= self.G[0]
-        self.is_regular = all(rep.is_regular for rep in self.reps.keys())
+        self.is_permutation = all(rep.is_permutation for rep in self.reps.keys())
         assert all(count==1 for count in self.reps.values())
 
     def equivariant_basis(self):
@@ -364,7 +393,6 @@ class DirectProduct(ProductRep):
 
 
 class DeferredSumRep(Rep):
-    concrete=False
     def __init__(self,*reps):
         self.to_sum=[]
         for rep in reps:
@@ -381,9 +409,11 @@ class DeferredSumRep(Rep):
     @property
     def T(self):
         return DeferredSumRep(*[rep.T for rep in self.to_sum])
+    @property
+    def concrete(self):
+        return False
 
 class DeferredProductRep(Rep):
-    concrete=False
     def __init__(self,*reps):
         self.to_prod=[]
         for rep in reps:
@@ -399,3 +429,6 @@ class DeferredProductRep(Rep):
     @property
     def T(self):
         return DeferredProductRep(*[rep.T for rep in self.to_prod])
+    @property
+    def concrete(self):
+        return False

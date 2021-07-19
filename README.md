@@ -3,20 +3,43 @@
 </div>
 
 # A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
-[![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | [![Paper](https://img.shields.io/badge/arXiv-2104.09459-red)](https://arxiv.org/abs/2104.09459) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/docs/notebooks/colabs/all.ipynb) | [![PyPI version](https://img.shields.io/pypi/v/emlp)](https://pypi.org/project/emlp/)
+[![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | [![Paper](https://img.shields.io/badge/arXiv-2104.09459-red)](https://arxiv.org/abs/2104.09459) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/docs/notebooks/colabs/all.ipynb) | 
+[![codecov.io](https://codecov.io/github/mfinzi/equivariant-MLP/coverage.svg?branch=dev)](https://codecov.io/github/mfinzi/equivariant-MLP?branch=dev)
+| [![PyPI version](https://img.shields.io/pypi/v/emlp)](https://pypi.org/project/emlp/) 
+<!-- [![tests](https://github.com/mfinzi/equivariant-MLP/actions/workflows/python-package.yml/badge.svg?branch=dev)](https://github.com/mfinzi/equivariant-MLP/actions/workflows/python-package.yml) |  -->
+<!-- | [![codecov](https://codecov.io/gh/mfinzi/equivariant-MLP/branch/master/graph/badge.svg?token=DYAFHK68JX)](https://codecov.io/gh/mfinzi/equivariant-MLP) -->
 
 
-*EMLP* is a jax library for the automated construction of equivariant layers in deep learning. You can read the documentation [here](https://emlp.readthedocs.io/en/latest/).
+*EMLP* is a jax library for the automated construction of equivariant layers in deep learning based on the ICML2021 paper [A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups](https://arxiv.org/abs/2104.09459). You can read the documentation [here](https://emlp.readthedocs.io/en/latest/).
 <!-- #and paper [here](https://arxiv.org/abs/2104.09459).  -->
 
+## What EMLP is great at doing
 
+- Computing equivariant linear layers between finite dimensional
+representations. You specify the symmetry group (discrete, continuous,
+non compact, complex) and the representations (tensors, irreducibles, induced representations, etc), and we will compute the basis of equivariant
+maps mapping from one to the other within a dense matrix.
+
+- Automatic construction of full equivariant models for small data. E.g.
+if your inputs and outputs (and intended features) are a small collection of elements like scalars, vectors, tensors, irreps with a total dimension less than 1000, then you will likely be able to use EMLP as a turnkey solution for making the model or atleast function as a strong baseline.
+
+- As a tool for building larger models, but where EMLP is just one component in a larger system. For example, using EMLP as the convolution kernel in an equivariant PointConv network.
+
+## What EMLP is not great at doing (yet?)
+
+- An efficient implementation of CNNs, Deep Sets, typical translation + rotation equivariant GCNNs, graph neural networks.
+
+- Handling large data like images, voxel grids, medium-large graphs, point clouds.
+
+Given the current approach, EMLP can only ever be as fast as an MLP. So if flattening the inputs into a single vector would be too large to train with an MLP, then it will also be too large to train with EMLP.
 
 --------------------------------------------------------------------------------
+
+# Showcasing some examples of computing equivariant bases
 
 We provide a type system for representations. With the operators ρᵤ⊗ρᵥ, ρᵤ⊕ρᵥ, ρ* implemented as `*`,`+` and `.T` build up different representations. The basic building blocks for representations are the base vector representation `V` and tensor representations `T(p,q) = V**p*V.T**q`. 
 
 For any given matrix group and representation formed in our type system, you can get the equivariant basis with [`rep.equivariant_basis()`](https://emlp.readthedocs.io/en/latest/package/emlp.reps.html#emlp.reps.equivariant_basis) or a matrix which projects to that subspace with [`rep.equivariant_projector()`](https://emlp.readthedocs.io/en/latest/package/emlp.reps.html#emlp.reps.equivariant_projector). 
-
 
 For example to find all O(1,3) (Lorentz) equivariant linear maps from from a 4-Vector Xᶜ to a rank (2,1) tensor Mᵇᵈₐ, you can run
 
@@ -72,6 +95,29 @@ You can visualize these equivariant bases with [`vis(repin,repout)`](https://eml
 
 Checkout our [documentation](https://emlp.readthedocs.io/en/latest/) to see how to use our system and some worked examples.
 
+# Simple example of using EMLP as a full equivariant model
+
+Suppose we want to construct a Lorentz equivariant model for particle physics data that takes in the input and output 4-momentum of two particles
+in a collision, as well as a some metadata about these particles like their charge, and we want to classify the output
+as belonging to 3 distinct classes of collisions. Since the outputs are simple logits, they should be unchanged by
+Lorentz transformation, and similarly with the charges.
+
+```python
+import emlp
+from emlp.reps import T
+from emlp.groups import Lorentz
+import numpy as np
+
+repin = 4*T(1)+2*T(0) # 4 four vectors and 2 scalars for the charges
+repout = 3*T(0) # 3 output logits for the 3 classes of collisions
+group = Lorentz()
+model = emlp.nn.EMLP(repin,repout,group=group,num_layers=3,ch=384)
+
+x = np.random.randn(32,repin(group).size()) # Create a minibatch of data
+y = model(x) # Outputs the 3 class logits
+```
+
+Here we have used the default Objax EMLP, but you can also use our [PyTorch](https://emlp.readthedocs.io/en/latest/notebooks/pytorch_support.html), [Haiku](https://emlp.readthedocs.io/en/latest/notebooks/haiku_support.html), or [Flax]() versions of the models. To see more examples, or how to use your own representations or symmetry groups, check out the documentation.
 
 # Installation instructions
 

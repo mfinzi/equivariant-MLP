@@ -69,7 +69,7 @@ def gated(sumrep): #TODO: generalize to mixed tensors?
     """ Returns the rep with an additional scalar 'gate' for each of the nonscalars and non regular
         reps in the input. To be used as the output for linear (and or bilinear) layers directly
         before a :func:`GatedNonlinearity` to produce its scalar gates. """
-    return sumrep+sum([Scalar(rep.G) for rep in sumrep if rep!=Scalar and not rep.is_regular])
+    return sumrep+sum([Scalar(rep.G) for rep in sumrep if rep!=Scalar and not rep.is_permutation])
 
 @export
 class GatedNonlinearity(Module): #TODO: add support for mixed tensors and non sumreps
@@ -188,7 +188,7 @@ class EMLP(Module,metaclass=Named):
         else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
         #assert all((not rep.G is None) for rep in middle_layers[0].reps)
         reps = [self.rep_in]+middle_layers
-        #logging.info(f"Reps: {reps}")
+        logging.info(f"Reps: {reps}")
         self.network = Sequential(
             *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
             Linear(reps[-1],self.rep_out)
@@ -334,7 +334,7 @@ def gate_indices(sumrep): #TODO: add support for mixed_tensors
     num_nonscalars = 0
     i=0
     for rep in sumrep:
-        if rep!=Scalar and not rep.is_regular:
+        if rep!=Scalar and not rep.is_permutation:
             indices[perm[i:i+rep.size()]] = channels+num_nonscalars
             num_nonscalars+=1
         i+=rep.size()

@@ -158,7 +158,7 @@ def test_equivariant_matrix(G,repin,repout):
     #print(g.shape,(x@W.T).shape)
     gWx = (routg@(x@W.T)[...,None])[...,0]
     equiv_err = rel_error(Wgx,gWx)
-    assert equiv_err<1e-5,f"Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G}"
+    assert equiv_err<3e-5,f"Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G}"
 
     # print(f"R {repW.rho(gs[0])}")
     # print(f"R1 x R2 {jnp.kron(routg[0],jnp.linalg.inv(ring[0]).T)}")

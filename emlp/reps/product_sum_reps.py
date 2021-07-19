@@ -153,8 +153,8 @@ def mul_reps(ra,rb):
 
 @dispatch
 def mul_reps(ra,rb):  # base case
-    if type(ra)==ScalarRep: return rb
-    if type(rb)==ScalarRep: return ra
+    if type(ra) is ScalarRep: return rb
+    if type(rb) is ScalarRep: return ra
     if not both_concrete(ra,rb):
         return DeferredProductRep(ra,rb)
     if hasattr(ra,"G") and hasattr(rb,"G") and ra.G==rb.G:

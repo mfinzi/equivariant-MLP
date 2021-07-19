@@ -18,7 +18,7 @@
 - Computing equivariant linear layers between finite dimensional
 representations. You specify the symmetry group (discrete, continuous,
 non compact, complex) and the representations (tensors, irreducibles, induced representations, etc), and we will compute the basis of equivariant
-maps mapping from one to the other within a dense matrix.
+maps mapping from one to the other.
 
 - Automatic construction of full equivariant models for small data. E.g.
 if your inputs and outputs (and intended features) are a small collection of elements like scalars, vectors, tensors, irreps with a total dimension less than 1000, then you will likely be able to use EMLP as a turnkey solution for making the model or atleast function as a strong baseline.

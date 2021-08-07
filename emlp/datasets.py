@@ -1,11 +1,7 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import jax.numpy as jnp
 from emlp.reps import Scalar,Vector,T
-from torch.utils.data import Dataset
-from oil.utils.utils import export,Named,Expression,FixedNumpySeed
+from emlp.utils import export,Named
 from emlp.groups import SO,O,Trivial,Lorentz,RubiksCube,Cube
 from functools import partial
 import itertools
@@ -13,23 +9,21 @@ from jax import vmap,jit
 from objax import Module
 
 @export
-class Inertia(Dataset):
+class Inertia(object):
     def __init__(self,N=1024,k=5):
         super().__init__()
         self.dim = (1+3)*k
-        self.X = torch.randn(N,self.dim)
-        self.X[:,:k] = F.softplus(self.X[:,:k]) # Masses
+        self.X = np.random.randn(N,self.dim)
+        self.X[:,:k] = np.log(1+np.exp(self.X[:,:k])) # Masses
         mi = self.X[:,:k]
         ri = self.X[:,k:].reshape(-1,k,3)
-        I = torch.eye(3)
+        I = np.eye(3)
         r2 = (ri**2).sum(-1)[...,None,None]
         inertia = (mi[:,:,None,None]*(r2*I - ri[...,None]*ri[...,None,:])).sum(1)
         self.Y = inertia.reshape(-1,9)
         self.rep_in = k*Scalar+k*Vector
         self.rep_out = T(2)
         self.symmetry = O(3)
-        self.X = self.X.numpy()
-        self.Y = self.Y.numpy()
         # One has to be careful computing offset and scale in a way so that standardizing
         # does not violate equivariance
         Xmean = self.X.mean(0)
@@ -51,24 +45,23 @@ class Inertia(Dataset):
         return GroupAugmentation(model,self.rep_in,self.rep_out,self.symmetry)
 
 @export
-class O5Synthetic(Dataset):
+class O5Synthetic(object):
     def __init__(self,N=1024):
         super().__init__()
         d=5
         self.dim = 2*d
-        self.X = torch.randn(N,self.dim)
+        self.X = np.random.randn(N,self.dim)
         ri = self.X.reshape(-1,2,5)
         r1,r2 = ri.transpose(0,1)
         self.Y = (r1**2).sum(-1).sqrt().sin()-.5*(r2**2).sum(-1).sqrt()**3 + (r1*r2).sum(-1)/((r1**2).sum(-1).sqrt()*(r2**2).sum(-1).sqrt())
         self.rep_in = 2*Vector
         self.rep_out = Scalar
         self.symmetry = O(d)
-        self.X = self.X.numpy()
-        self.Y = self.Y.numpy()[...,None]
+        self.Y = self.Y[...,None]
         # One has to be careful computing mean and std in a way so that standardizing
         # does not violate equivariance
         Xmean = self.X.mean(0) # can add and subtract arbitrary tensors
-        Xscale = (np.sqrt((self.X.reshape(N,2,d)**2).mean((0,2)))[:,None]+0*ri[0].numpy()).reshape(self.dim)
+        Xscale = (np.sqrt((self.X.reshape(N,2,d)**2).mean((0,2)))[:,None]+0*ri[0]).reshape(self.dim)
         self.stats = 0,Xscale,self.Y.mean(axis=0),self.Y.std(axis=0)
 
     def __getitem__(self,i):
@@ -79,28 +72,27 @@ class O5Synthetic(Dataset):
         return GroupAugmentation(model,self.rep_in,self.rep_out,self.symmetry)
 
 @export
-class ParticleInteraction(Dataset):
+class ParticleInteraction(object):
     """ Electron muon e^4 interaction"""
     def __init__(self,N=1024):
         super().__init__()
         self.dim = 4*4
         self.rep_in = 4*Vector
         self.rep_out = Scalar
-        self.X = torch.randn(N,self.dim)/4
+        self.X = np.random.randn(N,self.dim)/4
         P = self.X.reshape(N,4,4)
-        p1,p2,p3,p4 = P.permute(1,0,2)
-        𝜂 = torch.diag(torch.tensor([1.,-1.,-1.,-1.]))
+        p1,p2,p3,p4 = P.transpose(1,0,2)
+        𝜂 = np.diag(np.array([1.,-1.,-1.,-1.]))
         dot = lambda v1,v2: ((v1@𝜂)*v2).sum(-1)
         Le = (p1[:,:,None]*p3[:,None,:] - (dot(p1,p3)-dot(p1,p1))[:,None,None]*𝜂)
         L𝜇 = ((p2@𝜂)[:,:,None]*(p4@𝜂)[:,None,:] - (dot(p2,p4)-dot(p2,p2))[:,None,None]*𝜂)
         M = 4*(Le*L𝜇).sum(-1).sum(-1)
         self.Y = M
         self.symmetry = Lorentz()
-        self.X = self.X.numpy()
-        self.Y = self.Y.numpy()[...,None]
+        self.Y = self.Y[...,None]
         # One has to be careful computing mean and std in a way so that standardizing
         # does not violate equivariance
-        self.Xscale = np.sqrt((np.abs((self.X.reshape(N,4,4)@𝜂.numpy())*self.X.reshape(N,4,4)).mean(-1)).mean(0))
+        self.Xscale = np.sqrt((np.abs((self.X.reshape(N,4,4)@𝜂)*self.X.reshape(N,4,4)).mean(-1)).mean(0))
         self.Xscale = (self.Xscale[:,None]+np.zeros((4,4))).reshape(-1)
         self.stats = 0,self.Xscale,self.Y.mean(axis=0),self.Y.std(axis=0)#self.X.mean(axis=0),self.X.std(axis=0),
     def __getitem__(self,i):
@@ -128,7 +120,7 @@ class GroupAugmentation(Module):
             return self.model(x,False)
 
 @export
-class InvertedCube(Dataset):
+class InvertedCube(object):
     def __init__(self,train=True):
         pass #TODO: finish implementing this simple dataset
         solved_state = np.eye(6)
@@ -186,7 +178,7 @@ def LBface_swap(state):
 
 
 @export
-class BrokenRubiksCube(Dataset):
+class BrokenRubiksCube(object):
     """ Binary classification problem of predicting whether a Rubik's cube configuration
         is solvable or 'broken' and not able to be solved by transformations from the group
         e.g. by removing and twisting a corner before replacing.
@@ -235,7 +227,7 @@ class BrokenRubiksCube(Dataset):
         return self.X.shape[0]
 
 # @export
-# class BrokenRubiksCube2x2(Dataset):
+# class BrokenRubiksCube2x2(object):
 #     """ Binary classification problem of predicting whether a Rubik's cube configuration
 #         is solvable or 'broken' and not able to be solved by transformations from the group
 #         e.g. by removing and twisting a corner before replacing.

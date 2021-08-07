@@ -11,7 +11,7 @@ import types
 from functools import partial
 from emlp.reps import T,Rep,Scalar
 from emlp.reps import bilinear_weights
-from oil.utils.utils import Named,export
+from emlp.utils import Named,export
 import logging
 import torch
 import torch.nn as nn

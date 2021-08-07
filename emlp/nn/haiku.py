@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 from emlp.reps import Rep
 from emlp.reps import bilinear_weights
-from oil.utils.utils import export
+from emlp.utils import export
 import logging
 import haiku as hk
 from emlp.nn import gated,gate_indices,uniform_rep

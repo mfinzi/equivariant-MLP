@@ -131,7 +131,7 @@ To run the scripts you will instead need to clone the repo and install it locall
 ```bash
 git clone https://github.com/mfinzi/equivariant-MLP.git
 cd equivariant-MLP
-pip install -e .
+pip install -e .[EXPTS]
 ```
 
 # Experimental Results from Paper

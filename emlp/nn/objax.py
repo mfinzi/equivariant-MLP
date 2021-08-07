@@ -7,7 +7,7 @@ from emlp.reps import T,Rep,Scalar
 from emlp.reps import bilinear_weights
 from emlp.reps.product_sum_reps import SumRep
 import collections
-from oil.utils.utils import Named,export
+from emlp.utils import Named,export
 import scipy as sp
 import scipy.special
 import random
@@ -55,7 +55,7 @@ class BiLinear(Module):
         super().__init__()
         Wdim, weight_proj = bilinear_weights(repout,repin)
         self.weight_proj = jit(weight_proj)
-        self.w = TrainVar(objax.random.normal((Wdim,)))#xavier_normal((Wdim,))) #TODO: revert to xavier
+        self.w = TrainVar(objax.random.normal((Wdim,)))
         logging.info(f"BiW components: dim:{Wdim}")
 
     def __call__(self, x,training=True):
@@ -65,17 +65,20 @@ class BiLinear(Module):
         return out
 
 @export
-def gated(sumrep): #TODO: generalize to mixed tensors?
+def gated(ch_rep:Rep) -> Rep:
     """ Returns the rep with an additional scalar 'gate' for each of the nonscalars and non regular
         reps in the input. To be used as the output for linear (and or bilinear) layers directly
         before a :func:`GatedNonlinearity` to produce its scalar gates. """
-    return sumrep+sum([Scalar(rep.G) for rep in sumrep if rep!=Scalar and not rep.is_permutation])
+    if isinstance(ch_rep,SumRep):
+        return ch_rep+sum([Scalar(rep.G) for rep in ch_rep if rep!=Scalar and not rep.is_permutation])
+    else:
+        return ch_rep+Scalar(ch_rep.G) if not ch_rep.is_permutation else ch_rep
 
 @export
-class GatedNonlinearity(Module): #TODO: add support for mixed tensors and non sumreps
+class GatedNonlinearity(Module):
     """ Gated nonlinearity. Requires input to have the additional gate scalars
         for every non regular and non scalar rep. Applies swish to regular and
-        scalar reps. (Right now assumes rep is a SumRep)"""
+        scalar reps. """
     def __init__(self,rep):
         super().__init__()
         self.rep=rep
@@ -100,9 +103,11 @@ class EMLPBlock(Module):
 
 def uniform_rep_general(ch,*rep_types):
     """ adds all combinations of (powers of) rep_types up to
-        a total of ch channels."""
-    #TODO: write this function
+        a total size of ch channels. """
     raise NotImplementedError
+    
+    
+    
 
 @export
 def uniform_rep(ch,group):
@@ -324,16 +329,19 @@ class EMLPH(EMLP):
 
 @export
 @cache(maxsize=None)
-def gate_indices(sumrep): #TODO: add support for mixed_tensors
+def gate_indices(ch_rep:Rep) -> jnp.ndarray:
     """ Indices for scalars, and also additional scalar gates
         added by gated(sumrep)"""
-    assert isinstance(sumrep,SumRep), f"unexpected type for gate indices {type(sumrep)}"
-    channels = sumrep.size()
-    perm = sumrep.perm
+    channels = ch_rep.size()
+    perm = ch_rep.perm
     indices = np.arange(channels)
+
+    if not isinstance(ch_rep,SumRep): # If just a single rep, only one scalar at end
+        return indices if ch_rep.is_permutation else np.ones(ch_rep.size())*ch_rep.size()
+
     num_nonscalars = 0
     i=0
-    for rep in sumrep:
+    for rep in ch_rep:
         if rep!=Scalar and not rep.is_permutation:
             indices[perm[i:i+rep.size()]] = channels+num_nonscalars
             num_nonscalars+=1

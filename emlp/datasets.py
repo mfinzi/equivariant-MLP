@@ -52,8 +52,8 @@ class O5Synthetic(object):
         self.dim = 2*d
         self.X = np.random.randn(N,self.dim)
         ri = self.X.reshape(-1,2,5)
-        r1,r2 = ri.transpose(0,1)
-        self.Y = (r1**2).sum(-1).sqrt().sin()-.5*(r2**2).sum(-1).sqrt()**3 + (r1*r2).sum(-1)/((r1**2).sum(-1).sqrt()*(r2**2).sum(-1).sqrt())
+        r1,r2 = ri.transpose(1,0,2)
+        self.Y = np.sin(np.sqrt((r1**2).sum(-1)))-.5*np.sqrt((r2**2).sum(-1))**3 + (r1*r2).sum(-1)/(np.sqrt((r1**2).sum(-1))*np.sqrt((r2**2).sum(-1)))
         self.rep_in = 2*Vector
         self.rep_out = Scalar
         self.symmetry = O(d)

@@ -2,9 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [dev]
+    branches:
+      - '**'        # matches every branch
   pull_request:
-    branches: [dev]
+    branches:
+      - '**'        # matches every branch
 
   workflow_dispatch:
 
@@ -23,7 +25,7 @@ jobs:
         python -m pip install pytest-cov
         pip install git+https://github.com/deepmind/dm-haiku
         python -m pip install flax
-        pip install -e .
+        pip install -e .[EXPTS]
     - name: Test coverage.
       run: |
         pytest --cov emlp --cov-report xml:cov.xml tests/*.py

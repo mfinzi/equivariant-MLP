@@ -117,7 +117,7 @@ x = np.random.randn(32,repin(group).size()) # Create a minibatch of data
 y = model(x) # Outputs the 3 class logits
 ```
 
-Here we have used the default Objax EMLP, but you can also use our [PyTorch](https://emlp.readthedocs.io/en/latest/notebooks/pytorch_support.html), [Haiku](https://emlp.readthedocs.io/en/latest/notebooks/haiku_support.html), or [Flax]() versions of the models. To see more examples, or how to use your own representations or symmetry groups, check out the documentation.
+Here we have used the default Objax EMLP, but you can also use our [PyTorch](https://emlp.readthedocs.io/en/latest/notebooks/pytorch_support.html), [Haiku](https://emlp.readthedocs.io/en/latest/notebooks/haiku_support.html), or [Flax](https://emlp.readthedocs.io/en/latest/notebooks/flax_support.html) versions of the models. To see more examples, or how to use your own representations or symmetry groups, check out the documentation.
 
 # Installation instructions
 

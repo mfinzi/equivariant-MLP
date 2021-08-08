@@ -9,7 +9,7 @@
 #     except AttributeError: continue
 # # concatenate the __all__ from each of the submodules (expose to user)
 
-__version__ = '0.9.1'
+__version__ = '1.0.1'
 from .nn import *
 from .groups import *
 from .reps import *

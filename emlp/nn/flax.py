@@ -7,7 +7,7 @@ from emlp.reps import bilinear_weights
 from emlp.reps.linear_operator_base import LinearOperator
 from emlp.reps.product_sum_reps import SumRep
 from emlp.groups import Group
-from oil.utils.utils import Named,export
+from emlp.utils import Named,export
 from flax import linen as nn
 import logging
 from emlp.nn import gated,gate_indices,uniform_rep

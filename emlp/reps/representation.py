@@ -10,7 +10,7 @@ from .linear_operators import ConcatLazy, I, lazify, densify, LazyJVP
 import logging
 import matplotlib.pyplot as plt
 from functools import reduce
-from oil.utils.utils import export
+from emlp.utils import export
 
 from plum import dispatch
 import emlp.reps
@@ -418,6 +418,7 @@ def sparsify_basis(Q,lr=1e-2): #(n,r)
 def bilinear_weights(out_rep,in_rep):
     #TODO: replace lazy_projection function with LazyDirectSum LinearOperator
     W_rep,W_perm = (in_rep>>out_rep).canonicalize()
+    # possible bug when in_rep and out_rep are both non sumreps? #TODO: investigate
     inv_perm = np.argsort(W_perm)
     mat_shape = out_rep.size(),in_rep.size()
     x_rep=in_rep

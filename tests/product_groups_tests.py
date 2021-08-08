@@ -21,7 +21,7 @@ def test_symmetric_mixed_tensor(G1,G2):
     samples = {G1:G1.samples(N),G2:G2.samples(N)}
     gv = (vmap(rep.rho_dense)(samples)*v).sum(-1)
     err = rel_error(gv,v+jnp.zeros_like(gv))
-    assert err<1e-5,f"Symmetric vector fails err {err:.3e} with G={G1}x{G2}"
+    assert err<3e-5,f"Symmetric vector fails err {err:.3e} with G={G1}x{G2}"
 
 
 @parametrize([(SO(3),S(5)),(S(5),SO(3))])
@@ -34,7 +34,7 @@ def test_symmetric_mixed_tensor_sum(G1,G2):
     samples = {G1:G1.samples(N),G2:G2.samples(N)}
     gv = (vmap(rep.rho_dense)(samples)*v).sum(-1)
     err = rel_error(gv,v+jnp.zeros_like(gv))
-    assert err<1e-5,f"Symmetric vector fails err {err:.3e} with G={G1}x{G2}"
+    assert err<3e-5,f"Symmetric vector fails err {err:.3e} with G={G1}x{G2}"
 
 
 @parametrize([(SO(3),S(5)),(S(5),SO(3))])
@@ -60,7 +60,7 @@ def test_symmetric_mixed_products(G1,G2):
     samples = {G1:g1s,G2:g2s}
     gv = (vmap(rep.rho_dense)(samples)*v).sum(-1)
     err = rel_error(gv,v+jnp.zeros_like(gv))
-    assert err<1e-5,f"Symmetric vector fails err {err:.3e} with G={G1}x{G2}"
+    assert err<3e-5,f"Symmetric vector fails err {err:.3e} with G={G1}x{G2}"
 
 @parametrize([(SO(3),S(5)),(S(5),SO(3))])
 def test_equivariant_matrix(G1,G2):
@@ -81,7 +81,7 @@ def test_equivariant_matrix(G1,G2):
     #print(g.shape,(x@W.T).shape)
     gWx = (routg@(x@W.T)[...,None])[...,0]
     equiv_err = rel_error(Wgx,gWx)
-    assert equiv_err<1e-5,f"Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G1}x{G2}"
+    assert equiv_err<3e-5,f"Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G1}x{G2}"
     # too much memory to run
     # gvecW = (vmap(repW.rho_dense)(samples)*W.reshape(-1)).sum(-1)
     # for i in range(N):

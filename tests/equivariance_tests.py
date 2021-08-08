@@ -62,10 +62,12 @@ def parametrize(cases,ids=None):
 #     return x
 
 test_groups = [SO(n) for n in [2,3,4]]+[O(n) for n in [2,3,4]]+\
-                    [SU(n) for n in [2,3,4]] +\
+                    [SU(n) for n in [2,3,4]] + [U(n) for n in [2,3,4]] + \
+                    [SL(n) for n in [2,3,4]] + [GL(n) for n in [2,3,4]] + \
                     [C(k) for k in [2,3,4,8]]+[D(k) for k in [2,3,4,8]]+\
                     [S(n) for n in [2,4,6]]+[Z(n) for n in [2,4,6]]+\
-                    [SO11p(),SO13p(),SO13(),O13()] +[Sp(n) for n in [1,3]]+[RubiksCube()]
+                    [SO11p(),SO13p(),SO13(),O13()] +[Sp(n) for n in [1,3]]+\
+                    [RubiksCube(),Cube(),ZksZnxZn(2,2),ZksZnxZn(4,4)]
 # class TestRepresentationSubspace(unittest.TestCase): pass
 # expand_test_cases = partial(expand_cases,TestRepresentationSubspace)
 
@@ -83,7 +85,7 @@ def test_sum(G):
     gs = G.samples(N)
     gv = (vmap(rep.rho_dense)(gs)*v).sum(-1)
     err = vmap(scale_adjusted_rel_error)(gv,v+jnp.zeros_like(gv),gs).mean()
-    assert err<1e-5,f"Symmetric vector fails err {err:.3e} with G={G}"
+    assert err<1e-4,f"Symmetric vector fails err {err:.3e} with G={G}"
 
 #@pytest.mark.parametrize("G",test_groups,ids=test_group_names)
 @parametrize([group for group in test_groups if group.d<5])
@@ -158,13 +160,13 @@ def test_equivariant_matrix(G,repin,repout):
     #print(g.shape,(x@W.T).shape)
     gWx = (routg@(x@W.T)[...,None])[...,0]
     equiv_err = rel_error(Wgx,gWx)
-    assert equiv_err<3e-5,f"Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G}"
+    assert equiv_err<1e-4,f"Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G}"
 
     # print(f"R {repW.rho(gs[0])}")
     # print(f"R1 x R2 {jnp.kron(routg[0],jnp.linalg.inv(ring[0]).T)}")
     gvecW = (vmap(repW.rho_dense)(gs)*W.reshape(-1)).sum(-1)
     gWerr =vmap(scale_adjusted_rel_error)(gvecW,W.reshape(-1)+jnp.zeros_like(gvecW),gs).mean()
-    assert gWerr<1e-5,f"Symmetric gvec(W)=vec(W) fails err {gWerr:.3e} with G={G}"
+    assert gWerr<1e-4,f"Symmetric gvec(W)=vec(W) fails err {gWerr:.3e} with G={G}"
 
 @parametrize([(SO(3),5*T(0)+5*T(1),3*T(0)+T(2)+2*T(1)),
                     (SO13p(),4*T(1,0),10*T(0)+3*T(1,0)+3*T(0,1)+T(0,2)+T(2,0)+T(1,1))])    
@@ -186,7 +188,7 @@ def test_bilinear_layer(G,repin,repout):
     gWxx = (routg@Wxx[...,None])[...,0]
     Wgxgx =(P(W,gx)@gx[...,None])[...,0]
     equiv_err = rel_error(Wgxgx,gWxx)
-    assert equiv_err<1e-6,f"Bilinear Equivariance fails err {equiv_err:.3e} with G={G}"
+    assert equiv_err<1e-4,f"Bilinear Equivariance fails err {equiv_err:.3e} with G={G}"
 
 @parametrize(test_groups)
 def test_large_representations(G):
@@ -207,7 +209,7 @@ def test_large_representations(G):
     #print(g.shape,(x@W.T).shape)
     gWx = (routg@(x@W.T)[...,None])[...,0]
     equiv_err = vmap(scale_adjusted_rel_error)(Wgx,gWx,gs).mean()
-    assert equiv_err<1e-5,f"Large Rep Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G}"
+    assert equiv_err<1e-4,f"Large Rep Equivariant gWx=Wgx fails err {equiv_err:.3e} with G={G}"
     logging.info(f"Success with G={G}")
 
 # #print(dir(TestRepresentationSubspace))

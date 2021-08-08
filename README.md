@@ -4,7 +4,7 @@
 
 # A Practical Method for Constructing Equivariant Multilayer Perceptrons for Arbitrary Matrix Groups
 [![Documentation](https://readthedocs.org/projects/emlp/badge/)](https://emlp.readthedocs.io/en/latest/) | [![Paper](https://img.shields.io/badge/arXiv-2104.09459-red)](https://arxiv.org/abs/2104.09459) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mfinzi/equivariant-MLP/blob/master/docs/notebooks/colabs/all.ipynb) | 
-[![codecov.io](https://codecov.io/github/mfinzi/equivariant-MLP/coverage.svg?branch=dev)](https://codecov.io/github/mfinzi/equivariant-MLP?branch=dev)
+[![codecov.io](https://codecov.io/github/mfinzi/equivariant-MLP/coverage.svg)](https://codecov.io/github/mfinzi/equivariant-MLP)
 | [![PyPI version](https://img.shields.io/pypi/v/emlp)](https://pypi.org/project/emlp/) 
 <!-- [![tests](https://github.com/mfinzi/equivariant-MLP/actions/workflows/python-package.yml/badge.svg?branch=dev)](https://github.com/mfinzi/equivariant-MLP/actions/workflows/python-package.yml) |  -->
 <!-- | [![codecov](https://codecov.io/gh/mfinzi/equivariant-MLP/branch/master/graph/badge.svg?token=DYAFHK68JX)](https://codecov.io/gh/mfinzi/equivariant-MLP) -->

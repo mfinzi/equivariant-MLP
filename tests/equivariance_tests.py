@@ -62,10 +62,12 @@ def parametrize(cases,ids=None):
 #     return x
 
 test_groups = [SO(n) for n in [2,3,4]]+[O(n) for n in [2,3,4]]+\
-                    [SU(n) for n in [2,3,4]] +\
+                    [SU(n) for n in [2,3,4]] + [U(n) for n in [2,3,4]] + \
+                    [SL(n) for n in [2,3,4]] + [GL(n) for n in [2,3,4]] + \
                     [C(k) for k in [2,3,4,8]]+[D(k) for k in [2,3,4,8]]+\
                     [S(n) for n in [2,4,6]]+[Z(n) for n in [2,4,6]]+\
-                    [SO11p(),SO13p(),SO13(),O13()] +[Sp(n) for n in [1,3]]+[RubiksCube()]
+                    [SO11p(),SO13p(),SO13(),O13()] +[Sp(n) for n in [1,3]]+\
+                    [RubiksCube(),Cube(),ZksZnxZn(2,2),ZksZnxZn(4,4)]
 # class TestRepresentationSubspace(unittest.TestCase): pass
 # expand_test_cases = partial(expand_cases,TestRepresentationSubspace)
 

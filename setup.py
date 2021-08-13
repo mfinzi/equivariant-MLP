@@ -15,7 +15,8 @@ setup(name=project_name,
       author_email='maf820@nyu.edu',
       license='MIT',
       python_requires='>=3.6',
-      install_requires=['h5py','objax','pytest','plum-dispatch','optax','tqdm>=4.38'],
+      install_requires=['h5py','objax','pytest','plum-dispatch',
+      'optax','tqdm>=4.38','sklearn','matplotlib'],
       extras_require = {
           'EXPTS':['olive-oil-ml']
       },

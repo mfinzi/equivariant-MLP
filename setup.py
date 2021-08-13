@@ -16,7 +16,7 @@ setup(name=project_name,
       license='MIT',
       python_requires='>=3.6',
       install_requires=['h5py','objax','pytest','plum-dispatch',
-      'optax','tqdm>=4.38','sklearn','matplotlib'],
+      'optax','tqdm>=4.38','matplotlib','scikit-learn'],
       extras_require = {
           'EXPTS':['olive-oil-ml']
       },

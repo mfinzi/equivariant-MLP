@@ -5,7 +5,7 @@ sphinx_rtd_theme
 sphinx-autodoc-typehints
 myst-nb
 nbmerge
-nbsphinx
+nbsphinx == 0.8.6
 recommonmark
 # Packages used for CI tests.
 pytest

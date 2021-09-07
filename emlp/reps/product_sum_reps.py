@@ -66,7 +66,7 @@ class SumRep(Rep):
         return SumRepFromCollection(self.reps),self.perm
 
     def __call__(self,G):
-        return SumRepFromCollection({rep.T:c for rep,c in self.reps.items()},perm=self.perm)
+        return SumRepFromCollection({rep(G):c for rep,c in self.reps.items()},perm=self.perm)
 
     @property
     def concrete(self):

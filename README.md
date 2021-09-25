@@ -25,7 +25,7 @@ if your inputs and outputs (and intended features) are a small collection of ele
 
 - As a tool for building larger models, but where EMLP is just one component in a larger system. For example, using EMLP as the convolution kernel in an equivariant PointConv network.
 
-## What EMLP is not great at doing (yet?)
+## What EMLP is not great at doing
 
 - An efficient implementation of CNNs, Deep Sets, typical translation + rotation equivariant GCNNs, graph neural networks.
 

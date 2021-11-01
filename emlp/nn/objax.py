@@ -183,14 +183,14 @@ class EMLP(Module,metaclass=Named):
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
         super().__init__()
         logging.info("Initing EMLP (objax)")
-        self.rep_in =rep_in(group)
-        self.rep_out = rep_out(group)
+        self.rep_in = rep_in(group) if not rep_in.concrete else rep_in
+        self.rep_out = rep_out(group) if not rep_out.concrete else rep_out
         
         self.G=group
         # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
         if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]#[uniform_rep(ch,group) for _ in range(num_layers)]
-        elif isinstance(ch,Rep): middle_layers = num_layers*[ch(group)]
-        else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
+        elif isinstance(ch,Rep): middle_layers = num_layers*[ch]
+        else: middle_layers = [(c if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
         #assert all((not rep.G is None) for rep in middle_layers[0].reps)
         reps = [self.rep_in]+middle_layers
         logging.info(f"Reps: {reps}")
@@ -212,18 +212,18 @@ class MLP(Module,metaclass=Named):
     """ Standard baseline MLP. Representations and group are used for shapes only. """
     def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
         super().__init__()
-        self.rep_in =rep_in(group)
-        self.rep_out = rep_out(group)
+        self.rep_in = rep_in(group) if not rep_in.concrete else rep_in
+        self.rep_out = rep_out(group) if not rep_out.concrete else rep_out
         self.G = group
         chs = [self.rep_in.size()] + num_layers*[ch]
         cout = self.rep_out.size()
         logging.info("Initing MLP")
-        self.net = Sequential(
+        self.network = Sequential(
             *[MLPBlock(cin,cout) for cin,cout in zip(chs,chs[1:])],
             nn.Linear(chs[-1],cout)
         )
     def __call__(self,x,training=True):
-        y = self.net(x)
+        y = self.network(x)
         return y
 
 @export
@@ -242,6 +242,7 @@ class Standardize(Module):
         super().__init__()
         self.model = model
         self.ds_stats=ds_stats
+        
     def __call__(self,x,training):
         if len(self.ds_stats)==2:
             muin,sin = self.ds_stats
@@ -251,68 +252,23 @@ class Standardize(Module):
             y = sout*self.model((x-muin)/sin,training=training)+muout
             return y
 
-
-
-# Networks for hamiltonian dynamics (need to sum for batched Hamiltonian grads)
 @export
-class MLPode(Module,metaclass=Named):
-    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
-        super().__init__()
-        self.rep_in =rep_in(group)
-        self.rep_out = rep_out(group)
-        self.G = group
-        chs = [self.rep_in.size()] + num_layers*[ch]
-        cout = self.rep_out.size()
-        logging.info("Initing MLP")
-        self.net = Sequential(
-            *[Sequential(nn.Linear(cin,cout),swish) for cin,cout in zip(chs,chs[1:])],
-            nn.Linear(chs[-1],cout)
-        )
+class MLPode(MLP):
     def __call__(self,z,t):
-        return self.net(z)
+        return self.network(z)
 
 @export
 class EMLPode(EMLP):
     """ Neural ODE Equivariant MLP. Same args as EMLP."""
     #__doc__ += EMLP.__doc__.split('.')[1]
-    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):#@
-        #super().__init__()
-        logging.info("Initing EMLP")
-        self.rep_in =rep_in(group)
-        self.rep_out = rep_out(group)
-        self.G=group
-        # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
-        if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]#[uniform_rep(ch,group) for _ in range(num_layers)]
-        elif isinstance(ch,Rep): middle_layers = num_layers*[ch(group)]
-        else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
-        #print(middle_layers[0].reps[0].G)
-        #print(self.rep_in.G)
-        reps = [self.rep_in]+middle_layers
-        logging.info(f"Reps: {reps}")
-        self.network = Sequential(
-            *[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],
-            Linear(reps[-1],self.rep_out)
-        )
     def __call__(self,z,t):
         return self.network(z)
 
 # Networks for hamiltonian dynamics (need to sum for batched Hamiltonian grads)
 @export
-class MLPH(Module,metaclass=Named):
-    def __init__(self,rep_in,rep_out,group,ch=384,num_layers=3):
-        super().__init__()
-        self.rep_in =rep_in(group)
-        self.rep_out = rep_out(group)
-        self.G = group
-        chs = [self.rep_in.size()] + num_layers*[ch]
-        cout = self.rep_out.size()
-        logging.info("Initing MLP")
-        self.net = Sequential(
-            *[Sequential(nn.Linear(cin,cout),swish) for cin,cout in zip(chs,chs[1:])],
-            nn.Linear(chs[-1],cout)
-        )
+class MLPH(MLP):
     def H(self,x):#,training=True):
-        y = self.net(x).sum()
+        y = self.network(x).sum()
         return y
     def __call__(self,x):
         return self.H(x)

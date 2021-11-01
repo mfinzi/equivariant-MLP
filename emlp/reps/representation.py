@@ -11,14 +11,12 @@ import logging
 import matplotlib.pyplot as plt
 from functools import reduce
 from emlp.utils import export
-
+import collections
 from plum import dispatch
 import emlp.reps
 #TODO: add rep,v = flatten({'Scalar':..., 'Vector':...,}), to_dict(rep,vector) returns {'Scalar':..., 'Vector':...,}
 #TODO and simpler rep = flatten({Scalar:2,Vector:10,...}),
 # Do we even want + operator to implement non canonical orderings?
-
-__all__ = ["V","Vector", "Scalar"]
 
 @export
 class Rep(object):
@@ -208,7 +206,8 @@ class ScalarRep(Rep):
         return self
     def size(self):
         return 1
-    def __repr__(self): return str(self)#f"T{self.rank+(self.G,)}"
+    def __repr__(self): 
+        return str(self)#f"T{self.rank+(self.G,)}"
     def __str__(self):
         return "V⁰"
     @property
@@ -248,7 +247,8 @@ class Base(Rep):
     def size(self):
         assert self.G is not None, f"must know G to find size for rep={self}"
         return self.G.d
-    def __repr__(self): return str(self)#f"T{self.rank+(self.G,)}"
+    def __repr__(self): 
+        return str(self)#f"T{self.rank+(self.G,)}"
     def __str__(self):
         return "V"# +(f"_{self.G}" if self.G is not None else "")
     
@@ -296,11 +296,6 @@ V=Vector= Base()  #: Alias V or Vector for an instance of the Base representatio
 
 Scalar = ScalarRep()#: An instance of the Scalar representation, equivalent to V**0
 
-@export
-def T(p,q=0,G=None):
-    """ A convenience function for creating rank (p,q) tensors."""
-    return (V**p*V.T**q)(G)
-
 def orthogonal_complement(proj):
     """ Computes the orthogonal complement to a given matrix proj"""
     U,S,VH = jnp.linalg.svd(proj,full_matrices=True)
@@ -346,14 +341,15 @@ def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
         lossval, grad = loss_and_grad(W)
         updates, opt_state = opt_update(grad, opt_state, W)
         W = optax.apply_updates(W, updates)
+
         # update progress bar
         progress = max(100*np.log(lossval/lstart)/np.log(tol**2/lstart)-prog_val,0)
         progress = min(100-prog_val,progress)
         if progress>0:
             prog_val += progress
             pbar.update(progress)
-
-        if jnp.sqrt(lossval) <tol: # check convergence condition
+        # check convergence condition
+        if jnp.sqrt(lossval) <tol:
             pbar.close()
             break # has converged
         if lossval>2e3 and i>100: # Solve diverged due to too high learning rate
@@ -375,6 +371,31 @@ def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
         above cutoff {scutoff:.2e} below cutoff. Final L {final_L:.2e}, earlier {S[rank-5:rank]}"
     #logging.debug(f"found Rank {r}, above cutoff {S[rank-1]:.3e} after {S[rank] if r>rank else np.inf:.3e}. Loss {final_L:.1e}")
     return Q
+
+def permutation_bfs_solve(perms):
+    """ Performs breadth first search to find the distinct orbits of the permutations.
+        Can be applied to find the solution basis when constraints are permutations.
+        perms: [k,n] array of permutations
+        Returns: a list of indices for each orbit. """
+    n = len(perms[0])
+    orbits = []
+    visited = np.zeros(n,dtype=bool)
+    queue = collections.deque()
+    for i in range(n):
+        if not visited[i]:
+            orbit = []
+            queue.append(i)
+            while queue:
+                i = queue.popleft()
+                if visited[i]: continue
+                orbit.append(i)
+                visited[i] = True
+                for perm in perms:
+                    queue.append(perm[i])
+            orbits.append(orbit)
+    return orbits
+            
+    
 
 class ConvergenceError(Exception): pass
 

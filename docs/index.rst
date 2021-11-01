@@ -46,7 +46,8 @@ and representations an easy task, and one that does not require knowledge of ana
    :caption: API Reference
 
    package/emlp.groups
-   package/emlp.reps
+   package/emlp.reps.representation
+   package/emlp.reps.zoo
    package/emlp.nn
 
 .. toctree::
@@ -54,7 +55,6 @@ and representations an easy task, and one that does not require knowledge of ana
    :caption: Notes
 
    testing.md
-   inner_workings.md
    CHANGELOG.md
 
 .. toctree::

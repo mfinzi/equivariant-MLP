@@ -21,9 +21,10 @@ class Inertia(object):
         r2 = (ri**2).sum(-1)[...,None,None]
         inertia = (mi[:,:,None,None]*(r2*I - ri[...,None]*ri[...,None,:])).sum(1)
         self.Y = inertia.reshape(-1,9)
-        self.rep_in = k*Scalar+k*Vector
-        self.rep_out = T(2)
+        
         self.symmetry = O(3)
+        self.rep_in = (k*Scalar+k*Vector)(self.symmetry)
+        self.rep_out = T(2)(self.symmetry)
         # One has to be careful computing offset and scale in a way so that standardizing
         # does not violate equivariance
         Xmean = self.X.mean(0)
@@ -54,9 +55,9 @@ class O5Synthetic(object):
         ri = self.X.reshape(-1,2,5)
         r1,r2 = ri.transpose(1,0,2)
         self.Y = np.sin(np.sqrt((r1**2).sum(-1)))-.5*np.sqrt((r2**2).sum(-1))**3 + (r1*r2).sum(-1)/(np.sqrt((r1**2).sum(-1))*np.sqrt((r2**2).sum(-1)))
-        self.rep_in = 2*Vector
-        self.rep_out = Scalar
         self.symmetry = O(d)
+        self.rep_in = 2*Vector(self.symmetry)
+        self.rep_out = Scalar(self.symmetry)
         self.Y = self.Y[...,None]
         # One has to be careful computing mean and std in a way so that standardizing
         # does not violate equivariance
@@ -77,8 +78,9 @@ class ParticleInteraction(object):
     def __init__(self,N=1024):
         super().__init__()
         self.dim = 4*4
-        self.rep_in = 4*Vector
-        self.rep_out = Scalar
+        self.symmetry = Lorentz()
+        self.rep_in = 4*Vector(self.symmetry)
+        self.rep_out = Scalar(self.symmetry)
         self.X = np.random.randn(N,self.dim)/4
         P = self.X.reshape(N,4,4)
         p1,p2,p3,p4 = P.transpose(1,0,2)
@@ -88,7 +90,7 @@ class ParticleInteraction(object):
         L𝜇 = ((p2@𝜂)[:,:,None]*(p4@𝜂)[:,None,:] - (dot(p2,p4)-dot(p2,p2))[:,None,None]*𝜂)
         M = 4*(Le*L𝜇).sum(-1).sum(-1)
         self.Y = M
-        self.symmetry = Lorentz()
+        
         self.Y = self.Y[...,None]
         # One has to be careful computing mean and std in a way so that standardizing
         # does not violate equivariance
@@ -133,8 +135,8 @@ class InvertedCube(object):
         self.X[1] = parity_state.reshape(-1)
         self.Y = labels
         self.symmetry = Cube()
-        self.rep_in = 6*Vector
-        self.rep_out = 2*Scalar
+        self.rep_in = 6*Vector(self.symmetry)
+        self.rep_out = 2*Scalar(self.symmetry)
         self.stats = (0,1)
         if train==False: # Scramble the cubes for test time
             gs = self.symmetry.samples(100)
@@ -208,8 +210,8 @@ class BrokenRubiksCube(object):
         self.X[11:] = solved_state.reshape(6,6,8)[:,parity_perm].reshape(-1)#equivalence_classes.reshape(12,-1)[1:]
         self.Y = labels
         self.symmetry = RubiksCube()
-        self.rep_in = 6*Vector
-        self.rep_out = 2*Scalar
+        self.rep_in = 6*Vector(self.symmetry)
+        self.rep_out = 2*Scalar(self.symmetry)
         self.stats = (0,1)
         if train==False: # Scramble the cubes for test time
             gs = self.symmetry.samples(440)

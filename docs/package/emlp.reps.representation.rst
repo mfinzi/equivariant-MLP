@@ -1,7 +1,7 @@
-Representations
+Base Representation
 ==============
 
-.. automodule:: emlp.reps
+.. automodule:: emlp.reps.representation
     :members:
     :exclude-members: Rep
     

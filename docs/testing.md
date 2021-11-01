@@ -19,3 +19,11 @@ The usual pytest command line arguments apply (like `-v` for verbose).
  <!-- and we add an additional `--log` argument for the log level. -->
 
 Similarly, you can find tests for "mixed" representations containing sub-representations from different groups in `emlp/tests/product_groups_tests.py`.
+
+In order to run the model_tests that test full equivariant models from the different frameworks (Haiku, flax, pytorch) you need to install some additional requirements:
+
+```bash
+pip install git+https://github.com/deepmind/dm-haiku
+python -m pip install flax
+pip install -e .[EXPTS]
+```

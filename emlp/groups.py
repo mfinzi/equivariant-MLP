@@ -460,15 +460,16 @@ def DkeR3(k):
 
 
 class DirectProduct(Group):
-    def __init__(self,G1,G2):
-        I1,I2 = I(G1.d),I(G2.d)
-        self.lie_algebra = [LazyKronsum([A1,0*I2]) for A1 in G1.lie_algebra]+[LazyKronsum([0*I1,A2]) for A2 in G2.lie_algebra]
-        self.discrete_generators = [LazyKron([M1,I2]) for M1 in G1.discrete_generators]+[LazyKron([I1,M2]) for M2 in G2.discrete_generators]
-        self.names = (repr(G1),repr(G2))
+    def __init__(self,*Gs):
+        self._Gs = Gs = sum([g._Gs if isinstance(g,DirectProduct) else [g] for g in Gs],[])
+        Is = [I(group.d) for group in Gs]
+        self.lie_algebra = [LazyKron(Is[:i]+[A]+Is[i+1:]) for i,group in enumerate(Gs) for A in group.lie_algebra]
+        self.discrete_generators = [LazyKron(Is[:i]+[M]+Is[i+1:]) for i,group in enumerate(Gs) for M in group.discrete_generators]
+        self.name = '×'.join([str(group) for group in Gs])
         super().__init__()
 
     def __repr__(self):
-        return f"{self.names[0]}x{self.names[1]}"
+        return self.name
 
 class WreathProduct(Group):
     def __init__(self,G1,G2):

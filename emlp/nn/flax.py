@@ -111,11 +111,12 @@ def EMLP(rep_in,rep_out,group,ch=384,num_layers=3):
         Returns:
             Module: the EMLP objax module."""
     logging.info("Initing EMLP (flax)")
-    rep_in = rep_in(group)
-    rep_out = rep_out(group)
-    if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]
-    elif isinstance(ch,Rep): middle_layers = num_layers*[ch(group)]
-    else: middle_layers = [(c(group) if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
+    rep_in = rep_in(group) if not rep_in.concrete else rep_in
+    rep_out = rep_out(group) if not rep_out.concrete else rep_out
+    # Parse ch as a single int, a sequence of ints, a single Rep, a sequence of Reps
+    if isinstance(ch,int): middle_layers = num_layers*[uniform_rep(ch,group)]#[uniform_rep(ch,group) for _ in range(num_layers)]
+    elif isinstance(ch,Rep): middle_layers = num_layers*[ch]
+    else: middle_layers = [(c if isinstance(c,Rep) else uniform_rep(c,group)) for c in ch]
     reps = [rep_in]+middle_layers
     logging.info(f"Reps: {reps}")
     return Sequential(*[EMLPBlock(rin,rout) for rin,rout in zip(reps,reps[1:])],Linear(reps[-1],rep_out))

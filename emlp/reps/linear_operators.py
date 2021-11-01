@@ -138,7 +138,7 @@ class LazyDirectSum(LinearOperator):
         self.Ms = [jax.device_put(M.astype(np.float32)) if isinstance(M,(np.ndarray)) else M for M in Ms]
         self.multiplicities = [1 for M in Ms] if multiplicities is None else multiplicities
         shape = (sum(Mi.shape[0]*c for Mi,c in zip(Ms,multiplicities)),
-                      sum(Mi.shape[0]*c for Mi,c in zip(Ms,multiplicities)))
+                      sum(Mi.shape[1]*c for Mi,c in zip(Ms,multiplicities))) # shouldn't this be Mi.shape[1]?
         super().__init__(None,shape)
         #self.dtype=Ms[0].dtype
         #self.dtype=jnp.dtype('float32')

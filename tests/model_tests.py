@@ -20,8 +20,8 @@ from jax import random
 def equivariance_err(model,mb,repin,repout,group):
     x,y = mb
     gs = group.samples(x.shape[0])
-    rho_gin = vmap(repin(group).rho_dense)(gs)
-    rho_gout = vmap(repout(group).rho_dense)(gs)
+    rho_gin = vmap(repin.rho_dense)(gs)
+    rho_gout = vmap(repout.rho_dense)(gs)
     y1 = model((rho_gin@x[...,None])[...,0])
     y2 = (rho_gout@model(x)[...,None])[...,0]
     return np.asarray(scale_adjusted_rel_error(y1,y2,gs))

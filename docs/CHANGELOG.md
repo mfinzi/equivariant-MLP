@@ -5,6 +5,12 @@ This is a comment.
 Remember to align the itemized text with the first line of an item within a list.
 -->
 
+## EMLP 1.1.0
+* New Features
+  * Added representation zoo for commonly used representations (e.g. Restricted Rep)
+* Codebase improvements
+  * Separated pytorch and experiments into optional dependencies (`pip install -e .[EXPTS]`)
+
 ## EMLP 1.0.0
 * New Features
   * Flax support (see `using EMLP with Flax`)

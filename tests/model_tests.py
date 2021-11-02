@@ -78,7 +78,7 @@ def test_pytorch_emlp(dsclass):
 
 
 from emlp.reps import vis, sparsify_basis, V,Rep
-from emlp.groups import S,SO
+from emlp.groups import S,SO,DirectProduct
 
 def test_utilities():
     W = V(SO(3))
@@ -91,18 +91,23 @@ def test_utilities():
 
 
 def test_bespoke_representations():
-    class ProductSubRep(Rep):
-        def __init__(self,G,subgroup_id,size):
-            """   Produces the representation of the subgroup of G = G1 x G2
-                with the index subgroup_id in {0,1} specifying G1 or G2.
-                Also requires specifying the size of the representation given by G1.d or G2.d """
+    
+    class Restricted(Rep):
+        """ Restricted Representation: a base representation of one
+             of the subgroups of G = G1 x G2 x ... x Gn
+            Args:
+                G (Group): Product group G = G1 x G2 x ... x Gn
+                subgroup_id (int): specifying G1,..., Gn"""
+
+        def __init__(self,G,subgroup_id):
+            assert isinstance(G,DirectProduct), "Restricted representation is only for direct product groups"
             self.G = G
             self.index = subgroup_id
-            self._size = size
+
         def __str__(self):
-            return "V_"+str(self.G).split('x')[self.index]
+            return "V_"+str(self.G).split('×')[self.index]
         def size(self):
-            return self._size
+            return self.G._Gs[self.index].d
         def rho(self,M): 
             # Given that M is a LazyKron object, we can just get the argument
             return M.Ms[self.index]
@@ -113,11 +118,12 @@ def test_bespoke_representations():
             # necessary now because rep is __call__ed in nn.EMLP constructor
             assert self.G==G
             return self
+    
     G1,G2 = SO(3),S(5)
     G = G1 * G2
 
-    VSO3 = ProductSubRep(G,0,G1.d)
-    VS5 = ProductSubRep(G,1,G2.d)
+    VSO3 = Restricted(G,0)
+    VS5 = Restricted(G,1)
     Vin = VS5 + V(G)
     Vout = VSO3
     str(Vin>>Vout)

@@ -554,10 +554,6 @@ class _SumLinearOperator(LinearOperator):
         A, B = self.args
         return A.H + B.H
 
-    def invT(self):
-        A,B = self.args
-        return A.invT() + B.invT()
-
 class _ProductLinearOperator(LinearOperator):
     def __init__(self, A, B):
         if not isinstance(A, LinearOperator) or \

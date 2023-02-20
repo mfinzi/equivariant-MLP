@@ -21,7 +21,7 @@ setup(name=project_name,
           'EXPTS':['olive-oil-ml']
       },
       packages=find_packages(),
-      long_description=open('README.md').read(),
+      long_description=open('README.md', encoding='UTF-8').read(),
       long_description_content_type='text/markdown',
       url='https://github.com/mfinzi/equivariant-MLP',
       classifiers=[

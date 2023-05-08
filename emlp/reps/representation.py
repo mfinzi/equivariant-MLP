@@ -101,7 +101,7 @@ class Rep(object):
         if self==Scalar: return jnp.ones((1,1))
         canon_rep,perm = self.canonicalize()
         invperm = np.argsort(perm)
-        if canon_rep not in self.solcache:
+        if True:#canon_rep not in self.solcache:
             logging.info(f"{canon_rep} cache miss")
             logging.info(f"Solving basis for {self}"+(f", for G={self.G}" if hasattr(self,"G") else ""))
             #if isinstance(group,Trivial): return np.eye(size(rank,group.d))

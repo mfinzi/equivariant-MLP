@@ -351,7 +351,7 @@ def krylov_constraint_solve_upto_r(C,r,tol=1e-5,lr=1e-2):#,W0=None):
         progress = min(100-prog_val,progress)
         if progress>0:
             prog_val += progress
-            pbar.update(progress)
+            pbar.update(float(progress))
 
         if jnp.sqrt(lossval) <tol: # check convergence condition
             pbar.close()
